@@ -55,6 +55,88 @@ const getToken = () =>
   localStorage.getItem("authToken")   ||
   localStorage.getItem("accessToken") || "";
 
+const getLocalDateString = (value = null) => {
+  if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().split("T")[0];
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+const extractLocationPoints = (payload) => {
+  const candidates = [
+    payload?.result,
+    payload?.data,
+    payload?.points,
+    payload?.path,
+    payload?.locations,
+    payload?.result?.points,
+    payload?.result?.path,
+    payload?.result?.locations,
+    payload?.data?.points,
+    payload?.data?.path,
+    payload?.data?.locations,
+  ];
+
+  return candidates.find(Array.isArray) || [];
+};
+
+const filterPointsFromPunchInTime = (points = [], punchInTime = null) => {
+  if (!Array.isArray(points) || !points.length || !punchInTime) return points;
+
+  const punchInMs = new Date(punchInTime).getTime();
+  if (!Number.isFinite(punchInMs)) return points;
+
+  return points.filter((point) => {
+    const pointMs = new Date(point?.recordedAt || point?.time || 0).getTime();
+    return !Number.isFinite(pointMs) || pointMs >= punchInMs;
+  });
+};
+
+const extractVisitTrailPoints = (visits = [], punchInLocation = null) => {
+  const points = [];
+  const seen = new Set();
+
+  const pushPoint = (latValue, lngValue, extra = {}) => {
+    const lat = Number(latValue);
+    const lng = Number(lngValue);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    points.push({ lat, lng, ...extra });
+  };
+
+  if (punchInLocation) {
+    pushPoint(punchInLocation.lat, punchInLocation.lng, { source: "punch-in" });
+  }
+
+  [...visits]
+    .filter(Boolean)
+    .sort((a, b) => {
+      const timeA = new Date(a?.checkInTime || a?.createdAt || a?.visitDate || 0).getTime();
+      const timeB = new Date(b?.checkInTime || b?.createdAt || b?.visitDate || 0).getTime();
+      return timeA - timeB;
+    })
+    .forEach((visit) => {
+      pushPoint(
+        visit.coordinates?.lat ??
+          visit.location?.lat ??
+          visit.location?.latitude ??
+          visit.lat ??
+          visit.latitude,
+        visit.coordinates?.lng ??
+          visit.coordinates?.longitude ??
+          visit.location?.lng ??
+          visit.location?.longitude ??
+          visit.lng ??
+          visit.longitude,
+        { source: "visit" }
+      );
+    });
+
+  return points;
+};
+
 function calcKm(points) {
   if (!points || points.length < 2) return 0;
   const R = 6371;
@@ -113,6 +195,31 @@ function distMetres(lat1, lng1, lat2, lng2) {
   return calcKm([{ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 }]) * 1000;
 }
 
+function resolvePunchInMarkerPosition(punchInLocation, trailPoints = []) {
+  if (!punchInLocation?.lat || !punchInLocation?.lng) return null;
+
+  const trailStart = Array.isArray(trailPoints) && trailPoints.length > 0 ? trailPoints[0] : null;
+  if (!trailStart?.lat || !trailStart?.lng) return punchInLocation;
+
+  const mismatchMetres = distMetres(
+    punchInLocation.lat,
+    punchInLocation.lng,
+    trailStart.lat,
+    trailStart.lng
+  );
+
+  // If the saved punch-in point is clearly off, prefer the first confirmed trail point.
+  if (mismatchMetres >= 60) {
+    return {
+      ...punchInLocation,
+      lat: trailStart.lat,
+      lng: trailStart.lng,
+    };
+  }
+
+  return punchInLocation;
+}
+
 let gmapsPromise = null;
 function loadGoogleMaps() {
   if (window.google?.maps) return Promise.resolve();
@@ -138,8 +245,10 @@ export default function LiveTrackingMap({
   onDistanceChange,
   isOwner         = true,
   punchInLocation = null,
+  punchOutLocation = null,
   selectedDate    = null, 
   visits          = [],
+  preferVisitTrail = false,
   
 }) {
   const mapDivRef  = useRef(null);
@@ -147,8 +256,12 @@ export default function LiveTrackingMap({
   const polyRef    = useRef({ casing: null, main: null });
   const startMkRef = useRef(null);
   const liveMkRef  = useRef(null);
+  const endMkRef   = useRef(null);
   const dotsRef    = useRef([]);
   const allPtsRef  = useRef([]);
+  const visitsRef = useRef(visits);
+  const punchInLocationRef = useRef(punchInLocation);
+  const punchOutLocationRef = useRef(punchOutLocation);
   const snappedTrailCacheRef = useRef({ key: "", path: [] });
   const drawRequestSeqRef = useRef(0);
 const visitMkRef = useRef([]);
@@ -171,9 +284,56 @@ const visitMkRef = useRef([]);
   const fenceLayersRef = useRef({});
   const drawingMgrRef  = useRef(null);
 
-  const isLive = isPunchedIn && !hasPunchedOut;
+  const syncStartMarker = useCallback((points = allPtsRef.current) => {
+    if (!mapLoaded || !gMapRef.current || !window.google?.maps) return;
+
+    const resolvedPunchIn = resolvePunchInMarkerPosition(
+      punchInLocationRef.current,
+      points
+    );
+
+    if (!resolvedPunchIn?.lat || !resolvedPunchIn?.lng) {
+      if (startMkRef.current) {
+        startMkRef.current.setMap(null);
+        startMkRef.current = null;
+      }
+      return;
+    }
+
+    const G = window.google.maps;
+    const map = gMapRef.current;
+    const pos = { lat: resolvedPunchIn.lat, lng: resolvedPunchIn.lng };
+
+    if (!userAdjustedViewportRef.current) {
+      withProgrammaticViewport(() => {
+        map.setCenter(pos);
+        map.setZoom(15);
+      });
+    }
+
+    if (!startMkRef.current) {
+      startMkRef.current = new G.Marker({
+        position: pos,
+        map,
+        title: "Punch-in Location",
+        zIndex: 10,
+        icon: {
+          path: G.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: "#2563eb",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 3,
+        },
+      });
+    } else {
+      startMkRef.current.setPosition(pos);
+    }
+  }, [mapLoaded]);
+
   const isTodaySelected =
     !selectedDate || selectedDate === new Date().toISOString().split("T")[0];
+  const isLive = isPunchedIn && !hasPunchedOut && isTodaySelected;
 
   const updateDistanceStats = useCallback((km, points = 0) => {
     const normalizedKm = Number.isFinite(Number(km)) ? Number(km) : 0;
@@ -192,6 +352,18 @@ const visitMkRef = useRef([]);
       suppressViewportEventsRef.current = false;
     }, 0);
   }, []);
+
+  useEffect(() => {
+    visitsRef.current = visits;
+  }, [visits]);
+
+  useEffect(() => {
+    punchInLocationRef.current = punchInLocation;
+  }, [punchInLocation]);
+
+  useEffect(() => {
+    punchOutLocationRef.current = punchOutLocation;
+  }, [punchOutLocation]);
 
   // ── Init Google Map ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -224,43 +396,10 @@ const visitMkRef = useRef([]);
       .catch((err) => toast.error(err.message, { title: "Map Failed to Load" }));
   }, []);
 
-  // ── Place green punch-in marker ─────────────────────────────────────────────
+  // ── Place punch-in marker ───────────────────────────────────────────────────
   useEffect(() => {
-    if (!mapLoaded || !punchInLocation?.lat || !punchInLocation?.lng) return;
-    if (!gMapRef.current || !window.google?.maps) return;
-
-    const G   = window.google.maps;
-    const map = gMapRef.current;
-    const pos = { lat: punchInLocation.lat, lng: punchInLocation.lng };
-
-    if (!userAdjustedViewportRef.current) {
-      withProgrammaticViewport(() => {
-        map.setCenter(pos);
-        map.setZoom(15);
-      });
-    }
-
-    if (!startMkRef.current) {
-      startMkRef.current = new G.Marker({
-        position: pos,
-        map,
-        title:  "Punch-in Location",
-        zIndex: 10,
-        icon: {
-          path:         G.SymbolPath.CIRCLE,
-          scale:        10,
-          fillColor:    "#2563eb",
-          fillOpacity:  1,
-          strokeColor:  "#ffffff",
-          strokeWeight: 3,
-        },
-      });
-    } else {
-      startMkRef.current.setPosition(pos);
-    }
-
-    console.log(`[PunchIn] ✅ Marker placed at ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`);
-  }, [mapLoaded, punchInLocation]);
+    syncStartMarker();
+  }, [mapLoaded, punchInLocation, syncStartMarker]);
 
  // ── Draw visit markers ──────────────────────────────────────────────────────
 useEffect(() => {
@@ -362,6 +501,45 @@ useEffect(() => {
     visitMkRef.current.push(marker);
   });
 }, [mapLoaded, visits]);
+
+  const syncEndMarker = useCallback((points = allPtsRef.current) => {
+    if (!mapLoaded || !gMapRef.current || !window.google?.maps) return;
+
+    const G = window.google.maps;
+    const explicitEnd =
+      punchOutLocationRef.current?.lat && punchOutLocationRef.current?.lng
+        ? { lat: punchOutLocationRef.current.lat, lng: punchOutLocationRef.current.lng }
+        : null;
+    const trailEnd = points?.length ? points[points.length - 1] : null;
+    const markerPos = explicitEnd || (!isLive ? trailEnd : null);
+
+    if (!markerPos) {
+      if (endMkRef.current) {
+        endMkRef.current.setMap(null);
+        endMkRef.current = null;
+      }
+      return;
+    }
+
+    if (endMkRef.current) {
+      endMkRef.current.setPosition({ lat: markerPos.lat, lng: markerPos.lng });
+    } else {
+      endMkRef.current = new G.Marker({
+        position: { lat: markerPos.lat, lng: markerPos.lng },
+        map: gMapRef.current,
+        title: explicitEnd ? "Punch-out Location" : "Tracking Stopped",
+        zIndex: 18,
+        icon: {
+          path: G.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: "#111827",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 3,
+        },
+      });
+    }
+  }, [mapLoaded, isLive]);
   
 
   // ── Drawing Manager ─────────────────────────────────────────────────────────
@@ -570,7 +748,7 @@ useEffect(() => {
     if (!gMapRef.current || !window.google?.maps || points.length === 0) return;
     const G   = window.google.maps;
     const map = gMapRef.current;
-    const shouldDrawLine = points.length >= 2 && hasConfirmedMovement(points);
+    const shouldDrawLine = points.length >= 2;
     const requestSeq = ++drawRequestSeqRef.current;
 
     let path = points.map((p) => ({ lat: p.lat, lng: p.lng }));
@@ -594,19 +772,19 @@ useEffect(() => {
             path,
             geodesic: true,
             strokeColor: "#ffffff",
-            strokeOpacity: 0.95,
-            strokeWeight: 8,
+            strokeOpacity: 1,
+            strokeWeight: 10,
             map,
-            zIndex: 6,
+            zIndex: 1000,
           }),
           main: new G.Polyline({
             path,
             geodesic: true,
-            strokeColor: "#dc2626",
-            strokeOpacity: 0.92,
-            strokeWeight: 4,
+            strokeColor: "#ef4444",
+            strokeOpacity: 1,
+            strokeWeight: 6,
             map,
-            zIndex: 7,
+            zIndex: 1001,
           }),
         };
       }
@@ -643,23 +821,28 @@ useEffect(() => {
 
     const last = points[points.length - 1];
     if (last) {
-      if (liveMkRef.current) {
-        liveMkRef.current.setPosition({ lat: last.lat, lng: last.lng });
-      } else {
-        liveMkRef.current = new G.Marker({
-          position: { lat: last.lat, lng: last.lng },
-          map,
-          title:  "Current Position",
-          zIndex: 20,
-          icon: {
-            path:         G.SymbolPath.CIRCLE,
-            scale:        10,
-            fillColor:    "#ef4444",
-            fillOpacity:  1,
-            strokeColor:  "rgba(239,68,68,0.4)",
-            strokeWeight: 12,
-          },
-        });
+      if (isLive) {
+        if (liveMkRef.current) {
+          liveMkRef.current.setPosition({ lat: last.lat, lng: last.lng });
+        } else {
+          liveMkRef.current = new G.Marker({
+            position: { lat: last.lat, lng: last.lng },
+            map,
+            title:  "Current Position",
+            zIndex: 20,
+            icon: {
+              path:         G.SymbolPath.CIRCLE,
+              scale:        10,
+              fillColor:    "#ef4444",
+              fillOpacity:  1,
+              strokeColor:  "rgba(239,68,68,0.4)",
+              strokeWeight: 12,
+            },
+          });
+        }
+      } else if (liveMkRef.current) {
+        liveMkRef.current.setMap(null);
+        liveMkRef.current = null;
       }
       if (isLive && autoPanLive && !userAdjustedViewportRef.current) {
         withProgrammaticViewport(() => {
@@ -667,6 +850,9 @@ useEffect(() => {
         });
       }
     }
+
+    syncEndMarker(points);
+    syncStartMarker(points);
 
     if (shouldDrawLine && !isLive && autoFit && !userAdjustedViewportRef.current) {
       const bounds = new G.LatLngBounds();
@@ -676,7 +862,8 @@ useEffect(() => {
       });
     }
 
-    const km = calcFilteredKm(points);
+    const filteredKm = calcFilteredKm(points);
+    const km = filteredKm > 0 ? filteredKm : calcKm(points);
     updateDistanceStats(km, points.length);
     console.log(`[drawTrail] ${points.length} points — ${km.toFixed(3)} km`);
   }
@@ -716,7 +903,9 @@ useEffect(() => {
     return simplified;
   }
 
-  function cleanPoints(raw) {
+  function cleanPoints(raw, options = {}) {
+    const { allowSparse = false } = options;
+    if (!Array.isArray(raw)) return [];
     const cleaned = [];
     for (const p of raw) {
       const lat = Number(p.lat);
@@ -725,7 +914,7 @@ useEffect(() => {
       const distanceFromPrevious = Number(p.distanceFromPrevious ?? 0);
 
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-      if (accuracy && accuracy > 60) continue;
+      if (accuracy && accuracy > (allowSparse ? 150 : 60)) continue;
 
       if (cleaned.length === 0) {
         cleaned.push({ lat, lng, accuracy, distanceFromPrevious });
@@ -734,44 +923,49 @@ useEffect(() => {
 
       const prev = cleaned[cleaned.length - 1];
       const distM = distMetres(prev.lat, prev.lng, lat, lng);
-      const requiredMove = Math.max(
-        getEffectiveMoveThreshold(accuracy, prev.accuracy),
-        distanceFromPrevious > 0 ? 28 : 40
-      );
-      const gpsNoiseRadius = getGpsNoiseRadiusMetres(accuracy, prev.accuracy);
+      const requiredMove = allowSparse
+        ? Math.max(10, Math.min(getEffectiveMoveThreshold(accuracy, prev.accuracy), 25))
+        : Math.max(
+            getEffectiveMoveThreshold(accuracy, prev.accuracy),
+            distanceFromPrevious > 0 ? 28 : 40
+          );
+      const gpsNoiseRadius = allowSparse
+        ? Math.max(10, Math.min(getGpsNoiseRadiusMetres(accuracy, prev.accuracy), 25))
+        : getGpsNoiseRadiusMetres(accuracy, prev.accuracy);
 
-      if (distanceFromPrevious <= 0 && distM < 30) continue;
-      if (distM < requiredMove) continue;
-      if (distM < gpsNoiseRadius) continue;
-      if (distM > 2000) continue;
+      if (distanceFromPrevious <= 0 && distM < (allowSparse ? 10 : 30)) continue;
+      if (distM < requiredMove && distanceFromPrevious <= 0) continue;
+      if (!allowSparse && distM < gpsNoiseRadius) continue;
+      if (!allowSparse && distM > 5000 && distanceFromPrevious <= 0) continue;
 
       cleaned.push({ lat, lng, accuracy, distanceFromPrevious });
     }
 
-    return simplifyTrailPoints(cleaned);
+    return allowSparse ? cleaned : simplifyTrailPoints(cleaned);
   }
 
   const fetchTotalKm = useCallback(async () => {
     if (!userId) return;
-    if (allPtsRef.current.length >= 2) {
-      updateDistanceStats(calcFilteredKm(allPtsRef.current), allPtsRef.current.length);
-      return;
-    }
     try {
-       const dateParam = selectedDate && selectedDate.match(/^\d{4}-\d{2}-\d{2}$/)
-        ? selectedDate
-        : new Date().toISOString().split("T")[0];
+       const dateParam = getLocalDateString(selectedDate);
       const res = await fetch(
         `${API}/api/v1/location/distance?salesmanId=${userId}&date=${dateParam}`,
         { headers: { Authorization: `Bearer ${getToken()}` } }
       );
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        if (allPtsRef.current.length >= 2) {
+          updateDistanceStats(calcFilteredKm(allPtsRef.current) || calcKm(allPtsRef.current), allPtsRef.current.length);
+        }
+        return;
+      }
       const data = await res.json();
       const dbKm = data?.data?.totalKm ?? data?.result?.totalKm ?? data?.totalKm ?? 0;
       const dbPoints = data?.data?.totalPoints ?? data?.result?.totalPoints ?? data?.totalPoints ?? 0;
-      if (allPtsRef.current.length < 2) {
-        updateDistanceStats(Math.round(dbKm * 1000) / 1000, dbPoints);
+      if (Number(dbKm) > 0 || Number(dbPoints) > 0) {
+        updateDistanceStats(Math.round(Number(dbKm) * 1000) / 1000, Number(dbPoints) || allPtsRef.current.length);
+      } else if (allPtsRef.current.length >= 2) {
+        updateDistanceStats(calcFilteredKm(allPtsRef.current) || calcKm(allPtsRef.current), allPtsRef.current.length);
       }
     } catch { /* non-fatal */ }
   }, [userId, selectedDate, updateDistanceStats]);
@@ -779,6 +973,7 @@ useEffect(() => {
   const loadTrailFromDB = useCallback(async (options = {}) => {
     const { autoFit = false } = options;
     if (!userId || !mapLoaded) return;
+    if (preferVisitTrail) return;
      try {
       // ✅ Use selectedDate if provided, otherwise fall back to today
       let since, until;
@@ -800,13 +995,33 @@ useEffect(() => {
       const data    = await res.json();
       console.log("[AdminMap] Full response:", JSON.stringify(data).slice(0, 300));
 
-      const raw     = data?.result || data?.data || data?.points || [];
-      const cleaned = cleanPoints(raw);
+      const raw = extractLocationPoints(data);
+      const rawAfterPunchIn = filterPointsFromPunchInTime(
+        raw,
+        punchInLocationRef.current?.time || null
+      );
+      const cleaned = cleanPoints(rawAfterPunchIn);
+      const sparseCleaned = cleaned.length >= 2 ? cleaned : cleanPoints(rawAfterPunchIn, { allowSparse: true });
+      const visitFallbackTrail = extractVisitTrailPoints(
+        visitsRef.current,
+        punchInLocationRef.current
+      );
 
-      console.log(`[AdminMap] DB points: raw=${raw.length} cleaned=${cleaned.length}`);
+      console.log(
+        `[AdminMap] DB points: raw=${raw.length} afterPunchIn=${rawAfterPunchIn.length} cleaned=${cleaned.length} sparse=${sparseCleaned.length} visitFallback=${visitFallbackTrail.length}`
+      );
 
-      if (cleaned.length > 0) {
-        const merged = [...cleaned];
+      const shouldUseVisitFallback =
+        sparseCleaned.length < 2 && visitFallbackTrail.length >= 2;
+
+      const baseTrail = shouldUseVisitFallback
+        ? visitFallbackTrail
+        : sparseCleaned.length > 0
+          ? sparseCleaned
+          : visitFallbackTrail;
+
+      if (baseTrail.length > 0) {
+        const merged = [...baseTrail];
         if (isLive && isTodaySelected) {
           for (const lp of allPtsRef.current) {
             const alreadyIn = merged.some(
@@ -815,20 +1030,22 @@ useEffect(() => {
             if (!alreadyIn) merged.push(lp);
           }
         }
-        const finalTrail = cleanPoints(merged);
+        const finalTrail = cleanPoints(merged, {
+          allowSparse: shouldUseVisitFallback,
+        });
         allPtsRef.current = finalTrail;
         drawTrail(finalTrail, { autoFit, autoPanLive: false });
         console.log(`[AdminMap] ✅ Trail: ${finalTrail.length} points — ${calcKm(finalTrail).toFixed(3)} km`);
       } else {
         if (allPtsRef.current.length > 0) drawTrail(allPtsRef.current, { autoFit, autoPanLive: false });
-        console.warn(`[AdminMap] ⚠️ No DB points — raw:${raw.length}`);
+        console.warn(`[AdminMap] ⚠️ No DB points — raw:${raw.length} afterPunchIn:${rawAfterPunchIn.length}`);
       }
 
       await fetchTotalKm();
     } catch (e) {
       console.error("[AdminMap] ❌ Trail fetch failed:", e.message);
     }
-  }, [userId, mapLoaded, fetchTotalKm, selectedDate, isLive, isTodaySelected]);
+  }, [userId, mapLoaded, fetchTotalKm, selectedDate, isLive, isTodaySelected, preferVisitTrail]);
 
   useEffect(() => {
     // ✅ Clear old trail and re-fetch whenever selectedDate changes
@@ -838,19 +1055,73 @@ useEffect(() => {
     dotsRef.current.forEach(d => d.setMap(null));
     dotsRef.current = [];
     if (liveMkRef.current) { liveMkRef.current.setMap(null); liveMkRef.current = null; }
+    if (endMkRef.current) { endMkRef.current.setMap(null); endMkRef.current = null; }
     allPtsRef.current = [];
     snappedTrailCacheRef.current = { key: "", path: [] };
     drawRequestSeqRef.current += 1;
     userAdjustedViewportRef.current = false;
     updateDistanceStats(0, 0);
-    loadTrailFromDB({ autoFit: true });
-  }, [loadTrailFromDB, updateDistanceStats]);
+    if (!preferVisitTrail) {
+      loadTrailFromDB({ autoFit: true });
+    }
+  }, [loadTrailFromDB, updateDistanceStats, preferVisitTrail]);
 
   useEffect(() => {
+    if (!mapLoaded || isLive) return;
+
+    const visitFallbackTrail = extractVisitTrailPoints(visits, punchInLocation);
+    if (allPtsRef.current.length >= 2 || visitFallbackTrail.length < 2) {
+      syncEndMarker(allPtsRef.current);
+      return;
+    }
+
+    const finalTrail = cleanPoints(visitFallbackTrail, { allowSparse: true });
+    if (finalTrail.length >= 2) {
+      allPtsRef.current = finalTrail;
+      drawTrail(finalTrail, { autoFit: true, autoPanLive: false });
+      updateDistanceStats(calcKm(finalTrail), finalTrail.length);
+    } else {
+      syncEndMarker(finalTrail);
+    }
+  }, [mapLoaded, isLive, visits, punchInLocation, syncEndMarker, updateDistanceStats]);
+
+  useEffect(() => {
+    if (!mapLoaded || !preferVisitTrail) return;
+
+    const visitTrail = extractVisitTrailPoints(visits, punchInLocation);
+    const finalTrail = cleanPoints(visitTrail, { allowSparse: true });
+
+    if (finalTrail.length >= 2) {
+      allPtsRef.current = finalTrail;
+      drawTrail(finalTrail, { autoFit: true, autoPanLive: false });
+      updateDistanceStats(calcKm(finalTrail), finalTrail.length);
+      return;
+    }
+
+    if (finalTrail.length === 1) {
+      allPtsRef.current = finalTrail;
+      syncStartMarker(finalTrail);
+      syncEndMarker(finalTrail);
+      updateDistanceStats(0, finalTrail.length);
+      return;
+    }
+
+    allPtsRef.current = [];
+    syncStartMarker([]);
+    syncEndMarker([]);
+    updateDistanceStats(0, 0);
+  }, [mapLoaded, preferVisitTrail, visits, punchInLocation, syncEndMarker, syncStartMarker, updateDistanceStats]);
+
+  useEffect(() => {
+    syncEndMarker(allPtsRef.current);
+  }, [punchOutLocation, syncEndMarker]);
+
+  useEffect(() => {
+    if (preferVisitTrail) return;
     if (!userId || !mapLoaded || !isLive || !isTodaySelected) return;
     const id = setInterval(() => loadTrailFromDB({ autoFit: false }), 30_000);
     return () => clearInterval(id);
-  }, [userId, mapLoaded, loadTrailFromDB, isLive, isTodaySelected]);
+  }, [userId, mapLoaded, loadTrailFromDB, isLive, isTodaySelected, preferVisitTrail]);
 
   // ── Start / stop tracking on punch ─────────────────────────────────────────
   useEffect(() => {

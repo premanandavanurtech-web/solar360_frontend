@@ -22,6 +22,7 @@ const BASE_URL = "https://solar-backend-6vaa.onrender.com/api/v1";
 const BACKEND_ORIGIN = BASE_URL.replace(/\/api\/v1\/?$/, "");
 const PHOTO_BACKEND_ORIGINS = [
   BACKEND_ORIGIN,
+  "https://solar-backend-6vaa.onrender.com",
   "https://solar-backend-29z1.onrender.com",
 ].filter((origin, index, list) => origin && list.indexOf(origin) === index);
 const KNOWN_BACKEND_HOSTS = new Set([
@@ -80,7 +81,7 @@ const fmt = (d) => d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", min
 const normalizePhotoUrl = (rawUrl) => {
   if (!rawUrl || typeof rawUrl !== "string") return null;
 
-  const trimmedUrl = rawUrl.trim();
+  const trimmedUrl = rawUrl.trim().replace(/\\/g, "/");
   if (!trimmedUrl) return null;
 
   if (trimmedUrl.startsWith("data:") || trimmedUrl.startsWith("blob:")) {
@@ -106,11 +107,11 @@ const normalizePhotoUrl = (rawUrl) => {
 
   try {
     const parsedUrl = new URL(trimmedUrl);
-    if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname) && parsedUrl.pathname.startsWith("/public/")) {
-      return `${BACKEND_ORIGIN}${parsedUrl.pathname}`;
-    }
     if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname) && parsedUrl.pathname.startsWith("/uploads/")) {
-      return `${BACKEND_ORIGIN}/public${parsedUrl.pathname}`;
+      return `${parsedUrl.origin}/public${parsedUrl.pathname}`;
+    }
+    if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname) && parsedUrl.pathname.startsWith("/public/")) {
+      return `${parsedUrl.origin}${parsedUrl.pathname}`;
     }
     return parsedUrl.toString();
   } catch {
@@ -118,11 +119,59 @@ const normalizePhotoUrl = (rawUrl) => {
   }
 };
 
-const getPhotoUrlCandidates = (rawUrl) => {
-  const primaryUrl = normalizePhotoUrl(rawUrl);
+const extractPhotoValue = (photoLike) => {
+  if (!photoLike) return null;
+  if (typeof photoLike === "string") return photoLike;
+  if (typeof photoLike !== "object") return null;
+
+  return (
+    photoLike.url ||
+    photoLike.uri ||
+    photoLike.secure_url ||
+    photoLike.downloadURL ||
+    photoLike.path ||
+    photoLike.location ||
+    photoLike.filename ||
+    photoLike.filePath ||
+    photoLike.src ||
+    null
+  );
+};
+
+const getPhotoUrlCandidates = (rawPhoto) => {
+  const primaryUrl = normalizePhotoUrl(extractPhotoValue(rawPhoto));
   if (!primaryUrl) return [];
 
   const candidates = [primaryUrl];
+  const pushBackendPaths = (pathname) => {
+    const normalizedPath = pathname.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!normalizedPath) return;
+
+    const filename = normalizedPath.split("/").filter(Boolean).pop();
+    const pathVariants = [
+      `/${normalizedPath}`,
+      normalizedPath.startsWith("public/") ? `/${normalizedPath}` : `/public/${normalizedPath}`,
+    ];
+
+    if (normalizedPath.startsWith("uploads/")) {
+      pathVariants.push(`/public/${normalizedPath}`);
+    }
+
+    if (filename) {
+      pathVariants.push(
+        `/public/${filename}`,
+        `/public/uploads/${filename}`,
+        `/public/uploads/images/${filename}`,
+        `/uploads/${filename}`,
+        `/uploads/images/${filename}`,
+      );
+    }
+
+    PHOTO_BACKEND_ORIGINS.forEach((origin) => {
+      pathVariants.forEach((path) => candidates.push(`${origin}${path}`));
+    });
+  };
+
   try {
     const parsedUrl = new URL(primaryUrl);
     if (
@@ -136,11 +185,31 @@ const getPhotoUrlCandidates = (rawUrl) => {
         candidates.push(`${origin}${publicPath}`);
       });
     }
+    if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname)) {
+      pushBackendPaths(parsedUrl.pathname);
+    }
   } catch {
-    // Keep only the normalized URL for non-URL values.
+    pushBackendPaths(primaryUrl);
   }
 
   return candidates.filter((url, index, list) => url && list.indexOf(url) === index);
+};
+
+const getVisitPhotoUrls = (visit) => {
+  if (!visit) return [];
+
+  const photoSources = [
+    ...(Array.isArray(visit.photos) ? visit.photos : []),
+    visit.photo,
+    visit.photoUrl,
+    visit.image,
+    visit.imageUrl,
+    visit.visitPhoto,
+    visit.thumbnail,
+  ].filter(Boolean);
+
+  return photoSources.flatMap((photo) => getPhotoUrlCandidates(photo))
+    .filter((url, index, list) => url && list.indexOf(url) === index);
 };
 
 const getDateRange = (r) => {
@@ -185,6 +254,22 @@ const getDateRange = (r) => {
 
   return {};
 };
+
+const getSelectedDayKey = (dateRange) => {
+  if (dateRange && /^\d{4}-\d{2}-\d{2}$/.test(dateRange)) return dateRange;
+
+  const date = new Date();
+  if (dateRange === "yesterday") {
+    date.setDate(date.getDate() - 1);
+  }
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+const isSingleDayFilter = (dateRange) =>
+  dateRange === "today" ||
+  dateRange === "yesterday" ||
+  /^\d{4}-\d{2}-\d{2}$/.test(dateRange || "");
 
 const getRecentDays = () => {
   const days = [];
@@ -369,18 +454,27 @@ const VisitCard = ({ visit: v, index, isLast, fixedBatteryInfo, fixedBatteryChip
   const [imgOpen, setImgOpen] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
 
-  const photoUrls = getPhotoUrlCandidates(
-    v.photos?.[0]?.url
-    || (typeof v.photos?.[0] === "string" ? v.photos[0] : null)
-    || v.photo
-    || null
-  );
+  const photoUrls = getVisitPhotoUrls(v);
   const photoUrl = photoUrls[photoIndex] || null;
+  const photoCount = [
+    ...(Array.isArray(v.photos) ? v.photos : []),
+    v.photo,
+    v.photoUrl,
+    v.image,
+    v.imageUrl,
+    v.visitPhoto,
+    v.thumbnail,
+  ].filter(Boolean).length;
+
   const handlePhotoError = () => {
     setPhotoIndex((current) =>
       current + 1 < photoUrls.length ? current + 1 : current,
     );
   };
+
+  useEffect(() => {
+    setPhotoIndex(0);
+  }, [v.id, v._id, v.photos, v.photo, v.photoUrl, v.image, v.imageUrl, v.visitPhoto, v.thumbnail]);
 
   const address = (() => {
     if (!v.address) return "";
@@ -487,11 +581,11 @@ const VisitCard = ({ visit: v, index, isLast, fixedBatteryInfo, fixedBatteryChip
             </Box>
           )}
 
-          {v.photos?.length > 0 && (
+          {photoCount > 0 && (
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.3 }}>
               <PhotoCamera sx={{ fontSize: 11, color: "#94a3b8" }} />
               <Typography sx={{ fontSize: "0.68rem", color: "#94a3b8" }}>
-                {v.photos.length} photo{v.photos.length > 1 ? "s" : ""}
+                {photoCount} photo{photoCount > 1 ? "s" : ""}
               </Typography>
             </Box>
           )}
@@ -748,9 +842,18 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
   const fetchPunchInStatus = useCallback(async () => {
     if (!targetUserId) return;
     try {
-      const today = new Date().toISOString().split("T")[0];
+      if (!isSingleDayFilter(filters.dateRange)) {
+        setIsPunchedIn(false);
+        setHasPunchedOut(false);
+        setPunchInLocation(null);
+        setPunchOutLocation(null);
+        setPunchBatteryInfo({ percentage: null, isCharging: false, recordedAt: null });
+        return;
+      }
+
+      const selectedDay = getSelectedDayKey(filters.dateRange);
       const res   = await apiFetch("/attendance", {
-        startDate: today, endDate: today, limit: 1,
+        startDate: selectedDay, endDate: selectedDay, limit: 1,
         ...(isAdminView ? { userId: targetUserId } : {}),
       });
       const list = res?.data?.attendances || res?.result?.attendances || res?.data || [];
@@ -799,10 +902,11 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
         setIsPunchedIn(false);
         setHasPunchedOut(false);
         setPunchInLocation(null);
+        setPunchOutLocation(null);
         setPunchBatteryInfo({ percentage: null, isCharging: false, recordedAt: null });
       }
     } catch (e) { console.warn("Punch-in status failed:", e.message); }
-  }, [targetUserId, isAdminView]);
+  }, [targetUserId, isAdminView, filters.dateRange]);
 
   const fetchVisits = useCallback(async (pageNum = 1, append = false) => {
     try {
@@ -844,15 +948,12 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
 
   const fetchGpsDistance = useCallback(async () => {
     if (!targetUserId) return;
+    if (!isSingleDayFilter(filters.dateRange)) {
+      setGpsDistance(null);
+      return;
+    }
     try {
-      const selectedDate =
-        filters.dateRange?.match(/^\d{4}-\d{2}-\d{2}$/)
-          ? filters.dateRange
-          : (() => {
-              const now = new Date();
-              if (filters.dateRange === "yesterday") now.setDate(now.getDate() - 1);
-              return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-            })();
+      const selectedDate = getSelectedDayKey(filters.dateRange);
       const res = await apiFetch("/location/distance", { date: selectedDate, salesmanId: targetUserId });
       const data  = res?.data || res?.result || res;
       setGpsDistance({ totalKm: data?.totalKm ?? 0, totalPoints: data?.totalPoints ?? 0 });
@@ -926,6 +1027,7 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
 
   useEffect(() => {
     if (!targetUserId) return;
+    if (filters.dateRange && filters.dateRange !== "today") return;
     const interval = setInterval(() => {
       fetchVisits(1, false);
       fetchGpsDistance();
@@ -933,9 +1035,14 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
       fetchLatestBattery();
     }, 12_000);
     return () => clearInterval(interval);
-  }, [targetUserId, fetchVisits, fetchGpsDistance, fetchPunchInStatus, fetchLatestBattery]);
+  }, [targetUserId, filters.dateRange, fetchVisits, fetchGpsDistance, fetchPunchInStatus, fetchLatestBattery]);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
+  const selectedMapDate = isSingleDayFilter(filters.dateRange)
+    ? getSelectedDayKey(filters.dateRange)
+    : null;
+  const useVisitTrailOnly = !isSingleDayFilter(filters.dateRange);
+
   const visibleVisits   = visits.filter(
     (visit) =>
       !isSystemStartLocationVisit(visit) &&
@@ -1128,7 +1235,7 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
           
 
 
-           <LiveTrackingMap
+<LiveTrackingMap
   isPunchedIn={isPunchedIn}
   hasPunchedOut={hasPunchedOut}
   userId={targetUserId}
@@ -1137,16 +1244,10 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
   locateTrigger={locateTrigger}
   onDistanceChange={setMapDistance}
   punchInLocation={punchInLocation}
+  punchOutLocation={punchOutLocation}
   visits={visibleVisits} 
-  selectedDate={
-    filters.dateRange?.match(/^\d{4}-\d{2}-\d{2}$/)
-      ? filters.dateRange
-      : (() => {
-          const now = new Date();
-          if (filters.dateRange === "yesterday") now.setDate(now.getDate() - 1);
-          return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
-        })()
-  }
+  selectedDate={selectedMapDate}
+  preferVisitTrail={useVisitTrailOnly}
 />
 
 
@@ -1165,7 +1266,9 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
   {displayDistanceKm.toFixed(2)}{" "}
   <Typography component="span" sx={{ fontSize: "0.75rem", fontWeight: 400, color: "#94a3b8" }}>km</Typography>
 </Typography>
-<Typography sx={{ fontSize: "0.65rem", color: "#94a3b8", mt: 0.5 }}>GPS distance</Typography>
+<Typography sx={{ fontSize: "0.65rem", color: "#94a3b8", mt: 0.5 }}>
+  {mapDistanceKm > 0 ? "Tracked route distance" : gpsDistanceKm > 0 ? "GPS route distance" : "Visit route distance"}
+</Typography>
 {totalDist >= 0.05 && (
   <Typography sx={{ fontSize: "0.65rem", color: alpha(PRIMARY, 0.6), mt: 0.25 }}>
     {totalDist.toFixed(1)} km road
