@@ -603,35 +603,6 @@ export default function AddUserPage() {
                 ),
               }}
             />
-            {(formData.password || touched.password) && missingPasswordRules.length > 0 && (
-              <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
-                {missingPasswordRules.map((rule) => (
-                  <Typography
-                    key={rule.key}
-                    variant="caption"
-                    sx={{
-                      color: "#d32f2f",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 0.75,
-                      fontSize: { xs: "0.72rem", sm: "0.78rem" },
-                    }}
-                  >
-                    <Box
-                      component="span"
-                      sx={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: "50%",
-                        bgcolor: "#d32f2f",
-                        flexShrink: 0,
-                      }}
-                    />
-                    {rule.label}
-                  </Typography>
-                ))}
-              </Box>
-            )}
           </Grid>
 
           <Grid item xs={12} sm={6}>
@@ -718,6 +689,35 @@ export default function AddUserPage() {
                 ),
               }}
             />
+            {(formData.password || touched.password) && missingPasswordRules.length > 0 && (
+              <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+                {missingPasswordRules.map((rule) => (
+                  <Typography
+                    key={rule.key}
+                    variant="caption"
+                    sx={{
+                      color: "#d32f2f",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 0.75,
+                      fontSize: { xs: "0.72rem", sm: "0.78rem" },
+                    }}
+                  >
+                    <Box
+                      component="span"
+                      sx={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        bgcolor: "#d32f2f",
+                        flexShrink: 0,
+                      }}
+                    />
+                    {rule.label}
+                  </Typography>
+                ))}
+              </Box>
+            )}
           </Grid>
 
           <Grid item xs={12} sm={6}>
