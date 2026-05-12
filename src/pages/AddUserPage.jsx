@@ -210,8 +210,8 @@ export default function AddUserPage() {
           newErrors.password = "Password is required";
         } else if (value.length < 8) {
           newErrors.password = "Minimum 8 characters required";
-        } else if (!/(?=.*[A-Z])(?=.*\d)/.test(value)) {
-          newErrors.password = "Include uppercase and number";
+        } else if (!/(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/.test(value)) {
+          newErrors.password = "Include uppercase, number, and special character";
         } else {
           delete newErrors.password;
         }
@@ -723,7 +723,7 @@ export default function AddUserPage() {
             >
               <Typography variant="body2">
                 Password must contain at least 8 characters, including one
-                uppercase letter and one number.
+                uppercase letter, one number, and one special character.
               </Typography>
             </Alert>
           </Grid>
