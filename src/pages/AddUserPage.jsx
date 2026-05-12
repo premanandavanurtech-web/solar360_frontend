@@ -119,6 +119,31 @@ export default function AddUserPage() {
   const [supervisors, setSupervisors] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const passwordRuleChecks = [
+    {
+      key: "length",
+      label: "At least 8 characters",
+      valid: formData.password.length >= 8,
+    },
+    {
+      key: "uppercase",
+      label: "At least one uppercase letter",
+      valid: /[A-Z]/.test(formData.password),
+    },
+    {
+      key: "number",
+      label: "At least one number",
+      valid: /\d/.test(formData.password),
+    },
+    {
+      key: "special",
+      label: "At least one special character",
+      valid: /[^A-Za-z0-9]/.test(formData.password),
+    },
+  ];
+
+  const missingPasswordRules = passwordRuleChecks.filter((rule) => !rule.valid);
   const [activeStep, setActiveStep] = useState(0);
   const [touched, setTouched] = useState({});
 
@@ -578,6 +603,35 @@ export default function AddUserPage() {
                 ),
               }}
             />
+            {(formData.password || touched.password) && missingPasswordRules.length > 0 && (
+              <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+                {missingPasswordRules.map((rule) => (
+                  <Typography
+                    key={rule.key}
+                    variant="caption"
+                    sx={{
+                      color: "#d32f2f",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 0.75,
+                      fontSize: { xs: "0.72rem", sm: "0.78rem" },
+                    }}
+                  >
+                    <Box
+                      component="span"
+                      sx={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        bgcolor: "#d32f2f",
+                        flexShrink: 0,
+                      }}
+                    />
+                    {rule.label}
+                  </Typography>
+                ))}
+              </Box>
+            )}
           </Grid>
 
           <Grid item xs={12} sm={6}>
@@ -709,23 +763,6 @@ export default function AddUserPage() {
                 ),
               }}
             />
-          </Grid>
-
-          <Grid item xs={12}>
-            <Alert
-              severity="info"
-              sx={{
-                borderRadius: 2,
-                mt: 1,
-                fontSize: { xs: "0.75rem", sm: "0.875rem" },
-              }}
-              icon={<Info fontSize="small" />}
-            >
-              <Typography variant="body2">
-                Password must contain at least 8 characters, including one
-                uppercase letter, one number, and one special character.
-              </Typography>
-            </Alert>
           </Grid>
 
           {/* Role Selection Section */}
