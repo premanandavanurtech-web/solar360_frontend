@@ -62,7 +62,7 @@ export default function LeaveManagement() {
   const [reviewNotes, setReviewNotes] = useState({});
 
   const isManager = useMemo(
-    () => ["Head_office", "ZSM", "ASM"].includes(user?.role),
+    () => ["Admin_panel", "ZSM", "Incharge"].includes(user?.role),
     [user?.role],
   );
 

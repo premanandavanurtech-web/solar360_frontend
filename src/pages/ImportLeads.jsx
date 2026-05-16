@@ -82,27 +82,27 @@ const PRIMARY = "#4569ea";
 const SECONDARY = "#1a237e";
 const SUCCESS = "#22c55e";
 const WARNING = "#f59e0b";
-const API_BASE = "https://solar-backend-6vaa.onrender.com/api/v1";
+const API_BASE = "http://localhost:9001/api/v1";
 
 // Role-based access control
-const ALLOWED_ROLES = ["ASM", "ZSM", "Head_office", "TEAM"];
+const ALLOWED_ROLES = ["Incharge", "ZSM", "Admin_panel", "TEAM"];
 
 const hasAccess = (userRole) => ALLOWED_ROLES.includes(userRole);
 
 // Role Configuration
 const ROLE_CONFIG = {
-  Head_office: {
-    label: "Head Office",
+  Admin_panel: {
+    label: "Admin Panel",
     color: PRIMARY,
     icon: <Person sx={{ fontSize: 16 }} />,
   },
   ZSM: {
-    label: "Zone Sales Manager",
+    label: "Operation Lead",
     color: PRIMARY,
     icon: <Person sx={{ fontSize: 16 }} />,
   },
-  ASM: {
-    label: "Area Sales Manager",
+  Incharge: {
+    label: "Incharge",
     color: PRIMARY,
     icon: <Person sx={{ fontSize: 16 }} />,
   },
@@ -725,7 +725,7 @@ export default function InputLeadsPage() {
       >
         <Alert severity="warning" sx={{ maxWidth: 500, borderRadius: 3 }}>
           <AlertTitle>Access Restricted</AlertTitle>
-          Only ASM, ZSM, and Head Office can import leads.
+          Only Incharge, Operation Lead, and Admin Panel can import leads.
           <br />
           <Typography variant="body2" sx={{ mt: 1 }}>
             Your role: <strong>{userRole || "Unknown"}</strong>
@@ -1073,7 +1073,7 @@ export default function InputLeadsPage() {
               sx={{ display: "flex", alignItems: "center", gap: 1 }}
             >
               <Info fontSize="small" sx={{ color: PRIMARY }} />
-              4. Required permissions: <strong>ASM, ZSM, or Head Office</strong>
+              4. Required permissions: <strong>Incharge, Operation Lead, or Admin Panel</strong>
             </Typography>
           </Stack>
         </Box>

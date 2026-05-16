@@ -141,7 +141,7 @@ const PRIMARY = "#4569ea";
 const SECONDARY = "#1a237e";
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 25, 50];
 const DEFAULT_ITEMS_PER_PAGE = 10;
-const ALLOWED_ROLES = ["Head_office", "ZSM", "ASM", "TEAM"];
+const ALLOWED_ROLES = ["Admin_panel", "ZSM", "Incharge", "TEAM"];
 
 // Period Options
 const PERIOD_OPTIONS = [
@@ -221,18 +221,18 @@ const BANK_LIST = [
 
 // Role Configuration
 const ROLE_CONFIG = {
-  Head_office: {
-    label: "Head Office",
+  Admin_panel: {
+    label: "Admin Panel",
     color: PRIMARY,
     icon: <AdminPanelSettings sx={{ fontSize: 16 }} />,
   },
   ZSM: {
-    label: "Zone Sales Manager",
+    label: "Operation Lead",
     color: PRIMARY,
     icon: <WorkspacePremium sx={{ fontSize: 16 }} />,
   },
-  ASM: {
-    label: "Area Sales Manager",
+  Incharge: {
+    label: "Incharge",
     color: PRIMARY,
     icon: <SupervisorAccount sx={{ fontSize: 16 }} />,
   },
@@ -248,12 +248,12 @@ const hasAccess = (userRole) => ALLOWED_ROLES.includes(userRole);
 
 const getUserPermissions = (userRole) => ({
   canView: true,
-  canEdit:  ["Head_office", "ZSM"].includes(userRole),
-  canDelete: userRole === "Head_office",
-  canManage: ["Head_office", "ZSM", "ASM"].includes(userRole),
-  canSeeAll: ["Head_office", "ZSM", "ASM"].includes(userRole),
+  canEdit:  ["Admin_panel", "ZSM"].includes(userRole),
+  canDelete: userRole === "Admin_panel",
+  canManage: ["Admin_panel", "ZSM", "Incharge"].includes(userRole),
+  canSeeAll: ["Admin_panel", "ZSM", "Incharge"].includes(userRole),
   canSeeOwn: userRole === "TEAM",
-  canUpdateStatus: ["Head_office", "ZSM", "ASM"].includes(userRole),
+  canUpdateStatus: ["Admin_panel", "ZSM", "Incharge"].includes(userRole),
 });
 
 const getLoanStatusColor = (status) => {

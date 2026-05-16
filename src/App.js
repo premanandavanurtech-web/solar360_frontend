@@ -100,23 +100,23 @@ function App() {
                   <ProtectedRoute>
                     <MainLayout>
                       <Routes>
-                        <Route path="dashboard" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><Dashboard /></ProtectedRoute>} />
-                        <Route path="total-visits" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><TotalVisitsPage /></ProtectedRoute>} />
-                        <Route path="registration" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><Registration /></ProtectedRoute>} />
-                        <Route path="reports" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><Reports /></ProtectedRoute>} />
-                        <Route path="user-management" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><UserManagement /></ProtectedRoute>} />
-                        <Route path="add-user" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM"]}><AddUserPage /></ProtectedRoute>} />
-                        <Route path="import-leads" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><ImportLead /></ProtectedRoute>} />
-                        <Route path="add-lead" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><AddLead /></ProtectedRoute>} />
-                        <Route path="expense" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><Expense /></ProtectedRoute>} />
-                        <Route path="lead-funnel" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><LeadFunnelDashboard /></ProtectedRoute>} />
-                        <Route path="missed-leads" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><MissedLeads /></ProtectedRoute>} />
-                        <Route path="installation-completion" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><Installation /></ProtectedRoute>} />
-                        <Route path="bank-loan-apply" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><BankLoanApply /></ProtectedRoute>} />
-                        <Route path="document-submission" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><DocumentSubmission /></ProtectedRoute>} />
-                        <Route path="add-visit" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><VisitDetails /></ProtectedRoute>} />
-                        <Route path="bank-at-pending" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><BankAtPending /></ProtectedRoute>} />
-                        <Route path="disbursement" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><Disbursement /></ProtectedRoute>} />
+                        <Route path="dashboard" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Dashboard /></ProtectedRoute>} />
+                        <Route path="total-visits" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><TotalVisitsPage /></ProtectedRoute>} />
+                        <Route path="registration" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Registration /></ProtectedRoute>} />
+                        <Route path="reports" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Reports /></ProtectedRoute>} />
+                        <Route path="user-management" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><UserManagement /></ProtectedRoute>} />
+                        <Route path="add-user" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge"]}><AddUserPage /></ProtectedRoute>} />
+                        <Route path="import-leads" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><ImportLead /></ProtectedRoute>} />
+                        <Route path="add-lead" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><AddLead /></ProtectedRoute>} />
+                        <Route path="expense" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Expense /></ProtectedRoute>} />
+                        <Route path="lead-funnel" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><LeadFunnelDashboard /></ProtectedRoute>} />
+                        <Route path="missed-leads" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><MissedLeads /></ProtectedRoute>} />
+                        <Route path="installation-completion" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Installation /></ProtectedRoute>} />
+                        <Route path="bank-loan-apply" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><BankLoanApply /></ProtectedRoute>} />
+                        <Route path="document-submission" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><DocumentSubmission /></ProtectedRoute>} />
+                        <Route path="add-visit" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><VisitDetails /></ProtectedRoute>} />
+                        <Route path="bank-at-pending" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><BankAtPending /></ProtectedRoute>} />
+                        <Route path="disbursement" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Disbursement /></ProtectedRoute>} />
 
                         {/* ── ATTENDANCE ───────────────────────────────────────────────────
                             /attendance              → own attendance (any role)
@@ -127,7 +127,7 @@ function App() {
                         <Route
                           path="attendance"
                           element={
-                            <ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}>
+                            <ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}>
                               <Attandance />
                             </ProtectedRoute>
                           }
@@ -135,7 +135,7 @@ function App() {
                         <Route
                           path="attendance/:userId"
                           element={
-                            <ProtectedRoute allowedRoles={["Head_office","ZSM","ASM"]}>
+                            <ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge"]}>
                               <Attandance />
                             </ProtectedRoute>
                           }
@@ -143,7 +143,7 @@ function App() {
                         <Route
                           path="team-attendance"
                           element={
-                            <ProtectedRoute allowedRoles={["Head_office","ZSM","ASM"]}>
+                            <ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge"]}>
                               <TeamAttendance />
                             </ProtectedRoute>
                           }
@@ -151,16 +151,16 @@ function App() {
                         <Route
                           path="leave-management"
                           element={
-                            <ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}>
+                            <ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}>
                               <LeaveManagement />
                             </ProtectedRoute>
                           }
                         />
 
-                        <Route path="team-tracking" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><TeamTracking /></ProtectedRoute>} />
-                       <Route path="member-history/:userId" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><MemberVisitHistory /></ProtectedRoute>} />
-                        <Route path="notifications" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><Notifications /></ProtectedRoute>} />
-                        <Route path="all-leads" element={<ProtectedRoute allowedRoles={["Head_office","ZSM","ASM","TEAM"]}><LeadOverview /></ProtectedRoute>} />
+                        <Route path="team-tracking" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><TeamTracking /></ProtectedRoute>} />
+                       <Route path="member-history/:userId" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><MemberVisitHistory /></ProtectedRoute>} />
+                        <Route path="notifications" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Notifications /></ProtectedRoute>} />
+                        <Route path="all-leads" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><LeadOverview /></ProtectedRoute>} />
                         <Route path="*" element={<Navigate to="/dashboard" replace />} />
                       </Routes>
                     </MainLayout>

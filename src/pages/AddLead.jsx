@@ -72,18 +72,18 @@ const WARNING = "#ff9800";
 
 // Role Configuration
 const ROLE_CONFIG = {
-  Head_office: {
-    label: "Head Office",
+  Admin_panel: {
+    label: "Admin Panel",
     color: PRIMARY,
     icon: <Person sx={{ fontSize: 16 }} />,
   },
   ZSM: {
-    label: "Zone Sales Manager",
+    label: "Operation Lead",
     color: PRIMARY,
     icon: <Person sx={{ fontSize: 16 }} />,
   },
-  ASM: {
-    label: "Area Sales Manager",
+  Incharge: {
+    label: "Incharge",
     color: PRIMARY,
     icon: <Person sx={{ fontSize: 16 }} />,
   },
@@ -149,7 +149,7 @@ export default function CreateLeadPage() {
   // Check if user has permission to create leads
   useEffect(() => {
     const checkPermission = () => {
-      const allowedRoles = ["Head_office", "ASM", "ZSM", "TEAM"];
+      const allowedRoles = ["Admin_panel", "Incharge", "ZSM", "TEAM"];
       
       if (!userRole || !allowedRoles.includes(userRole)) {
         setAccessDenied(true);

@@ -3,6 +3,7 @@ import React, { createContext, useState, useContext, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 
 const DashboardContext = createContext({});
+const normalizeRole = (role) => (role === "Head_office" ? "Admin_panel" : role);
 
 export const useDashboard = () => useContext(DashboardContext);
 
@@ -24,7 +25,7 @@ export const DashboardProvider = ({ children }) => {
       setLoading(true);
       setError(null);
 
-      const userRole = user?.role;
+      const userRole = normalizeRole(user?.role);
       //console.log('Fetching dashboard for role:', userRole);
 
       let endpoint;
@@ -32,14 +33,14 @@ export const DashboardProvider = ({ children }) => {
 
       // Determine API endpoint based on role
       switch (userRole) {
-        case "Head_office":
+        case "Admin_panel":
           endpoint = "/lead/HeadOfficeDashboard";
           break;
         case "ZSM":
           endpoint = "/lead/HeadOfficeDashboard";
           break;
-        case "ASM":
-          endpoint = "/lead/AsmDashboard";
+        case "Incharge":
+          endpoint = "/lead/InchargeDashboard";
           break;
         case "TEAM":
           endpoint = "/lead/TeamDashboard";
@@ -93,10 +94,10 @@ export const DashboardProvider = ({ children }) => {
 
   /** 🔹 Get user role display name */
   const getRoleDisplayName = () => {
-    switch (user?.role) {
-      case "Head_office": return "Head Office";
-      case "ZSM": return "Zonal Manager";
-      case "ASM": return "Area Manager";
+    switch (normalizeRole(user?.role)) {
+      case "Admin_panel": return "Admin Panel";
+      case "ZSM": return "Operation Lead";
+      case "Incharge": return "Incharge";
       case "TEAM": return "Field Executive";
       default: return "User";
     }

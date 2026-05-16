@@ -215,18 +215,18 @@ const STAGE_CONFIG = {
 
 // Role Configuration
 const ROLE_CONFIG = {
-  Head_office: {
-    label: "Head Office",
+  Admin_panel: {
+    label: "Admin Panel",
     color: PRIMARY_COLOR,
     icon: <AdminPanelSettings sx={{ fontSize: 16 }} />,
   },
   ZSM: {
-    label: "Zone Sales Manager",
+    label: "Operation Lead",
     color: PRIMARY_COLOR,
     icon: <WorkspacePremium sx={{ fontSize: 16 }} />,
   },
-  ASM: {
-    label: "Area Sales Manager",
+  Incharge: {
+    label: "Incharge",
     color: PRIMARY_COLOR,
     icon: <SupervisorAccount sx={{ fontSize: 16 }} />,
   },

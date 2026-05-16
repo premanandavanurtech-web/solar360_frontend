@@ -490,7 +490,9 @@ const Login = () => {
           throw new Error("User role not found in login response");
         }
 
-        if (!["Head_office", "ZSM", "ASM", "TEAM"].includes(userRole)) {
+        const normalizedRole = userRole === "Head_office" ? "Admin_panel" : userRole;
+
+        if (!["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(normalizedRole)) {
           throw new Error("You do not have permission to access this system");
         }
 
@@ -507,7 +509,7 @@ const Login = () => {
         setSuccessMessage("Login successful! Redirecting to dashboard...");
 
         setTimeout(() => {
-          if (userRole === "TEAM") {
+          if (normalizedRole === "TEAM") {
             navigate("/attendance", { replace: true });
           } else {
             navigate("/dashboard", { replace: true });
@@ -873,7 +875,7 @@ const Login = () => {
                     width: { xs: 80, sm: 100, md: 120 },
                     height: { xs: 80, sm: 100, md: 120 },
                     borderRadius: "50%",
-                    background: COLOR_VERY_LIGHT,
+                    background: "#ffffff",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -894,10 +896,9 @@ const Login = () => {
                     src={logo}
                     alt="Sahoo Construction & Solar logo"
                     style={{
-                      width: "120%",
-                      height: "120%",
+                      width: "84%",
+                      height: "84%",
                       objectFit: "contain",
-                      padding: "12px",
                     }}
                   />
                 </Box>

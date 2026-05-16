@@ -22,12 +22,12 @@ import {
 import { useSocket } from "./Usesocket.js";
 import { toast } from "../components/useToast.jsx";
 
-const API  = "https://solar-backend-6vaa.onrender.com";
+const API  = "http://localhost:9001";
 const GKEY = "AIzaSyCqM7uF9c0ZMQjdssHqSMJJ3mBcmz5RNS0";
 
 const MIN_MOVE_METRES = 35;
 const SNAP_TO_ROADS_MAX_POINTS = 100;
-const SNAP_TO_ROADS_MAX_GAP_METRES = 300;
+const SNAP_TO_ROADS_MAX_GAP_METRES = 2500;
 
 function getGpsNoiseRadiusMetres(currentAccuracy = 0, previousAccuracy = 0) {
   const current = Number(currentAccuracy) || 0;
@@ -135,6 +135,31 @@ const extractVisitTrailPoints = (visits = [], punchInLocation = null) => {
     });
 
   return points;
+};
+
+const ensureTrailStartsAtPunchIn = (points = [], punchInLocation = null) => {
+  if (!punchInLocation?.lat || !punchInLocation?.lng) return points;
+  const punchPoint = {
+    lat: Number(punchInLocation.lat),
+    lng: Number(punchInLocation.lng),
+    accuracy: Number(punchInLocation.accuracy ?? 0),
+    source: "punch-in",
+  };
+
+  if (!Number.isFinite(punchPoint.lat) || !Number.isFinite(punchPoint.lng)) {
+    return points;
+  }
+
+  const first = points[0];
+  if (
+    first &&
+    Math.abs(Number(first.lat) - punchPoint.lat) < 0.00001 &&
+    Math.abs(Number(first.lng) - punchPoint.lng) < 0.00001
+  ) {
+    return points;
+  }
+
+  return [punchPoint, ...points];
 };
 
 function calcKm(points) {
@@ -272,6 +297,11 @@ const visitMkRef = useRef([]);
   const [sockAck,    setSockAck]    = useState(null);
   const [totalKm,    setTotalKm]    = useState(0);
   const [pointCount, setPointCount] = useState(0);
+  const [roadTravel, setRoadTravel] = useState({
+    totalKm: null,
+    segmentCount: 0,
+    loading: false,
+  });
 
   const prevPunchedIn  = useRef(false);
   const prevPunchedOut = useRef(false);
@@ -677,6 +707,65 @@ useEffect(() => {
       : batch.map((point) => ({ lat: point.lat, lng: point.lng }));
   }
 
+  function appendPath(target, path) {
+    for (const point of path) {
+      if (!point || !Number.isFinite(Number(point.lat)) || !Number.isFinite(Number(point.lng))) continue;
+      const normalized = { lat: Number(point.lat), lng: Number(point.lng) };
+      const last = target[target.length - 1];
+      if (
+        last &&
+        Math.abs(last.lat - normalized.lat) < 0.000001 &&
+        Math.abs(last.lng - normalized.lng) < 0.000001
+      ) {
+        continue;
+      }
+      target.push(normalized);
+    }
+  }
+
+  function fetchDrivingPath(from, to) {
+    const G = window.google?.maps;
+    if (!G?.DirectionsService) {
+      return Promise.resolve([
+        { lat: from.lat, lng: from.lng },
+        { lat: to.lat, lng: to.lng },
+      ]);
+    }
+
+    return new Promise((resolve) => {
+      const directionsService = new G.DirectionsService();
+      directionsService.route(
+        {
+          origin: { lat: Number(from.lat), lng: Number(from.lng) },
+          destination: { lat: Number(to.lat), lng: Number(to.lng) },
+          travelMode: G.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status !== "OK") {
+            resolve([
+              { lat: from.lat, lng: from.lng },
+              { lat: to.lat, lng: to.lng },
+            ]);
+            return;
+          }
+
+          const overviewPath = result?.routes?.[0]?.overview_path || [];
+          const path = overviewPath
+            .map((latLng) => ({
+              lat: typeof latLng.lat === "function" ? latLng.lat() : latLng.lat,
+              lng: typeof latLng.lng === "function" ? latLng.lng() : latLng.lng,
+            }))
+            .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+
+          resolve(path.length >= 2 ? path : [
+            { lat: from.lat, lng: from.lng },
+            { lat: to.lat, lng: to.lng },
+          ]);
+        }
+      );
+    });
+  }
+
   async function getRoadPath(points) {
     if (!Array.isArray(points) || points.length < 2) {
       return points.map((point) => ({ lat: point.lat, lng: point.lng }));
@@ -687,8 +776,14 @@ useEffect(() => {
       return snappedTrailCacheRef.current.path;
     }
 
-    const batches = [];
+    const snappedPath = [];
     let currentBatch = [points[0]];
+
+    const flushCurrentBatch = async () => {
+      if (currentBatch.length < 2) return;
+      const snappedBatch = await fetchSnappedBatch(currentBatch);
+      appendPath(snappedPath, snappedBatch);
+    };
 
     for (let i = 1; i < points.length; i++) {
       const prev = points[i - 1];
@@ -699,41 +794,22 @@ useEffect(() => {
         gapMetres > SNAP_TO_ROADS_MAX_GAP_METRES ||
         currentBatch.length >= SNAP_TO_ROADS_MAX_POINTS
       ) {
-        if (currentBatch.length >= 2) {
-          batches.push(currentBatch);
+        await flushCurrentBatch();
+
+        if (gapMetres > SNAP_TO_ROADS_MAX_GAP_METRES) {
+          const drivingPath = await fetchDrivingPath(prev, curr);
+          appendPath(snappedPath, drivingPath);
+          currentBatch = [curr];
+        } else {
+          currentBatch = [prev, curr];
         }
-        currentBatch = gapMetres > SNAP_TO_ROADS_MAX_GAP_METRES ? [curr] : [prev, curr];
         continue;
       }
 
       currentBatch.push(curr);
     }
 
-    if (currentBatch.length >= 2) {
-      batches.push(currentBatch);
-    }
-
-    if (!batches.length) {
-      return points.map((point) => ({ lat: point.lat, lng: point.lng }));
-    }
-
-    const snappedPath = [];
-
-    for (const batch of batches) {
-      const snappedBatch = await fetchSnappedBatch(batch);
-      if (!snappedBatch.length) continue;
-
-      if (snappedPath.length > 0) {
-        const first = snappedBatch[0];
-        const last = snappedPath[snappedPath.length - 1];
-        const duplicate =
-          Math.abs(first.lat - last.lat) < 0.000001 &&
-          Math.abs(first.lng - last.lng) < 0.000001;
-        snappedPath.push(...(duplicate ? snappedBatch.slice(1) : snappedBatch));
-      } else {
-        snappedPath.push(...snappedBatch);
-      }
-    }
+    await flushCurrentBatch();
 
     const finalPath = snappedPath.length
       ? snappedPath
@@ -944,6 +1020,34 @@ useEffect(() => {
     return allowSparse ? cleaned : simplifyTrailPoints(cleaned);
   }
 
+  const fetchRoadTravelDistance = useCallback(async () => {
+    if (!userId) return;
+    setRoadTravel((prev) => ({ ...prev, loading: true }));
+    try {
+      const dateParam = getLocalDateString(selectedDate);
+      const res = await fetch(
+        `${API}/api/v1/location/travel-distance?salesmanId=${userId}&date=${dateParam}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } }
+      );
+
+      if (!res.ok) {
+        setRoadTravel({ totalKm: null, segmentCount: 0, loading: false });
+        return;
+      }
+
+      const data = await res.json();
+      const result = data?.data || data?.result || data || {};
+      const roadKm = Number(result.totalKm);
+      setRoadTravel({
+        totalKm: Number.isFinite(roadKm) ? roadKm : null,
+        segmentCount: Number(result.segmentCount || result.segments?.length || 0),
+        loading: false,
+      });
+    } catch {
+      setRoadTravel({ totalKm: null, segmentCount: 0, loading: false });
+    }
+  }, [userId, selectedDate]);
+
   const fetchTotalKm = useCallback(async () => {
     if (!userId) return;
     try {
@@ -1021,7 +1125,10 @@ useEffect(() => {
           : visitFallbackTrail;
 
       if (baseTrail.length > 0) {
-        const merged = [...baseTrail];
+        const merged = ensureTrailStartsAtPunchIn(
+          [...baseTrail],
+          punchInLocationRef.current
+        );
         if (isLive && isTodaySelected) {
           for (const lp of allPtsRef.current) {
             const alreadyIn = merged.some(
@@ -1042,10 +1149,11 @@ useEffect(() => {
       }
 
       await fetchTotalKm();
+      await fetchRoadTravelDistance();
     } catch (e) {
       console.error("[AdminMap] ❌ Trail fetch failed:", e.message);
     }
-  }, [userId, mapLoaded, fetchTotalKm, selectedDate, isLive, isTodaySelected, preferVisitTrail]);
+  }, [userId, mapLoaded, fetchTotalKm, fetchRoadTravelDistance, selectedDate, isLive, isTodaySelected, preferVisitTrail]);
 
   useEffect(() => {
     // ✅ Clear old trail and re-fetch whenever selectedDate changes
@@ -1075,7 +1183,10 @@ useEffect(() => {
       return;
     }
 
-    const finalTrail = cleanPoints(visitFallbackTrail, { allowSparse: true });
+      const finalTrail = cleanPoints(
+        ensureTrailStartsAtPunchIn(visitFallbackTrail, punchInLocation),
+        { allowSparse: true }
+      );
     if (finalTrail.length >= 2) {
       allPtsRef.current = finalTrail;
       drawTrail(finalTrail, { autoFit: true, autoPanLive: false });
@@ -1089,7 +1200,10 @@ useEffect(() => {
     if (!mapLoaded || !preferVisitTrail) return;
 
     const visitTrail = extractVisitTrailPoints(visits, punchInLocation);
-    const finalTrail = cleanPoints(visitTrail, { allowSparse: true });
+    const finalTrail = cleanPoints(
+      ensureTrailStartsAtPunchIn(visitTrail, punchInLocation),
+      { allowSparse: true }
+    );
 
     if (finalTrail.length >= 2) {
       allPtsRef.current = finalTrail;
@@ -1429,7 +1543,11 @@ useEffect(() => {
           : <span style={{ color: "#94a3b8" }}>📍 Waiting for movement…</span>}
         <span style={{ color: "#e2e8f0" }}>|</span>
         <span style={{ color: totalKm > 0 ? "#4569ea" : "#94a3b8", fontSize: 13, fontWeight: 800 }}>
-          🛣 {totalKm.toFixed(2)} km
+          GPS {totalKm.toFixed(2)} km
+        </span>
+        <span style={{ color: "#e2e8f0" }}>|</span>
+        <span style={{ color: roadTravel.totalKm > 0 ? "#16a34a" : "#94a3b8", fontSize: 13, fontWeight: 800 }}>
+          Road {roadTravel.loading ? "..." : `${Number(roadTravel.totalKm || 0).toFixed(2)} km`}
         </span>
         {isLive && (
           <>

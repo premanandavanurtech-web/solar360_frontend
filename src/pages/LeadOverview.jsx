@@ -155,20 +155,20 @@ const PERIOD_OPTIONS = [
 ];
 
 const ROLE_PERMISSIONS = {
-  Head_office: {
+  Admin_panel: {
     view: true, edit: true, assign: true, delete: true, bulkActions: true,
     export: true, settings: true, color: PRIMARY_COLOR,
-    icon: <AdminPanelSettings />, label: "Head Office", level: 1, canAssignTo: ["ASM", "TEAM"],
+    icon: <AdminPanelSettings />, label: "Admin Panel", level: 1, canAssignTo: ["Incharge", "TEAM"],
   },
   ZSM: {
     view: true, edit: true, assign: true, delete: false, bulkActions: true,
     export: true, settings: false, color: PRIMARY_COLOR,
-    icon: <WorkspacePremium />, label: "Zone Sales Manager", level: 2, canAssignTo: ["ASM", "TEAM"],
+    icon: <WorkspacePremium />, label: "Operation Lead", level: 2, canAssignTo: ["Incharge", "TEAM"],
   },
-  ASM: {
+  Incharge: {
     view: true, edit: true, assign: true, delete: false, bulkActions: true,
     export: false, settings: false, color: PRIMARY_COLOR,
-    icon: <SupervisorAccount />, label: "Area Sales Manager", level: 3, canAssignTo: ["TEAM"],
+    icon: <SupervisorAccount />, label: "Incharge", level: 3, canAssignTo: ["TEAM"],
   },
   TEAM: {
     view: true, edit: true, assign: false, delete: false, bulkActions: false,
@@ -203,6 +203,69 @@ const formatDate = (dateString, formatStr = "MMM dd, yyyy hh:mm a") => {
     const parsedDate = parseISO(dateString);
     return isValid(parsedDate) ? format(parsedDate, formatStr) : "Invalid date";
   } catch { return "Invalid date"; }
+};
+
+const formatTimelineValue = (value) => {
+  if (!value || value === "Empty") return "Empty";
+  return value;
+};
+
+const buildTimelineStageDetails = (timeline) => {
+  const snapshot = timeline?.snapshot || {};
+  const changeMap = (timeline?.changes || []).reduce((acc, change) => {
+    if (change?.field) acc[change.field] = change.newValue;
+    return acc;
+  }, {});
+
+  const pick = (key, fallback = null) => {
+    if (snapshot[key] !== undefined && snapshot[key] !== null && snapshot[key] !== "") {
+      return snapshot[key];
+    }
+    if (changeMap[key] !== undefined && changeMap[key] !== null && changeMap[key] !== "") {
+      return changeMap[key];
+    }
+    return fallback;
+  };
+
+  const toDetail = (label, value) => {
+    if (value === undefined || value === null || value === "" || value === "Not set" || value === "Empty") {
+      return null;
+    }
+    return { label, value };
+  };
+
+  const stageDetails = {
+    Visit: [
+      toDetail("Visit status", pick("visitStatus", timeline?.stage === "Visit" ? "Pending" : null)),
+      toDetail("Visit date", pick("visitDate") ? formatDate(pick("visitDate"), "dd MMM yyyy") : formatDate(timeline?.updatedAt, "dd MMM yyyy")),
+    ].filter(Boolean),
+    Registration: [
+      toDetail("Registration status", pick("registrationStatus")),
+      toDetail("Registration date", pick("dateOfRegistration") ? formatDate(pick("dateOfRegistration"), "dd MMM yyyy") : formatDate(timeline?.updatedAt, "dd MMM yyyy")),
+    ].filter(Boolean),
+    "Bank Loan Apply": [
+      toDetail("Loan status", pick("loanStatus")),
+      toDetail("Loan date", pick("loanApprovalDate") ? formatDate(pick("loanApprovalDate"), "dd MMM yyyy") : formatDate(timeline?.updatedAt, "dd MMM yyyy")),
+    ].filter(Boolean),
+    "Document Submission": [
+      toDetail("Document status", pick("documentStatus")),
+      toDetail("Document date", pick("documentSubmissionDate") ? formatDate(pick("documentSubmissionDate"), "dd MMM yyyy") : formatDate(timeline?.updatedAt, "dd MMM yyyy")),
+    ].filter(Boolean),
+    "Bank at Pending": [
+      toDetail("Bank status", pick("bankAtPendingStatus")),
+      toDetail("Bank date", pick("bankAtPendingDate") ? formatDate(pick("bankAtPendingDate"), "dd MMM yyyy") : formatDate(timeline?.updatedAt, "dd MMM yyyy")),
+    ].filter(Boolean),
+    Disbursement: [
+      toDetail("Disbursement status", pick("disbursementStatus")),
+      toDetail("Disbursement date", pick("disbursementDate") ? formatDate(pick("disbursementDate"), "dd MMM yyyy") : formatDate(timeline?.updatedAt, "dd MMM yyyy")),
+    ].filter(Boolean),
+    "Installation Completion": [
+      toDetail("Installation status", pick("installationStatus")),
+      toDetail("Installation date", pick("installationDate") ? formatDate(pick("installationDate"), "dd MMM yyyy") : formatDate(timeline?.updatedAt, "dd MMM yyyy")),
+    ].filter(Boolean),
+  };
+
+  return stageDetails[timeline?.stage] || [];
 };
 
 const getAssignedPerson = (lead) => {
@@ -517,12 +580,13 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
   const [leadDetails, setLeadDetails] = useState(null);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
+  const [expandedTimelineStage, setExpandedTimelineStage] = useState(null);
 
   const permissions = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.TEAM;
 
   useEffect(() => {
     if (open && lead) { fetchLeadDetails(); }
-    else { setLeadDetails(null); setError(null); setActiveTab(0); }
+    else { setLeadDetails(null); setError(null); setActiveTab(0); setExpandedTimelineStage(null); }
   }, [open, lead]);
 
   const fetchLeadDetails = async () => {
@@ -588,6 +652,27 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
   if (!leadDetails) return null;
 
   const statusColor = getStatusColor(leadDetails.status);
+  const orderedTimeline = [...(leadDetails.stageTimeline || [])].sort(
+    (a, b) => new Date(a.updatedAt || 0) - new Date(b.updatedAt || 0)
+  );
+  const groupedTimeline = orderedTimeline.reduce((groups, entry) => {
+    const existingGroup = groups.find((group) => group.stage === entry.stage);
+    if (existingGroup) {
+      existingGroup.entries.push(entry);
+      existingGroup.latestUpdatedAt = entry.updatedAt;
+      existingGroup.latestUpdatedBy = entry.updatedBy;
+      existingGroup.latestUpdatedRole = entry.updatedRole;
+    } else {
+      groups.push({
+        stage: entry.stage,
+        entries: [entry],
+        latestUpdatedAt: entry.updatedAt,
+        latestUpdatedBy: entry.updatedBy,
+        latestUpdatedRole: entry.updatedRole,
+      });
+    }
+    return groups;
+  }, []);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth fullScreen={isMobile}
@@ -793,23 +878,67 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
             <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}><Timeline fontSize="small" /> Lead Timeline ({leadDetails.stageTimeline?.length || 0} updates)</Typography>
             {leadDetails.stageTimeline?.length > 0 ? (
               <List sx={{ maxHeight: 420, overflow: "auto" }}>
-                {[...leadDetails.stageTimeline].reverse().map((timeline, index) => {
-                  const sc = getStatusColor(timeline.stage);
+                {groupedTimeline.map((group, index) => {
+                  const sc = getStatusColor(group.stage);
+                  const isExpanded = expandedTimelineStage === group.stage;
                   return (
                     <ListItem key={index} sx={{ px: 0, py: 1.5, borderBottom: `1px solid ${alpha(PRIMARY_COLOR, 0.06)}`, alignItems: "flex-start" }}>
                       <ListItemAvatar>
                         <Avatar sx={{ bgcolor: sc.bg, color: sc.color, width: 36, height: 36 }}>{React.cloneElement(sc.icon, { sx: { fontSize: 18 } })}</Avatar>
                       </ListItemAvatar>
-                      <ListItemText
-                        primary={<Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <Typography variant="body2" fontWeight={700}>{timeline.stage}</Typography>
-                          <Typography variant="caption" color="text.secondary">{formatDate(timeline.updatedAt, "dd MMM, HH:mm")}</Typography>
-                        </Box>}
-                        secondary={<>
-                          <Typography variant="body2" sx={{ mt: 0.5, color: "text.primary" }}>{timeline.notes}</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>Updated by: {timeline.updatedRole} • {timeline.updatedBy?.firstName || "System"}</Typography>
-                        </>}
-                      />
+                      <Box sx={{ flex: 1 }}>
+                        <Box
+                          onClick={() => setExpandedTimelineStage(isExpanded ? null : group.stage)}
+                          sx={{ cursor: "pointer", borderRadius: 2, p: 1, mx: -1, mt: -0.5, "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.03) } }}
+                        >
+                          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1 }}>
+                            <Box>
+                              <Typography variant="body2" fontWeight={700}>{group.stage}</Typography>
+                              <Typography variant="body2" sx={{ mt: 0.5, color: "text.primary" }}>
+                                {group.entries.length > 1 ? `${group.entries.length} updates in this stage` : group.entries[0]?.notes}
+                              </Typography>
+                            </Box>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <Typography variant="caption" color="text.secondary">{formatDate(group.latestUpdatedAt, "dd MMM, HH:mm")}</Typography>
+                              {isExpanded ? <ExpandLess sx={{ fontSize: 18, color: PRIMARY_COLOR }} /> : <ExpandMore sx={{ fontSize: 18, color: PRIMARY_COLOR }} />}
+                            </Stack>
+                          </Box>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
+                            Updated by: {group.latestUpdatedRole || "System"} • {group.latestUpdatedBy?.firstName || "System"}
+                          </Typography>
+                        </Box>
+                        <Collapse in={isExpanded}>
+                          <Box sx={{ pt: 1.25, display: "grid", gap: 1 }}>
+                            {group.entries.map((timeline, entryIndex) => {
+                              const stageDetails = buildTimelineStageDetails(timeline);
+                              return (
+                                <Box key={`${group.stage}-${timeline.updatedAt || entryIndex}`} sx={{ p: 1.25, borderRadius: 2, bgcolor: alpha(PRIMARY_COLOR, 0.03), border: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}` }}>
+                                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 1, mb: 1 }}>
+                                    <Box>
+                                      <Typography variant="body2" fontWeight={700}>{timeline.notes}</Typography>
+                                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                                        Updated by: {timeline.updatedRole || "System"} • {timeline.updatedBy?.firstName || "System"}
+                                      </Typography>
+                                    </Box>
+                                    <Typography variant="caption" color="text.secondary">{formatDate(timeline.updatedAt, "dd MMM, HH:mm")}</Typography>
+                                  </Box>
+
+                                  {stageDetails.length > 0 && (
+                                    <Grid container spacing={1.25}>
+                                      {stageDetails.map((detail, detailIndex) => (
+                                        <Grid item xs={12} sm={6} key={`${group.stage}-${entryIndex}-${detail.label}-${detailIndex}`}>
+                                          <Typography variant="caption" color="text.secondary" display="block">{detail.label}</Typography>
+                                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{detail.value || "Not set"}</Typography>
+                                        </Grid>
+                                      ))}
+                                    </Grid>
+                                  )}
+                                </Box>
+                              );
+                            })}
+                          </Box>
+                        </Collapse>
+                      </Box>
                     </ListItem>
                   );
                 })}
@@ -986,7 +1115,7 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
   const { fetchAPI, user } = useAuth();
 
   const [loading, setLoading] = useState(false);
-  const [asmUsers, setAsmUsers] = useState([]);
+  const [InchargeUsers, setInchargeUsers] = useState([]);
   const [teamUsers, setTeamUsers] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [fetchingUsers, setFetchingUsers] = useState(false);
@@ -1009,7 +1138,7 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
   }, [open, canAssign, permissions]);
 
   const resetModal = () => {
-    setAsmUsers([]); setTeamUsers([]); setSelectedUserId(""); setError(null);
+    setInchargeUsers([]); setTeamUsers([]); setSelectedUserId(""); setError(null);
     setAssignToRole(""); setShowRoleSelection(false); setAvailableRoles([]);
   };
 
@@ -1018,9 +1147,9 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
     try {
       setFetchingUsers(true); setError(null);
       let endpoint = "", queryParams = "?page=1&limit=100";
-      if (userRole === "Head_office" || userRole === "ZSM") {
-        endpoint = roleToFetch === "ASM" ? "/user/managerList" : "/user/getManagerUnderUserList";
-      } else if (userRole === "ASM" && roleToFetch === "TEAM") {
+      if (userRole === "Admin_panel" || userRole === "ZSM") {
+        endpoint = roleToFetch === "Incharge" ? "/user/managerList" : "/user/getManagerUnderUserList";
+      } else if (userRole === "Incharge" && roleToFetch === "TEAM") {
         endpoint = "/user/getManagerUnderUserList";
         queryParams = `?page=1&limit=100&supervisorId=${user._id}`;
       }
@@ -1031,12 +1160,12 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
         const filteredUsers = usersData.filter((u) => {
           const hasRole = u.role === roleToFetch, isActive = u.status === "active";
           let supervised = true;
-          if (userRole === "ASM" && roleToFetch === "TEAM") supervised = u.supervisor?._id === user._id || u.supervisorId === user._id || u.supervisor === user._id;
+          if (userRole === "Incharge" && roleToFetch === "TEAM") supervised = u.supervisor?._id === user._id || u.supervisorId === user._id || u.supervisor === user._id;
           return hasRole && isActive && supervised;
         });
-        if (roleToFetch === "ASM") setAsmUsers(filteredUsers);
+        if (roleToFetch === "Incharge") setInchargeUsers(filteredUsers);
         else if (roleToFetch === "TEAM") setTeamUsers(filteredUsers);
-        if (filteredUsers.length === 0) setError(`No active ${roleToFetch === "ASM" ? "Area Sales Managers" : "team members"} available.`);
+        if (filteredUsers.length === 0) setError(`No active ${roleToFetch === "Incharge" ? "Incharges" : "team members"} available.`);
         else setError(null);
       } else setError(response?.message || `Failed to load ${roleToFetch} users.`);
     } catch (error) { setError(error.message || "Failed to load users. Please try again."); }
@@ -1046,7 +1175,7 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
   const handleRoleChange = async (event) => {
     const role = event.target.value;
     setAssignToRole(role); setSelectedUserId("");
-    if (role === "ASM") setAsmUsers([]); else if (role === "TEAM") setTeamUsers([]);
+    if (role === "Incharge") setInchargeUsers([]); else if (role === "TEAM") setTeamUsers([]);
     setError(null); await fetchUsers(role);
   };
 
@@ -1061,7 +1190,7 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
         else throw new Error(response.message || "Failed to bulk assign leads");
       } else {
         const assignData = { leadId: lead._id, targetId: selectedUserId, targetRole: assignToRole };
-        if (assignToRole === "ASM") assignData.managerId = selectedUserId;
+        if (assignToRole === "Incharge") assignData.managerId = selectedUserId;
         else if (assignToRole === "TEAM") assignData.userId = selectedUserId;
         const response = await fetchAPI("/lead/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(assignData) });
         if (response.success) { onAssign(response.result); onClose(); showSnackbar?.("Lead assigned successfully", "success"); }
@@ -1071,7 +1200,7 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
     finally { setLoading(false); }
   };
 
-  const getAvailableUsers = () => assignToRole === "ASM" ? asmUsers : assignToRole === "TEAM" ? teamUsers : [];
+  const getAvailableUsers = () => assignToRole === "Incharge" ? InchargeUsers : assignToRole === "TEAM" ? teamUsers : [];
   const getSelectedUser = () => getAvailableUsers().find((u) => u._id === selectedUserId);
 
   if (!canAssign) {
@@ -1145,16 +1274,16 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
                 <Typography variant="subtitle2" fontWeight={700} color="text.primary" sx={{ mb: 1 }}>Assign To Role</Typography>
                 <Stack direction="row" spacing={1.5}>
                   {availableRoles.map((role) => {
-                    const users = role === "ASM" ? asmUsers : teamUsers;
+                    const users = role === "Incharge" ? InchargeUsers : teamUsers;
                     const selected = assignToRole === role;
-                    const icon = role === "ASM" ? <SupervisorAccount /> : <Groups />;
+                    const icon = role === "Incharge" ? <SupervisorAccount /> : <Groups />;
                     return (
                       <Box key={role} onClick={() => handleRoleChange({ target: { value: role } })}
                         sx={{ flex: 1, p: 1.5, borderRadius: 2, border: `2px solid ${selected ? "#00bcd4" : alpha("#00bcd4", 0.2)}`, bgcolor: selected ? alpha("#00bcd4", 0.06) : "#fff", cursor: "pointer", transition: "all 0.2s", "&:hover": { borderColor: alpha("#00bcd4", 0.5) } }}>
                         <Stack direction="row" spacing={1} alignItems="center">
                           <Box sx={{ color: selected ? "#00838f" : "text.secondary", display: "flex" }}>{icon}</Box>
                           <Box>
-                            <Typography variant="body2" fontWeight={selected ? 700 : 500}>{role === "ASM" ? "ASM" : "Team"}</Typography>
+                            <Typography variant="body2" fontWeight={selected ? 700 : 500}>{role === "Incharge" ? "Incharge" : "Team"}</Typography>
                             {users.length > 0 && <Typography variant="caption" color="text.secondary">{users.length} available</Typography>}
                           </Box>
                           {selected && <Box sx={{ ml: "auto", color: "#00838f", display: "flex" }}><CheckCircle fontSize="small" /></Box>}
@@ -1174,7 +1303,7 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
                 {getAvailableUsers().length === 0 && !fetchingUsers && assignToRole ? (
                   <Box sx={{ p: 3, borderRadius: 2, border: `1.5px dashed ${alpha("#00bcd4", 0.3)}`, textAlign: "center" }}>
                     <Groups sx={{ color: alpha("#00bcd4", 0.4), fontSize: 36, mb: 1 }} />
-                    <Typography variant="body2" color="text.secondary">No {assignToRole === "TEAM" ? "team members" : "ASM users"} available</Typography>
+                    <Typography variant="body2" color="text.secondary">No {assignToRole === "TEAM" ? "team members" : "Incharge users"} available</Typography>
                   </Box>
                 ) : (
                   <Stack spacing={1} sx={{ maxHeight: 220, overflow: "auto" }}>
@@ -1259,7 +1388,7 @@ const DeleteConfirmationDialog = React.memo(({ open, onClose, leadsToDelete, onD
         <DialogContent sx={{ p: 3 }}>
           <Alert severity="error" sx={{ borderRadius: 2 }}>
             <Typography variant="body1" fontWeight={600}>Delete permission required</Typography>
-            <Typography variant="body2" sx={{ mt: 1 }}>Only Head Office administrators can delete leads. Your role ({permissions.label}) does not have delete privileges.</Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>Only Admin Panel administrators can delete leads. Your role ({permissions.label}) does not have delete privileges.</Typography>
           </Alert>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}><Button onClick={onClose} variant="contained" sx={{ bgcolor: PRIMARY_COLOR }}>Close</Button></DialogActions>

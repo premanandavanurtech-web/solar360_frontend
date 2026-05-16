@@ -70,6 +70,7 @@ import {
   Lock,
   LockOpen,
   Visibility,
+  VisibilityOff,
   ContentCopy,
   FilterAlt,
   Sort,
@@ -104,25 +105,25 @@ const PERIOD_OPTIONS = [
 ];
 
 const ROLE_CONFIG = {
-  Head_office: {
+  Admin_panel: {
     color: PRIMARY_COLOR,
     bg: alpha(PRIMARY_COLOR, 0.08),
     icon: <AdminPanelSettings fontSize="small" />,
-    label: "Head Office",
+    label: "Admin Panel",
     level: 1,
   },
   ZSM: {
     color: PRIMARY_COLOR,
     bg: alpha(PRIMARY_COLOR, 0.08),
     icon: <SupervisorAccount fontSize="small" />,
-    label: "Zonal Sales Manager",
+    label: "Operation Lead",
     level: 2,
   },
-  ASM: {
+  Incharge: {
     color: PRIMARY_COLOR,
     bg: alpha(PRIMARY_COLOR, 0.08),
     icon: <SupervisorAccount fontSize="small" />,
-    label: "Area Sales Manager",
+    label: "Incharge",
     level: 3,
   },
   TEAM: {
@@ -828,22 +829,22 @@ const MobileUserCard = ({
   const canEdit = useMemo(() => {
     if (!currentUserRole || !user) return false;
     if (user._id === currentUserId) return true;
-    if (currentUserRole === "Head_office") return true;
+    if (currentUserRole === "Admin_panel") return true;
     const userRoleLevel = ROLE_CONFIG[user.role]?.level || 999;
     const currentRoleLevel = ROLE_CONFIG[currentUserRole]?.level || 0;
     if (currentUserRole === "ZSM") return userRoleLevel > currentRoleLevel;
-    if (currentUserRole === "ASM") return user.role === "TEAM";
+    if (currentUserRole === "Incharge") return user.role === "TEAM";
     return false;
   }, [currentUserRole, user, currentUserId]);
 
   const canToggleStatus = canEdit;
   const canAssign =
     user.role === "TEAM" &&
-    ["ZSM", "ASM", "Head_office"].includes(currentUserRole) &&
+    ["ZSM", "Incharge", "Admin_panel"].includes(currentUserRole) &&
     !user.supervisor;
-  const canViewPassword = currentUserRole === "Head_office";
+  const canViewPassword = currentUserRole === "Admin_panel";
   const canDelete =
-    currentUserRole === "Head_office" && user.role !== "Head_office";
+    currentUserRole === "Admin_panel" && user.role !== "Admin_panel";
 
   return (
     <Paper
@@ -1186,8 +1187,25 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
     phoneNumber: "",
     role: "",
     status: "active",
+    password: "",
+    confirmPassword: "",
   });
   const [errors, setErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const validRoles = ["Admin_panel", "ZSM", "Incharge", "TEAM"];
+
+  const getPasswordRequirementMessage = (password) => {
+    if (!password) return "Use 1 capital letter, 1 number, and 1 special character";
+
+    const missing = [];
+    if (!/[A-Z]/.test(password)) missing.push("1 capital letter");
+    if (!/\d/.test(password)) missing.push("1 number");
+    if (!/[^A-Za-z0-9]/.test(password)) missing.push("1 special character");
+
+    if (password.length < 8) missing.unshift("at least 8 characters");
+    return missing.length ? `Use ${missing.join(", ")}` : "";
+  };
 
   useEffect(() => {
     if (user) {
@@ -1196,9 +1214,13 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
         lastName: user.lastName || "",
         email: user.email || "",
         phoneNumber: user.phoneNumber || "",
-        role: user.role || "",
+        role: validRoles.includes(user.role) ? user.role : "",
         status: user.status || "active",
+        password: "",
+        confirmPassword: "",
       });
+      setShowPassword(false);
+      setShowConfirmPassword(false);
     }
   }, [user]);
 
@@ -1206,7 +1228,7 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
     const currentRoleLevel = ROLE_CONFIG[currentUserRole]?.level || 0;
     return Object.entries(ROLE_CONFIG)
       .filter(([roleKey, config]) => {
-        if (currentUserRole === "Head_office") return true;
+        if (currentUserRole === "Admin_panel") return true;
         return config.level > currentRoleLevel;
       })
       .map(([value, config]) => ({
@@ -1220,7 +1242,7 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
 
   const canEditRole = useMemo(() => {
     if (!user || !currentUserRole) return false;
-    if (currentUserRole === "Head_office") return true;
+    if (currentUserRole === "Admin_panel") return true;
     if (user._id === currentUser?._id) return false;
     const userRoleLevel = ROLE_CONFIG[user.role]?.level || 0;
     const currentRoleLevel = ROLE_CONFIG[currentUserRole]?.level || 0;
@@ -1229,7 +1251,7 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
 
   const canEditStatus = useMemo(() => {
     if (!user || !currentUserRole) return false;
-    if (currentUserRole === "Head_office") return true;
+    if (currentUserRole === "Admin_panel") return true;
     if (user._id === currentUser?._id) return true;
     const userRoleLevel = ROLE_CONFIG[user.role]?.level || 0;
     const currentRoleLevel = ROLE_CONFIG[currentUserRole]?.level || 0;
@@ -1249,6 +1271,16 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
       newErrors.phoneNumber = "Invalid phone number";
     }
     if (!formData.role && canEditRole) newErrors.role = "Role is required";
+    if (formData.password) {
+      if (formData.password.length < 8) {
+        newErrors.password = getPasswordRequirementMessage(formData.password);
+      } else if (!/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/.test(formData.password)) {
+        newErrors.password = getPasswordRequirementMessage(formData.password);
+      }
+      if (formData.password !== formData.confirmPassword) {
+        newErrors.confirmPassword = "Passwords do not match";
+      }
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -1263,8 +1295,11 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
         email: formData.email,
         phoneNumber: formData.phoneNumber,
       };
-      if (canEditRole) updateData.role = formData.role;
+      if (canEditRole && validRoles.includes(formData.role)) updateData.role = formData.role;
       if (canEditStatus) updateData.status = formData.status;
+      if (currentUserRole === "Admin_panel" && formData.password) {
+        updateData.password = formData.password;
+      }
 
       const response = await safeFetchAPI(`/user/update/${user._id}`, {
         method: "PUT",
@@ -1477,6 +1512,63 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
             </FormControl>
           )}
 
+          {currentUserRole === "Admin_panel" && (
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="New Password"
+                  type={showPassword ? "text" : "password"}
+                  value={formData.password}
+                  onChange={handleChange("password")}
+                  error={!!errors.password}
+                  helperText={errors.password || getPasswordRequirementMessage(formData.password)}
+                  size={isMobile ? "small" : "medium"}
+                  sx={fieldSx}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          edge="end"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => setShowPassword((v) => !v)}
+                        >
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Confirm Password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={formData.confirmPassword}
+                  onChange={handleChange("confirmPassword")}
+                  error={!!errors.confirmPassword}
+                  helperText={errors.confirmPassword}
+                  size={isMobile ? "small" : "medium"}
+                  sx={fieldSx}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          edge="end"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => setShowConfirmPassword((v) => !v)}
+                        >
+                          {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+            </Grid>
+          )}
+
           {/* Status */}
           {canEditStatus && (
             <Box
@@ -1681,7 +1773,7 @@ const PasswordViewDialog = ({ open, onClose, user, fetchAPI }) => {
                 Confidential Access
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Visible to Head Office only. Handle with care and do not share.
+                Visible to Admin Panel only. Handle with care and do not share.
               </Typography>
             </Box>
           </Box>
@@ -2197,7 +2289,7 @@ const AssignManagerDialog = ({
                     No active managers found
                   </Typography>
                   <Typography variant="caption" color="text.disabled">
-                    Ensure there are active ZSM or ASM users
+                    Ensure there are active Operation Lead or Incharge users
                   </Typography>
                 </Box>
               ) : (
@@ -2277,7 +2369,7 @@ const AssignManagerDialog = ({
               )}
             </Box>
 
-            {userRole === "ASM" && (
+            {userRole === "Incharge" && (
               <Box
                 sx={{
                   p: 2,
@@ -2293,7 +2385,7 @@ const AssignManagerDialog = ({
                   sx={{ color: "#00838f", fontSize: 18, flexShrink: 0, mt: 0.1 }}
                 />
                 <Typography variant="caption" color="#00838f">
-                  As an ASM, you can only assign team members to yourself.
+                  As an Incharge, you can only assign team members to yourself.
                 </Typography>
               </Box>
             )}
@@ -2402,9 +2494,9 @@ const UserManagement = () => {
 
   // Role-based permissions
   const userRole = currentUser?.role || "";
-  const canAddUser = ["Head_office", "ZSM", "ASM", "TEAM"].includes(userRole);
-  const canViewPassword = userRole === "Head_office";
-  const canDeleteUsers = userRole === "Head_office";
+  const canAddUser = ["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(userRole);
+  const canViewPassword = userRole === "Admin_panel";
+  const canDeleteUsers = userRole === "Admin_panel";
 
   // Filter options based on role
   const roleOptions = useMemo(() => {
@@ -2416,7 +2508,7 @@ const UserManagement = () => {
         icon: config.icon,
       })),
     ];
-    if (userRole === "ASM") {
+    if (userRole === "Incharge") {
       return allRoles.filter(
         (role) => role.value === "all" || role.value === "TEAM"
       );
@@ -2424,7 +2516,7 @@ const UserManagement = () => {
     if (userRole === "ZSM") {
       return allRoles.filter(
         (role) =>
-          role.value === "all" || ["ASM", "TEAM"].includes(role.value)
+          role.value === "all" || ["Incharge", "TEAM"].includes(role.value)
       );
     }
     return allRoles;
@@ -2461,13 +2553,13 @@ const UserManagement = () => {
       if (data.success) {
         let fetchedUsers = data.result?.users || [];
 
-        if (userRole === "Head_office") {
-          fetchedUsers = fetchedUsers.filter((u) => u.role !== "Head_office");
+        if (userRole === "Admin_panel") {
+          fetchedUsers = fetchedUsers.filter((u) => u.role !== "Admin_panel");
         } else if (userRole === "ZSM") {
           fetchedUsers = fetchedUsers.filter((u) =>
-            ["ASM", "TEAM"].includes(u.role)
+            ["Incharge", "TEAM"].includes(u.role)
           );
-        } else if (userRole === "ASM") {
+        } else if (userRole === "Incharge") {
           fetchedUsers = fetchedUsers.filter((u) => u.role === "TEAM");
         }
 
@@ -2492,7 +2584,7 @@ const UserManagement = () => {
     try {
       let allManagers = [];
 
-      if (userRole === "ASM") {
+      if (userRole === "Incharge") {
         const params = new URLSearchParams({
           page: "1",
           limit: "100",
@@ -2505,11 +2597,11 @@ const UserManagement = () => {
         const zsmData = await safeFetchAPI(`/user/getAllUsers?${zsmParams.toString()}`);
         if (zsmData.success) allManagers = [...(zsmData.result?.users || [])];
 
-        if (userRole === "Head_office") {
-          const asmParams = new URLSearchParams({ page: "1", limit: "100", role: "ASM" });
-          const asmData = await safeFetchAPI(`/user/getAllUsers?${asmParams.toString()}`);
-          if (asmData.success)
-            allManagers = [...allManagers, ...(asmData.result?.users || [])];
+        if (userRole === "Admin_panel") {
+          const InchargeParams = new URLSearchParams({ page: "1", limit: "100", role: "Incharge" });
+          const InchargeData = await safeFetchAPI(`/user/getAllUsers?${InchargeParams.toString()}`);
+          if (InchargeData.success)
+            allManagers = [...allManagers, ...(InchargeData.result?.users || [])];
         }
       }
 
@@ -2593,11 +2685,11 @@ const UserManagement = () => {
   const canEditUser = (user) => {
     if (!user || !currentUser) return false;
     if (user._id === currentUser._id) return true;
-    if (currentUser.role === "Head_office") return true;
+    if (currentUser.role === "Admin_panel") return true;
     const userRoleLevel = ROLE_CONFIG[user.role]?.level || 999;
     const currentRoleLevel = ROLE_CONFIG[currentUser.role]?.level || 0;
     if (currentUser.role === "ZSM") return userRoleLevel > currentRoleLevel;
-    if (currentUser.role === "ASM") return user.role === "TEAM";
+    if (currentUser.role === "Incharge") return user.role === "TEAM";
     return false;
   };
 
@@ -2622,7 +2714,7 @@ const UserManagement = () => {
 
   const handleViewPassword = (user) => {
     if (!canViewPassword) {
-      toast.error("Only Head Office can view passwords.", {
+      toast.error("Only Admin Panel can view passwords.", {
         title: "Permission Denied",
       });
       return;
@@ -2633,14 +2725,14 @@ const UserManagement = () => {
 
   const handleDeleteUser = async () => {
     if (!userToDelete || !canDeleteUsers) {
-      toast.error("Only Head Office can delete users.", {
+      toast.error("Only Admin Panel can delete users.", {
         title: "Permission Denied",
       });
       return;
     }
 
-    if (userToDelete.role === "Head_office") {
-      toast.error("Head Office users cannot be deleted.", {
+    if (userToDelete.role === "Admin_panel") {
+      toast.error("Admin Panel users cannot be deleted.", {
         title: "Action Not Allowed",
       });
       setDeleteDialogOpen(false);
@@ -2684,8 +2776,8 @@ const UserManagement = () => {
       return;
     }
 
-    if (userRole === "ASM" && selectedManager !== currentUser?._id) {
-      toast.error("As an ASM, you can only assign team members to yourself.", {
+    if (userRole === "Incharge" && selectedManager !== currentUser?._id) {
+      toast.error("As an Incharge, you can only assign team members to yourself.", {
         title: "Assignment Restricted",
       });
       return;
@@ -2870,10 +2962,10 @@ const UserManagement = () => {
               variant="body2"
               sx={{ opacity: 0.9, fontSize: { xs: "0.75rem", sm: "0.875rem" } }}
             >
-              {userRole === "ASM"
+              {userRole === "Incharge"
                 ? "Manage your team members"
                 : userRole === "ZSM"
-                ? "Manage ASM and TEAM members in your zone"
+                ? "Manage Incharge and TEAM members in your zone"
                 : "Manage users in your head office only"}
             </Typography>
           </Box>
@@ -3213,10 +3305,10 @@ const UserManagement = () => {
                         const canEdit = canEditUser(user);
                         const canAssign =
                           user.role === "TEAM" &&
-                          ["ZSM", "ASM", "Head_office"].includes(userRole) &&
+                          ["ZSM", "Incharge", "Admin_panel"].includes(userRole) &&
                           !user.supervisor;
                         const canView = canViewPassword;
-                        const canDelete = canDeleteUsers && user.role !== "Head_office";
+                        const canDelete = canDeleteUsers && user.role !== "Admin_panel";
 
                         return (
                           <TableRow key={user._id} hover>

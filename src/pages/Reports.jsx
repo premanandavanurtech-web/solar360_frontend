@@ -157,9 +157,9 @@ const ATTENDANCE_STATUS = {
 
 // Role-based access control with proper visibility rules
 const ROLE_ACCESS = {
-  Head_office: {
+  Admin_panel: {
     level: 1,
-    label: "Head Office",
+    label: "Admin Panel",
     icon: <AdminPanelSettings />,
     canAccess: ["leads", "installation", "expenses", "attendance"],
     visibility: "all",
@@ -167,15 +167,15 @@ const ROLE_ACCESS = {
   },
   ZSM: {
     level: 2,
-    label: "Zone Sales Manager",
+    label: "Operation Lead",
     icon: <WorkspacePremium />,
     canAccess: ["leads", "installation", "expenses", "attendance"],
     visibility: "zone",
     description: "View zone-wide reports",
   },
-  ASM: {
+  Incharge: {
     level: 3,
-    label: "Area Sales Manager",
+    label: "Incharge",
     icon: <SupervisorAccount />,
     canAccess: ["leads", "installation", "expenses", "attendance"],
     visibility: "team",

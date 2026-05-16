@@ -2721,11 +2721,11 @@ export default function ExpensesPage() {
 
   // Permissions
   const userRole = user?.role || "";
-  const canCreate = ["TEAM", "ASM", "ZSM", "Head_office"].includes(userRole);
-  const canEdit = ["TEAM", "ASM", "ZSM", "Head_office"].includes(userRole);
-  const canDelete = userRole === "Head_office";
-  const canUpdateStatus = ["ASM", "ZSM", "Head_office"].includes(userRole);
-  const canViewSummary = ["ASM", "ZSM", "Head_office"].includes(userRole);
+  const canCreate = ["TEAM", "Incharge", "ZSM", "Admin_panel"].includes(userRole);
+  const canEdit = ["TEAM", "Incharge", "ZSM", "Admin_panel"].includes(userRole);
+  const canDelete = userRole === "Admin_panel";
+  const canUpdateStatus = ["Incharge", "ZSM", "Admin_panel"].includes(userRole);
+  const canViewSummary = ["Incharge", "ZSM", "Admin_panel"].includes(userRole);
 
   // Active filter count
   const activeFilterCount = useMemo(() => {
@@ -3007,7 +3007,7 @@ export default function ExpensesPage() {
     const isOwnExpense = expense.createdBy?._id === user?._id;
     const isPending = expense.status === "Pending";
 
-    if (userRole !== "Head_office" && !isOwnExpense) {
+    if (userRole !== "Admin_panel" && !isOwnExpense) {
       showSnackbar("You can only edit your own expenses", "error");
       return;
     }
@@ -3833,7 +3833,7 @@ export default function ExpensesPage() {
         {selectedExpenseForMenu?.status === "Pending" &&
           canEdit &&
           (selectedExpenseForMenu.createdBy?._id === user?._id ||
-            userRole === "Head_office") && (
+            userRole === "Admin_panel") && (
             <MenuItem onClick={() => handleMenuAction("edit")} sx={{ py: 1.5 }}>
               <ListItemIcon>
                 <Edit sx={{ fontSize: 18 }} />

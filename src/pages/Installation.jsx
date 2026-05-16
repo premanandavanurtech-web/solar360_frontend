@@ -150,7 +150,7 @@ const PRIMARY_COLOR = "#4569ea";
 const SECONDARY_COLOR = "#1a237e";
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 25, 50];
 const DEFAULT_ITEMS_PER_PAGE = 10;
-const ALLOWED_ROLES = ["Head_office", "ZSM", "ASM", "TEAM"];
+const ALLOWED_ROLES = ["Admin_panel", "ZSM", "Incharge", "TEAM"];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_FILE_TYPES = [
   "image/jpeg",
@@ -172,7 +172,6 @@ const INSTALLATION_STATUS_OPTIONS = [
   "installation_progress",
   "installation_completed",
   "sent_for_jee_verification",
-  "load_Enhancement",  
   "jee_verified",
   "meter_charge",
   "final_payment",
@@ -183,8 +182,8 @@ const INSTALLATION_STATUS_CONFIG = {
     bg: alpha(PRIMARY_COLOR, 0.08),
     color: PRIMARY_COLOR,
     icon: <Build sx={{ fontSize: 16 }} />,
-    label: "In Progress",
-    description: "Installation work is ongoing",
+    label: "BOQ",
+    description: "BOQ in progress",
     order: 2,
     progress: 40,
   },
@@ -192,7 +191,7 @@ const INSTALLATION_STATUS_CONFIG = {
     bg: alpha(PRIMARY_COLOR, 0.08),
     color: PRIMARY_COLOR,
     icon: <CheckCircle sx={{ fontSize: 16 }} />,
-    label: "Completed",
+    label: "Complete",
     description: "Installation completed successfully",
     order: 3,
     progress: 60,
@@ -210,8 +209,8 @@ const INSTALLATION_STATUS_CONFIG = {
     bg: alpha(PRIMARY_COLOR, 0.08),
     color: PRIMARY_COLOR,
     icon: <Schedule sx={{ fontSize: 16 }} />,
-    label: "Load Enhancement",
-    description: "Enhancement document upload required",
+    label: "BOQ",
+    description: "BOQ document update required",
     order: 1,
     progress: 10,
   },
@@ -228,8 +227,8 @@ const INSTALLATION_STATUS_CONFIG = {
     bg: alpha(PRIMARY_COLOR, 0.08),
     color: PRIMARY_COLOR,
     icon: <LocalAtm sx={{ fontSize: 16 }} />,
-    label: "Meter Charge",
-    description: "Meter charging in progress",
+    label: "Approve Subsidy",
+    description: "Subsidy approval in progress",
     order: 6,
     progress: 95,
   },
@@ -264,18 +263,18 @@ const LEAD_STATUS_CONFIG = {
 
 // Role Configuration
 const ROLE_CONFIG = {
-  Head_office: {
-    label: "Head Office",
+  Admin_panel: {
+    label: "Admin Panel",
     color: PRIMARY_COLOR,
     icon: <AdminPanelSettings sx={{ fontSize: 16 }} />,
   },
   ZSM: {
-    label: "Zone Sales Manager",
+    label: "Operation Lead",
     color: PRIMARY_COLOR,
     icon: <WorkspacePremium sx={{ fontSize: 16 }} />,
   },
-  ASM: {
-    label: "Area Sales Manager",
+  Incharge: {
+    label: "Incharge",
     color: PRIMARY_COLOR,
     icon: <SupervisorAccount sx={{ fontSize: 16 }} />,
   },
@@ -290,14 +289,14 @@ const ROLE_CONFIG = {
 const hasAccess = (userRole) => ALLOWED_ROLES.includes(userRole);
 
 const getUserPermissions = (userRole) => ({
-  canView: ["Head_office", "ZSM", "ASM", "TEAM"].includes(userRole),
-  canEdit: ["Head_office", "ZSM", "ASM", "TEAM"].includes(userRole),
-  canDelete: userRole === "Head_office",
-  canManage: ["Head_office", "ZSM", "ASM"].includes(userRole),
-  canSeeAll: ["Head_office", "ZSM", "ASM"].includes(userRole),
+  canView: ["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(userRole),
+  canEdit: ["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(userRole),
+  canDelete: userRole === "Admin_panel",
+  canManage: ["Admin_panel", "ZSM", "Incharge"].includes(userRole),
+  canSeeAll: ["Admin_panel", "ZSM", "Incharge"].includes(userRole),
   canSeeOwn: userRole === "TEAM",
-  canUpdateStatus: ["Head_office", "ZSM", "ASM", "TEAM"].includes(userRole),
-  canUploadEnhancement: ["Head_office", "ZSM", "ASM", "TEAM"].includes(
+  canUpdateStatus: ["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(userRole),
+  canUploadEnhancement: ["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(
     userRole,
   ),
 });
@@ -3188,7 +3187,7 @@ export default function InstallationPage() {
               lead.assignedManager === user._id ||
               lead.assignedUser?._id === user._id,
           );
-        } else if (userRole === "ASM" && user?._id) {
+        } else if (userRole === "Incharge" && user?._id) {
           rawInstallations = rawInstallations.filter(
             (lead) =>
               lead.createdBy === user._id ||
@@ -3409,14 +3408,14 @@ export default function InstallationPage() {
         subText: "All installations",
       },
       {
-        label: "In Progress",
+        label: "BOQ",
         value: installationData.summary.installationProgress,
         color: PRIMARY_COLOR,
         icon: <Build />,
         subText: "Ongoing work",
       },
       {
-        label: "Completed",
+        label: "Complete",
         value: installationData.summary.installationCompleted,
         color: PRIMARY_COLOR,
         icon: <CheckCircle />,
@@ -3437,18 +3436,18 @@ export default function InstallationPage() {
         subText: "Verification Completed",
       },
       {
-        label: "Enhancement",
+        label: "BOQ",
         value: installationData.summary.loadEnhancement,  // FIXED: Use loadEnhancement
         color: PRIMARY_COLOR,
         icon: <Schedule />,
-        subText: "Requires documents",
+        subText: "Document update",
       },
       {
-        label: "Meter Charge",
+        label: "Approve Subsidy",
         value: installationData.summary.meterCharge,
         color: PRIMARY_COLOR,
         icon: <LocalAtm />,
-        subText: "Meter charging",
+        subText: "Approval pending",
       },
       {
         label: "Final Payment",

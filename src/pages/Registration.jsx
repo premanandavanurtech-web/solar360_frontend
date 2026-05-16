@@ -143,7 +143,7 @@ const PRIMARY = "#4569ea";
 const SECONDARY = "#1a237e";
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 25, 50];
 const DEFAULT_ITEMS_PER_PAGE = 10;
-const ALLOWED_ROLES = ["Head_office", "ZSM", "ASM", "TEAM"];
+const ALLOWED_ROLES = ["Admin_panel", "ZSM", "Incharge", "TEAM"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB for registration documents
 const ALLOWED_FILE_TYPES = [
   "application/pdf",
@@ -214,28 +214,28 @@ const LEAD_STATUS_CONFIG = {
 
 // Solar Requirement Types
 const SOLAR_REQUIREMENT_TYPES = [
-  "Residential (1-5 kW)",
-  "Commercial (5-50 kW)",
+  "ULA 1kW",
+  "PMSG Residential(1-10k)",
+  "Commercial (10kW  & above)",
   "Industrial (50+ kW)",
-  "Agricultural",
-  "Government/Institutional",
+  "Residental(Above 10kw)(GHS/RWA)",
   "Other",
 ];
 
 // Role Configuration
 const ROLE_CONFIG = {
-  Head_office: {
-    label: "Head Office",
+  Admin_panel: {
+    label: "Admin Panel",
     color: PRIMARY,
     icon: <AdminPanelSettings sx={{ fontSize: 16 }} />,
   },
   ZSM: {
-    label: "Zone Sales Manager",
+    label: "Operation Lead",
     color: PRIMARY,
     icon: <WorkspacePremium sx={{ fontSize: 16 }} />,
   },
-  ASM: {
-    label: "Area Sales Manager",
+  Incharge: {
+    label: "Incharge",
     color: PRIMARY,
     icon: <SupervisorAccount sx={{ fontSize: 16 }} />,
   },
@@ -260,12 +260,12 @@ const hasAccess = (userRole) => ALLOWED_ROLES.includes(userRole);
 const getUserPermissions = (userRole) => ({
   canView: true,
   canEdit: true,
-  canDelete: userRole === "Head_office",
-  canManage: ["Head_office", "ZSM", "ASM"].includes(userRole),
-  canSeeAll: ["Head_office", "ZSM", "ASM"].includes(userRole),
+  canDelete: userRole === "Admin_panel",
+  canManage: ["Admin_panel", "ZSM", "Incharge"].includes(userRole),
+  canSeeAll: ["Admin_panel", "ZSM", "Incharge"].includes(userRole),
   canSeeOwn: userRole === "TEAM",
-  canUpdateStatus: ["Head_office", "ZSM", "ASM"].includes(userRole),
-  canUploadDocs: ["Head_office", "ZSM", "ASM", "TEAM"].includes(userRole),
+  canUpdateStatus: ["Admin_panel", "ZSM", "Incharge"].includes(userRole),
+  canUploadDocs: ["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(userRole),
 });
 
 const getRegistrationStatusConfig = (status) => {

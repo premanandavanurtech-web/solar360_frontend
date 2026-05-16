@@ -133,7 +133,7 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 20, 50, 100];
 const DEFAULT_ITEMS_PER_PAGE = 20;
 
 // All roles have access
-const ALLOWED_ROLES = ["Head_office", "ZSM", "ASM", "TEAM"];
+const ALLOWED_ROLES = ["Admin_panel", "ZSM", "Incharge", "TEAM"];
 const hasAccess = (userRole) => ALLOWED_ROLES.includes(userRole);
 
 // Enhanced Status Configuration
@@ -226,18 +226,18 @@ const LEAD_STATUS_CONFIG = {
 
 // Role Configuration
 const ROLE_CONFIG = {
-  Head_office: {
-    label: "Head Office",
+  Admin_panel: {
+    label: "Admin Panel",
     color: PRIMARY_COLOR,
     icon: <AdminPanelSettings sx={{ fontSize: 16 }} />,
   },
   ZSM: {
-    label: "Zone Sales Manager",
+    label: "Operation Lead",
     color: PRIMARY_COLOR,
     icon: <WorkspacePremium sx={{ fontSize: 16 }} />,
   },
-  ASM: {
-    label: "Area Sales Manager",
+  Incharge: {
+    label: "Incharge",
     color: PRIMARY_COLOR,
     icon: <SupervisorAccount sx={{ fontSize: 16 }} />,
   },

@@ -21,7 +21,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import LiveTrackMap from "../utils/Livetrackmap";
 
-const API = "https://solar-backend-6vaa.onrender.com";
+const API = "http://localhost:9001";
 
 const avatarColors = [
   "#4569ea", "#7c3aed", "#0ea5e9", "#f59e0b",
@@ -376,12 +376,10 @@ const MemberTrailDialog = ({ member, open, onClose }) => {
 // ── Member Card ───────────────────────────────────────────────────────────────
 const MemberCard = ({ member }) => {
   const navigate = useNavigate();
-  const [showMap, setShowMap] = useState(false);
 
   const isActive = member.punchedIn && !member.punchOutTime;
   const isPunchedOut = !!member.punchOutTime;
   const isHoliday = member.status === "holiday";
-  const battStyle = getBatteryStyle(member.batteryPercentage);
 
   return (
     <>
@@ -538,25 +536,6 @@ const MemberCard = ({ member }) => {
           </Box>
         )}
 
-        {/* Battery */}
-        <Box
-          sx={{
-            mt: 1.5, p: 1.25, borderRadius: "10px",
-            bgcolor: battStyle ? battStyle.bg : "#f8fafc",
-            border: `1px solid ${battStyle ? battStyle.border : "#e2e8f0"}`,
-          }}
-        >
-          <Typography
-            sx={{
-              fontSize: "0.65rem", fontWeight: 700, color: "#94a3b8",
-              textTransform: "uppercase", letterSpacing: "0.06em", mb: 0.75,
-            }}
-          >
-            Device Battery
-          </Typography>
-          <BatteryBar percentage={member.batteryPercentage} isCharging={member.isCharging} />
-        </Box>
-
         {/* Buttons */}
         <Box sx={{ display: "flex", gap: 1, mt: 1.5 }}>
           {/* View Attendance */}
@@ -586,37 +565,8 @@ const MemberCard = ({ member }) => {
           >
             Attendance
           </Button>
-
-      {/* Live Track button — only shown when member has punched in */}
-          <Tooltip title={isActive ? "View live location and older dates" : "View stored map trail by date"}>
-            <Button
-              variant="contained"
-              size="small"
-              onClick={() => setShowMap(true)}
-              startIcon={<LocationOn sx={{ fontSize: "1rem" }} />}
-              sx={{
-                borderRadius: "10px", py: 1, fontSize: "0.78rem", fontWeight: 700,
-                textTransform: "none", flexShrink: 0,
-                background: isActive
-                  ? "linear-gradient(135deg, #22c55e, #16a34a)"
-                  : "linear-gradient(135deg, #3b82f6, #2563eb)",
-                boxShadow: isActive
-                  ? "0 3px 12px rgba(34,197,94,0.35)"
-                  : "0 3px 12px rgba(59,130,246,0.35)",
-                "&:hover": {
-                  background: isActive
-                    ? "linear-gradient(135deg, #16a34a, #15803d)"
-                    : "linear-gradient(135deg, #2563eb, #1d4ed8)",
-                },
-              }}
-            >
-              {isActive ? "Live Map" : "Map Trail"}
-            </Button>
-          </Tooltip>
         </Box>
       </Box>
-
-      <MemberTrailDialog member={member} open={showMap} onClose={() => setShowMap(false)} />
     </>
   );
 };
@@ -624,7 +574,7 @@ const MemberCard = ({ member }) => {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 const TeamAttendance = () => {
   const { user } = useAuth();
-  const canCreateHoliday = user?.role === "Head_office";
+  const canCreateHoliday = user?.role === "Admin_panel";
   const [team, setTeam] = useState([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -668,7 +618,7 @@ const TeamAttendance = () => {
     const token = localStorage.getItem("token");
     const headers = { Authorization: `Bearer ${token}` };
 
-    // Step 1: Fetch team users (backend now filters by role — ASM sees only their team)
+    // Step 1: Fetch team users (backend now filters by role — Incharge sees only their team)
     let rawUsers = [];
     try {
       const usersRes = await axios.get(`${API}/api/v1/user/getManagerUnderUserList`, {
@@ -680,7 +630,7 @@ const TeamAttendance = () => {
     }
 
     // ✅ Step 2: Fetch attendance ONLY for the fetched user IDs
-    // This prevents ASM from seeing attendance of users outside their team
+    // This prevents Incharge from seeing attendance of users outside their team
     let attendances = [];
     try {
       const userIds = rawUsers.map((u) => String(u._id || u.id)).filter(Boolean);

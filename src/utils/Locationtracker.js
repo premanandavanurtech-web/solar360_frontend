@@ -16,7 +16,7 @@
 
 import { toast } from "../components/useToast.jsx";
 
-const API = "https://solar-backend-6vaa.onrender.com";
+const API = "http://localhost:9001";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

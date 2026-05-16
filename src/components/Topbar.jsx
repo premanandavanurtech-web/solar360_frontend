@@ -20,6 +20,14 @@ import {
   Button,
   Paper,
   Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Stack,
+  Alert,
+  InputAdornment,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -32,17 +40,23 @@ import {
   Dashboard as DashboardIcon,
   Close as CloseIcon,
   ArrowBack as ArrowBackIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from "../contexts/AuthContext";
 
-const API = "https://solar-backend-6vaa.onrender.com/api/v1";
+const API = "http://localhost:9001/api/v1";
 
 const getToken = () =>
   localStorage.getItem("token") ||
   localStorage.getItem("authToken") ||
   localStorage.getItem("accessToken") ||
   "";
+
+const getAvatarUrl = (avatar) =>
+  avatar ? avatar.replace("/public/public/", "/public/") : "";
 
 const Topbar = ({ 
   toggleDrawer, 
@@ -60,8 +74,25 @@ const Topbar = ({
   const [notifications, setNotifications] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [adminCurrentPassword, setAdminCurrentPassword] = useState('');
+  const [profileForm, setProfileForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+    avatar: null,
+  });
 
-  const { user, logout } = useAuth()
+  const { user, logout, updateLocalUser } = useAuth()
   //console.log("users11...", user)
 
   const fetchNotifications = useCallback(async () => {
@@ -118,7 +149,7 @@ const Topbar = ({
     try {
       setLoggingOut(true);
       handleClose();
-      // Add logout logic here
+      logout();
       navigate('/login', { replace: true });
     } catch (error) {
       console.error('Logout error:', error);
@@ -126,7 +157,87 @@ const Topbar = ({
     } finally {
       setLoggingOut(false);
     }
-  }, [navigate, handleClose]);
+  }, [navigate, handleClose, logout]);
+
+  useEffect(() => {
+    if (!profileOpen || !user) return;
+    setProfileForm({
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      email: user.email || '',
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+      avatar: null,
+    });
+    setProfileError('');
+    setProfileEditing(false);
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+  }, [profileOpen, user]);
+
+  useEffect(() => {
+    if (!profileOpen || user?.role !== 'Admin_panel' || !user?._id) return;
+
+    const fetchAdminPassword = async () => {
+      try {
+        const token = getToken();
+        const res = await fetch(`${API}/user/getViewPassword/${user._id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await res.json();
+        if (res.ok) {
+          setAdminCurrentPassword(payload?.result?.viewPassword || '');
+        }
+      } catch {
+        setAdminCurrentPassword('');
+      }
+    };
+
+    fetchAdminPassword();
+  }, [profileOpen, user]);
+
+  const handleProfileSave = useCallback(async () => {
+    if (profileForm.newPassword && profileForm.newPassword !== profileForm.confirmPassword) {
+      setProfileError('New password and confirm password do not match.');
+      return;
+    }
+
+    try {
+      if (!profileEditing) return;
+      setProfileSaving(true);
+      setProfileError('');
+      const token = getToken();
+      const formData = new FormData();
+      formData.append('firstName', profileForm.firstName);
+      formData.append('lastName', profileForm.lastName);
+      formData.append('email', profileForm.email);
+      if (profileForm.avatar) formData.append('avatar', profileForm.avatar);
+      if (profileForm.newPassword) {
+        formData.append(
+          'currentPassword',
+          user?.role === 'Admin_panel' ? adminCurrentPassword : profileForm.currentPassword
+        );
+        formData.append('newPassword', profileForm.newPassword);
+      }
+
+      const res = await fetch(`${API}/user/profile`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.message || 'Profile update failed');
+      updateLocalUser(payload.result);
+      setProfileOpen(false);
+      setProfileEditing(false);
+    } catch (error) {
+      setProfileError(error.message || 'Profile update failed');
+    } finally {
+      setProfileSaving(false);
+    }
+  }, [adminCurrentPassword, profileEditing, profileForm, updateLocalUser, user?.role]);
 
   const handleSearch = useCallback((e) => {
     e.preventDefault();
@@ -190,9 +301,9 @@ const Topbar = ({
   const userRole = useMemo(() => {
     if (!user?.role) return 'User';
     const roleMap = {
-      'Head_office': 'Head Office',
-      'ZSM': 'Zonal Manager',
-      'ASM': 'Area Manager',
+      'Admin_panel': 'Admin Panel',
+      'ZSM': 'Operation Lead',
+      'Incharge': 'Incharge',
       'TEAM': 'Field Executive'
     };
     return roleMap[user.role] || user.role;
@@ -413,7 +524,7 @@ const Topbar = ({
                 onClick={handleProfileMenu}
               >
                 <Avatar
-                  src={user?.avatar}
+                  src={getAvatarUrl(user?.avatar)}
                   sx={{
                     bgcolor: user?.avatar ? 'transparent' : '#4569ea',
                     width: { xs: 32, sm: 36 },
@@ -490,7 +601,7 @@ const Topbar = ({
         <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Avatar
-              src={user?.avatar}
+              src={getAvatarUrl(user?.avatar)}
               sx={{
                 bgcolor: user?.avatar ? 'transparent' : '#4569ea',
                 color: '#ffffff',
@@ -518,6 +629,20 @@ const Topbar = ({
         
         {/* Menu Items */}
         <Box sx={{ py: 0.5 }}>
+          <MenuItem
+            onClick={() => {
+              handleClose();
+              setProfileOpen(true);
+            }}
+          >
+            <ListItemIcon>
+              <PersonIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText
+              primary="Profile"
+              primaryTypographyProps={{ fontSize: '0.9rem' }}
+            />
+          </MenuItem>
           <MenuItem 
             onClick={handleLogout} 
             sx={{ 
@@ -536,6 +661,137 @@ const Topbar = ({
           </MenuItem>
         </Box>
       </Menu>
+
+      <Dialog open={profileOpen} onClose={() => setProfileOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Edit Profile</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            {profileError && <Alert severity="error">{profileError}</Alert>}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Avatar
+                src={profileForm.avatar ? URL.createObjectURL(profileForm.avatar) : getAvatarUrl(user?.avatar)}
+                sx={{ width: 64, height: 64, bgcolor: '#4569ea' }}
+              >
+                {!user?.avatar && userInitials}
+              </Avatar>
+              {profileEditing ? (
+                <Button variant="outlined" component="label">
+                  Change Image
+                  <input
+                    hidden
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setProfileForm((prev) => ({ ...prev, avatar: e.target.files?.[0] || null }))
+                    }
+                  />
+                </Button>
+              ) : (
+                <Button variant="outlined" startIcon={<EditIcon />} onClick={() => setProfileEditing(true)}>
+                  Edit
+                </Button>
+              )}
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <TextField
+                label="First name"
+                value={profileForm.firstName}
+                disabled={!profileEditing}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, firstName: e.target.value }))}
+              />
+              <TextField
+                label="Last name"
+                value={profileForm.lastName}
+                disabled={!profileEditing}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, lastName: e.target.value }))}
+              />
+            </Box>
+            <TextField
+              label="Email"
+              type="email"
+              value={profileForm.email}
+              disabled={!profileEditing}
+              onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))}
+            />
+            <Divider />
+            <Typography fontWeight={600}>Change password</Typography>
+            {user?.role === 'Admin_panel' ? (
+              <TextField
+                label="Current password"
+                type={showCurrentPassword ? 'text' : 'password'}
+                value={adminCurrentPassword}
+                InputProps={{
+                  readOnly: true,
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        edge="end"
+                        onClick={() => setShowCurrentPassword((prev) => !prev)}
+                      >
+                        {showCurrentPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            ) : (
+              <TextField
+                label="Current password"
+                type="password"
+                value={profileForm.currentPassword}
+                disabled={!profileEditing}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+              />
+            )}
+            <TextField
+              label="New password"
+              type={showNewPassword ? 'text' : 'password'}
+              value={profileForm.newPassword}
+              disabled={!profileEditing}
+              onChange={(e) => setProfileForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      edge="end"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => setShowNewPassword((prev) => !prev)}
+                    >
+                      {showNewPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              label="Confirm new password"
+              type={showConfirmPassword ? 'text' : 'password'}
+              value={profileForm.confirmPassword}
+              disabled={!profileEditing}
+              onChange={(e) => setProfileForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      edge="end"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    >
+                      {showConfirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setProfileOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleProfileSave} disabled={!profileEditing || profileSaving}>
+            {profileSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Menu
         anchorEl={notificationAnchor}

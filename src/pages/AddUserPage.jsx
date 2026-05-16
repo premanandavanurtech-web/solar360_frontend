@@ -53,26 +53,26 @@ const PRIMARY_COLOR = "#3a5ac8";
 const SECONDARY_COLOR = "#2c489e";
 
 const ROLE_CONFIG = {
-  Head_office: {
-    label: "Head Office",
+  Admin_panel: {
+    label: "Admin Panel",
     icon: <Security />,
     description: "Full system access and administration rights",
     color: "#3a5ac8",
     shortDesc: "Admin Access",
   },
   ZSM: {
-    label: "Zonal Sales Manager",
+    label: "Operation Lead",
     icon: <Group />,
     description: "Manage regional teams and operations",
     color: "#3a5ac8",
     shortDesc: "Regional Manager",
   },
-  ASM: {
-    label: "Area Sales Manager",
+  Incharge: {
+    label: "Incharge",
     icon: <Group />,
     description: "Manage local teams and field operations",
     color: "#3a5ac8",
-    shortDesc: "Area Manager",
+    shortDesc: "Incharge",
   },
   TEAM: {
     label: "Team Member",
@@ -149,11 +149,11 @@ export default function AddUserPage() {
 
   // Determine available roles based on current user's role
   const getAvailableRoles = () => {
-    if (currentUser?.role === "Head_office") {
-      return ["Head_office", "ZSM", "ASM", "TEAM"];
+    if (currentUser?.role === "Admin_panel") {
+      return ["Admin_panel", "ZSM", "Incharge", "TEAM"];
     } else if (currentUser?.role === "ZSM") {
-      return ["ASM", "TEAM"];
-    } else if (currentUser?.role === "ASM") {
+      return ["Incharge", "TEAM"];
+    } else if (currentUser?.role === "Incharge") {
       return ["TEAM"];
     }
     return [];
@@ -173,17 +173,17 @@ export default function AddUserPage() {
       const data = await fetchAPI(`/user/getAllUsers?page=1&limit=100`);
       if (data.success) {
         let filteredSupervisors = [];
-        if (currentUser?.role === "Head_office") {
+        if (currentUser?.role === "Admin_panel") {
           filteredSupervisors = data.result.users.filter((u) =>
-            ["Head_office", "ZSM", "ASM"].includes(u.role),
+            ["Admin_panel", "ZSM", "Incharge"].includes(u.role),
           );
         } else if (currentUser?.role === "ZSM") {
           filteredSupervisors = data.result.users.filter((u) =>
-            ["ZSM", "ASM"].includes(u.role),
+            ["ZSM", "Incharge"].includes(u.role),
           );
-        } else if (currentUser?.role === "ASM") {
+        } else if (currentUser?.role === "Incharge") {
           filteredSupervisors = data.result.users.filter(
-            (u) => u.role === "ASM",
+            (u) => u.role === "Incharge",
           );
         }
         setSupervisors(filteredSupervisors);
@@ -947,10 +947,10 @@ export default function AddUserPage() {
                   Role Hierarchy
                 </Typography>
                 <Typography variant="body2">
-                  {currentUser.role === "Head_office" &&
-                    "Head Office → ZSM → ASM → TEAM"}
-                  {currentUser.role === "ZSM" && "ZSM → ASM → TEAM"}
-                  {currentUser.role === "ASM" && "ASM → TEAM"}
+                  {currentUser.role === "Admin_panel" &&
+                    "Admin Panel -> Operation Lead -> Incharge -> TEAM"}
+                  {currentUser.role === "ZSM" && "Operation Lead -> Incharge -> TEAM"}
+                  {currentUser.role === "Incharge" && "Incharge -> TEAM"}
                 </Typography>
                 <Typography variant="caption" sx={{ mt: 1, display: "block" }}>
                   You can only manage roles below your own in the hierarchy.

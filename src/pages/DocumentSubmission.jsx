@@ -141,7 +141,7 @@ const PRIMARY_COLOR = "#4569ea";
 const SECONDARY_COLOR = "#1a237e";
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 25, 50];
 const DEFAULT_ITEMS_PER_PAGE = 10;
-const ALLOWED_ROLES = ["Head_office", "ZSM", "ASM", "TEAM"];
+const ALLOWED_ROLES = ["Admin_panel", "ZSM", "Incharge", "TEAM"];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_FILE_TYPES = [
   "image/jpeg",
@@ -222,18 +222,18 @@ const DOCUMENT_STATUS_CONFIG = {
 
 // Role Configuration
 const ROLE_CONFIG = {
-  Head_office: {
-    label: "Head Office",
+  Admin_panel: {
+    label: "Admin Panel",
     color: PRIMARY_COLOR,
     icon: <AdminPanelSettings sx={{ fontSize: 16 }} />,
   },
   ZSM: {
-    label: "Zone Sales Manager",
+    label: "Operation Lead",
     color: PRIMARY_COLOR,
     icon: <WorkspacePremium sx={{ fontSize: 16 }} />,
   },
-  ASM: {
-    label: "Area Sales Manager",
+  Incharge: {
+    label: "Incharge",
     color: PRIMARY_COLOR,
     icon: <SupervisorAccount sx={{ fontSize: 16 }} />,
   },
@@ -248,13 +248,13 @@ const ROLE_CONFIG = {
 const hasAccess = (userRole) => ALLOWED_ROLES.includes(userRole);
 
 const getUserPermissions = (userRole) => ({
-  canView: ["Head_office", "ZSM", "ASM", "TEAM"].includes(userRole),
-  canEdit: ["Head_office", "ZSM", "ASM", "TEAM"].includes(userRole),
-  canDelete: userRole === "Head_office",
-  canManage: ["Head_office", "ZSM", "ASM", "TEAM"].includes(userRole),
-  canSeeAll: ["Head_office", "ZSM", "ASM"].includes(userRole),
+  canView: ["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(userRole),
+  canEdit: ["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(userRole),
+  canDelete: userRole === "Admin_panel",
+  canManage: ["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(userRole),
+  canSeeAll: ["Admin_panel", "ZSM", "Incharge"].includes(userRole),
   canSeeOwn: userRole === "TEAM",
-  canUpdateStatus: ["Head_office", "ZSM", "ASM", "TEAM"].includes(userRole),
+  canUpdateStatus: ["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(userRole),
 });
 
 // Helper: safely compare an id field that may be a string OR a populated object
@@ -3229,7 +3229,7 @@ export default function DocumentSubmissionPage() {
               matchesUserId(doc.assignedUser, uid) ||
               matchesUserId(doc.teamMember, uid),
           );
-        } else if (userRole === "ASM" && user?._id) {
+        } else if (userRole === "Incharge" && user?._id) {
           const uid = user._id?.toString();
           rawDocuments = rawDocuments.filter(
             (doc) =>
@@ -3249,7 +3249,7 @@ export default function DocumentSubmissionPage() {
               matchesUserId(doc.assignedUser, uid),
           );
         }
-        // Head_office sees all — no filter applied
+        // Admin_panel sees all — no filter applied
 
         
 

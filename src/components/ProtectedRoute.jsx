@@ -4,6 +4,8 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 
+const normalizeRole = (role) => (role === 'Head_office' ? 'Admin_panel' : role);
+
 const ProtectedRoute = ({ 
   children, 
   allowedRoles = []
@@ -53,7 +55,7 @@ const ProtectedRoute = ({
   }
 
   // Get current user role
-  const userRole = getUserRole();
+  const userRole = normalizeRole(getUserRole());
   
   // If no role, redirect to login
   if (!userRole) {
@@ -62,7 +64,8 @@ const ProtectedRoute = ({
   }
 
   // Check if user's role is allowed for this route
-  if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
+  const normalizedAllowedRoles = allowedRoles.map(normalizeRole);
+  if (normalizedAllowedRoles.length > 0 && !normalizedAllowedRoles.includes(userRole)) {
     console.warn(`User role ${userRole} not allowed for this route`);
     
     // Redirect to dashboard (since all roles use the same dashboard)

@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 
-const API = "https://solar-backend-6vaa.onrender.com";
+const API = "http://localhost:9001";
 
 export const useLiveBattery = (userId, token) => {
   const [percentage, setPercentage]   = useState(null);   // 0–100 or null if unavailable

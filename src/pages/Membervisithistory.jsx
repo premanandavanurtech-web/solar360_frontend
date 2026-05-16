@@ -18,11 +18,11 @@ import { useAuth } from "../contexts/AuthContext";
 import { stopTracking, isCurrentlyTracking } from "../utils/Locationtracker.js";
 import LiveTrackingMap from "../utils/Livetrackmap.jsx";
 
-const BASE_URL = "https://solar-backend-6vaa.onrender.com/api/v1";
+const BASE_URL = "http://localhost:9001/api/v1";
 const BACKEND_ORIGIN = BASE_URL.replace(/\/api\/v1\/?$/, "");
 const PHOTO_BACKEND_ORIGINS = [
   BACKEND_ORIGIN,
-  "https://solar-backend-6vaa.onrender.com",
+  "http://localhost:9001",
   "https://solar-backend-29z1.onrender.com",
 ].filter((origin, index, list) => origin && list.indexOf(origin) === index);
 const KNOWN_BACKEND_HOSTS = new Set([
@@ -786,7 +786,7 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
   const [loading,          setLoading]          = useState(true);
   const [error,            setError]            = useState(null);
   const [page,             setPage]             = useState(1);
-  const [hasMore,          setHasMore]          = useState(false);
+  const [hInchargeore,          setHInchargeore]          = useState(false);
   const [loadingMore,      setLoadingMore]      = useState(false);
   const [isPunchedIn,      setIsPunchedIn]      = useState(false);
   const [hasPunchedOut,    setHasPunchedOut]    = useState(false);
@@ -931,7 +931,7 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
       const pagination = res?.data?.pagination || res?.result?.pagination || res?.pagination || null;
 
       setVisits(prev => append ? [...prev, ...fetchedVisits] : fetchedVisits);
-      setHasMore(pagination ? pageNum < pagination.totalPages : false);
+      setHInchargeore(pagination ? pageNum < pagination.totalPages : false);
       setLastUpdated(new Date());
     } catch (err) { setError(err.message); }
     finally { setLoading(false); setLoadingMore(false); }
@@ -1566,7 +1566,7 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
             </Box>
 
             {/* Load more */}
-            {(hasMore || loadingMore) && (
+            {(hInchargeore || loadingMore) && (
               <Box sx={{ px: 3, py: 2, borderTop: "1px solid #f1f5f9", textAlign: "center" }}>
                 <Button size="small" disabled={loadingMore}
                   startIcon={loadingMore ? <CircularProgress size={12} /> : null}

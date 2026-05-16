@@ -823,7 +823,7 @@ export default function UnifiedDashboard() {
 
       let roleSpecificStats = [];
 
-      if (userRole === "Head_office" || userRole === "ZSM") {
+      if (userRole === "Admin_panel" || userRole === "ZSM") {
         roleSpecificStats = [
           {
             title: "Bank Loans",
@@ -871,7 +871,7 @@ export default function UnifiedDashboard() {
             navigateTo: "/team-members",
           },
         ];
-      } else if (userRole === "ASM") {
+      } else if (userRole === "Incharge") {
         roleSpecificStats = [
           {
             title: "My Team",
@@ -978,7 +978,7 @@ export default function UnifiedDashboard() {
     }
   }, [dashboardData, isMobile]);
 
-  const hasMissedLeadsData = useMemo(() => {
+  const hInchargeissedLeadsData = useMemo(() => {
     return dashboardData?.recentData?.missedLeads !== undefined;
   }, [dashboardData]);
 
@@ -1343,12 +1343,12 @@ export default function UnifiedDashboard() {
                 <CardContent sx={{ p: 1.5 }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
                     <Typography variant="subtitle2" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: '0.9rem' }}>
-                      {hasMissedLeadsData ? "Missed Leads" : "Recent Activities"}
+                      {hInchargeissedLeadsData ? "Missed Leads" : "Recent Activities"}
                     </Typography>
                     <Button
                       variant="text"
                       size="small"
-                      onClick={() => handleNavigateTo(hasMissedLeadsData ? "/missed-leads" : "/activities")}
+                      onClick={() => handleNavigateTo(hInchargeissedLeadsData ? "/missed-leads" : "/activities")}
                       endIcon={<NavigateNext sx={{ fontSize: 16 }} />}
                       sx={{ color: PRIMARY_COLOR, fontSize: '0.75rem' }}
                     >
@@ -1356,7 +1356,7 @@ export default function UnifiedDashboard() {
                     </Button>
                   </Box>
 
-                  {hasMissedLeadsData ? (
+                  {hInchargeissedLeadsData ? (
                     getRecentMissedLeads.length === 0 ? (
                       <EmptyStateCard
                         title="No Missed Leads"
@@ -1429,7 +1429,7 @@ export default function UnifiedDashboard() {
           )}
 
           {/* Team Section */}
-          {activeSection === 'team' && (user?.role === "Head_office" || user?.role === "ZSM" || user?.role === "ASM") && (
+          {activeSection === 'team' && (user?.role === "Admin_panel" || user?.role === "ZSM" || user?.role === "Incharge") && (
             <Stack spacing={2}>
               {/* Team Members */}
               {getTeamMembers.length > 0 && (
@@ -1800,12 +1800,12 @@ export default function UnifiedDashboard() {
             <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
                 <Typography variant="h6" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
-                  {hasMissedLeadsData ? "Missed Leads" : "Recent Activities"}
+                  {hInchargeissedLeadsData ? "Missed Leads" : "Recent Activities"}
                 </Typography>
                 <Button
                   variant="text"
                   size="small"
-                  onClick={() => handleNavigateTo(hasMissedLeadsData ? "/missed-leads" : "/activities")}
+                  onClick={() => handleNavigateTo(hInchargeissedLeadsData ? "/missed-leads" : "/activities")}
                   endIcon={<NavigateNext />}
                   sx={{ color: PRIMARY_COLOR, fontSize: { xs: '0.75rem', sm: '0.85rem' } }}
                 >
@@ -1813,7 +1813,7 @@ export default function UnifiedDashboard() {
                 </Button>
               </Box>
 
-              {hasMissedLeadsData ? (
+              {hInchargeissedLeadsData ? (
                 getRecentMissedLeads.length === 0 ? (
                   <EmptyStateCard
                     title="No Missed Leads"
@@ -1884,8 +1884,8 @@ export default function UnifiedDashboard() {
           </Card>
         </Grid>
 
-        {/* Team Overview - For Head_office, ZSM, ASM */}
-        {(user?.role === "Head_office" || user?.role === "ZSM" || user?.role === "ASM") && getTeamMembers.length > 0 && (
+        {/* Team Overview - For Admin_panel, ZSM, Incharge */}
+        {(user?.role === "Admin_panel" || user?.role === "ZSM" || user?.role === "Incharge") && getTeamMembers.length > 0 && (
           <Grid item xs={12}>
             <Card sx={{ borderRadius: { xs: 2, sm: 2.5, md: 3 }, boxShadow: "0 4px 20px rgba(0,0,0,0.02)", border: "1px solid #edf2f7" }}>
               <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>

@@ -8,7 +8,9 @@ import React, {
 } from "react";
 
 const AuthContext = createContext({});
-const API_BASE_URL = "https://solar-backend-6vaa.onrender.com/api/v1";
+const API_BASE_URL = "http://localhost:9001/api/v1";
+
+const normalizeRole = (role) => (role === "Head_office" ? "Admin_panel" : role);
 
 
 export const useAuth = () => {
@@ -33,12 +35,12 @@ export const AuthProvider = ({ children }) => {
 
     if (!token || !savedUser) return false;
 
-    try {
-      const parsedUser = JSON.parse(savedUser);
-      return !!(parsedUser && parsedUser.email && parsedUser.role);
-    } catch {
-      return false;
-    }
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        return !!(parsedUser && parsedUser.email && normalizeRole(parsedUser.role));
+      } catch {
+        return false;
+      }
   }, []);
 
   /* ===============================
@@ -53,7 +55,12 @@ export const AuthProvider = ({ children }) => {
 
         if (token && savedUser && isAuthenticated()) {
           const parsedUser = JSON.parse(savedUser);
-          setUser(parsedUser);
+          const normalizedUser = {
+            ...parsedUser,
+            role: normalizeRole(parsedUser.role),
+          };
+          setUser(normalizedUser);
+          localStorage.setItem("user", JSON.stringify(normalizedUser));
         }
       } catch (error) {
         console.error("Init error:", error);
@@ -138,16 +145,20 @@ export const AuthProvider = ({ children }) => {
 
       const token = response.result?.token || response.token;
       const userData = response.result?.user || response.result || response;
+      const normalizedUserData = {
+        ...userData,
+        role: normalizeRole(userData?.role),
+      };
 
       if (!token) throw new Error("No token received");
 
       localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(userData));
+      localStorage.setItem("user", JSON.stringify(normalizedUserData));
 
-      setUser(userData);
+      setUser(normalizedUserData);
       setSuccess("Login successful");
 
-      return { success: true, user: userData, token };
+      return { success: true, user: normalizedUserData, token };
     } catch (err) {
       setError(err.message);
       return { success: false, error: err.message };
@@ -163,6 +174,15 @@ export const AuthProvider = ({ children }) => {
   const logout = useCallback(() => {
     localStorage.clear();
     setUser(null);
+  }, []);
+
+  const updateLocalUser = useCallback((nextUser) => {
+    const normalizedUser = {
+      ...nextUser,
+      role: normalizeRole(nextUser?.role),
+    };
+    setUser(normalizedUser);
+    localStorage.setItem("user", JSON.stringify(normalizedUser));
   }, []);
 
   /* ===============================
@@ -230,10 +250,10 @@ export const AuthProvider = ({ children }) => {
     [fetchAPI],
   );
 
-  const getUserRole = useCallback(() => user?.role || null, [user]);
-  const isTeamMember = useCallback(() => user?.role === "TEAM", [user]);
+  const getUserRole = useCallback(() => normalizeRole(user?.role) || null, [user]);
+  const isTeamMember = useCallback(() => normalizeRole(user?.role) === "TEAM", [user]);
   const isManager = useCallback(
-    () => ["ZSM", "ASM", "Head_office"].includes(user?.role),
+    () => ["ZSM", "Incharge", "Admin_panel"].includes(normalizeRole(user?.role)),
     [user],
   );
 
@@ -252,6 +272,7 @@ export const AuthProvider = ({ children }) => {
     getUserRole,
     isTeamMember,
     isManager,
+    updateLocalUser,
     setError,
     setSuccess,
   };

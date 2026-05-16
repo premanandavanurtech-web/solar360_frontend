@@ -42,14 +42,14 @@ import {
 import { useSocket } from "../utils/Usesocket.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const API       = "https://solar-backend-6vaa.onrender.com";
+const API       = "http://localhost:9001";
 const PRIMARY   = "#4569ea";
 const SECONDARY = "#1a237e";
 const SUCCESS   = "#22c55e";
 const DANGER    = "#ef4444";
 const WARNING   = "#f59e0b";
 
-const MANAGER_ROLES = ["Head_office", "ZSM", "ASM"];
+const MANAGER_ROLES = ["Admin_panel", "ZSM", "Incharge"];
 
 // Office start time for "late" detection (9:00 AM)
 const OFFICE_START_HOUR   = 9;
@@ -667,7 +667,7 @@ export default function Attendance() {
   const userRole      = getUserRole();
   const isTeam        = userRole === "TEAM";
   const canManage     = MANAGER_ROLES.includes(userRole);
-  const canDelete     = userRole === "Head_office";
+  const canDelete     = userRole === "Admin_panel";
   const isManagerRole = MANAGER_ROLES.includes(userRole);
 
   const showPunchControls = !isAdminView && !isManagerRole;
@@ -1492,17 +1492,54 @@ export default function Attendance() {
                       ))}
                     </Box>
                   ) : (
-                    <TableContainer sx={{ maxHeight: 460 }}>
-                      <Table stickyHeader size="small">
-                        <TableHead>
+                    <TableContainer sx={{ maxHeight: 460, overflowX: "hidden" }}>
+                      <Table stickyHeader size="small" sx={{ tableLayout: "fixed", width: "100%" }}>
+                        <TableHead
+                          sx={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 3,
+                          }}
+                        >
                           <TableRow>
-                            <TableCell padding="checkbox" sx={{ bgcolor: alpha(PRIMARY, 0.04), borderBottom: `2px solid ${alpha(PRIMARY, 0.1)}` }}>
+                            <TableCell
+                              padding="checkbox"
+                              sx={{
+                                width: 44,
+                                top: 0,
+                                zIndex: 4,
+                                py: 1.25,
+                                bgcolor: "#f8fafc",
+                                borderBottom: `2px solid ${alpha(PRIMARY, 0.1)}`,
+                                boxShadow: `inset 0 -1px 0 ${alpha(PRIMARY, 0.08)}`,
+                              }}
+                            >
                               <Tooltip title={allSelected ? "Deselect all" : "Select all on this page"}>
                                 <Checkbox size="small" indeterminate={someSelected && !allSelected} checked={allSelected} onChange={toggleAll} sx={{ color: alpha(PRIMARY, 0.4), "&.Mui-checked": { color: PRIMARY }, "&.MuiCheckbox-indeterminate": { color: PRIMARY } }} />
                               </Tooltip>
                             </TableCell>
                             {["Date", "Punch In", "Punch Out", "Hours", "Status", "Actions"].map((h) => (
-                              <TableCell key={h} sx={{ bgcolor: alpha(PRIMARY, 0.04), fontWeight: 700, fontSize: "0.76rem", borderBottom: `2px solid ${alpha(PRIMARY, 0.1)}` }}>{h}</TableCell>
+                              <TableCell
+                                key={h}
+                                sx={{
+                                  top: 0,
+                                  zIndex: 4,
+                                  py: 1.25,
+                                  bgcolor: "#f8fafc",
+                                  fontWeight: 700,
+                                  fontSize: "0.76rem",
+                                  borderBottom: `2px solid ${alpha(PRIMARY, 0.1)}`,
+                                  boxShadow: `inset 0 -1px 0 ${alpha(PRIMARY, 0.08)}`,
+                                  width:
+                                    h === "Date" ? 78 :
+                                    h === "Punch In" ? 110 :
+                                    h === "Punch Out" ? 130 :
+                                    h === "Hours" ? 118 :
+                                    h === "Status" ? 150 : 86,
+                                }}
+                              >
+                                {h}
+                              </TableCell>
                             ))}
                           </TableRow>
                         </TableHead>
@@ -1529,7 +1566,16 @@ export default function Attendance() {
                                     <Checkbox size="small" checked={isChecked} onChange={() => toggleRow(id)} sx={{ color: alpha(PRIMARY, 0.3), "&.Mui-checked": { color: PRIMARY } }} />
                                   )}
                                 </TableCell>
-                                <TableCell><Typography variant="body2" fontWeight={600} color={isAbsent ? DANGER : "inherit"}>{fmtDate(a.date)}</Typography></TableCell>
+                                <TableCell>
+                                  <Typography
+                                    variant="body2"
+                                    fontWeight={600}
+                                    color={isAbsent ? DANGER : "inherit"}
+                                    sx={{ wordBreak: "break-word" }}
+                                  >
+                                    {fmtDate(a.date)}
+                                  </Typography>
+                                </TableCell>
                                 <TableCell>
                                   {a.punchIn
                                     ? <Chip
@@ -1565,9 +1611,18 @@ export default function Attendance() {
     <Typography variant="body2" color="text.disabled">—</Typography>
   )}
 </TableCell>
-                                <TableCell><Typography variant="body2" fontWeight={700} color={isAbsent ? DANGER : PRIMARY}>{a.workHoursFormatted || "—"}</Typography></TableCell>
                                 <TableCell>
-  <Stack spacing={0.5} alignItems="flex-start">
+                                  <Typography
+                                    variant="body2"
+                                    fontWeight={700}
+                                    color={isAbsent ? DANGER : PRIMARY}
+                                    sx={{ wordBreak: "break-word", lineHeight: 1.2 }}
+                                  >
+                                    {a.workHoursFormatted || "—"}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+  <Stack spacing={0.5} alignItems="flex-start" sx={{ maxWidth: "100%" }}>
     <StatusBadge status={a.status || "present"} />
     {a.missedPunchOut && <MissedPunchOutChip />}
   </Stack>
