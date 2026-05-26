@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 184" role="img" aria-labelledby="solarSoftwareTitle solarSoftwareDesc">
-  <title id="solarSoftwareTitle">Solar Software logo</title>
-  <desc id="solarSoftwareDesc">Solar Software logo with segmented circular mark, orange wordmark, and blue subtitle.</desc>
+  <title id="solarSoftwareTitle">Solar CRM logo</title>
+  <desc id="solarSoftwareDesc">Solar CRM logo with segmented circular mark, orange wordmark, and blue subtitle.</desc>
   <defs>
     <linearGradient id="orangeFill" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#ff9c2a"/>

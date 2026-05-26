@@ -1,0 +1,179 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@10.8.2
+2 info using node@v20.20.2
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\solarcrm\frontend\solar_frontend\.npmrc
+5 silly config load:file:C:\Users\dipak\.npmrc
+6 silly config load:file:C:\Users\dipak\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm install
+8 verbose argv "install" "--cache" "C:\\solarcrm\\frontend\\solar_frontend\\.npm-cache" "--no-audit" "--no-fund" "--ignore-scripts" "--legacy-peer-deps" "--package-lock" "false" "--omit" "optional"
+9 verbose logfile logs-max:10 dir:C:\solarcrm\frontend\solar_frontend\.npm-cache\_logs\2026-05-26T10_41_02_672Z-
+10 verbose logfile C:\solarcrm\frontend\solar_frontend\.npm-cache\_logs\2026-05-26T10_41_02_672Z-debug-0.log
+11 silly packumentCache heap:4345298944 maxSize:1086324736 maxEntrySize:543162368
+12 silly logfile done cleaning log files
+13 silly idealTree buildDeps
+14 silly fetch manifest @date-io/date-fns@^2.17.0
+15 silly packumentCache full:https://registry.npmjs.org/@date-io%2fdate-fns cache-miss
+16 http fetch GET 200 https://registry.npmjs.org/npm 1134ms
+17 http fetch GET 200 https://registry.npmjs.org/@date-io%2fdate-fns 2956ms (cache miss)
+18 silly fetch manifest @emotion/react@^11.11.4
+19 silly packumentCache full:https://registry.npmjs.org/@emotion%2freact cache-miss
+20 http fetch GET 200 https://registry.npmjs.org/@emotion%2freact 379ms (cache miss)
+21 silly fetch manifest @emotion/styled@^11.11.0
+22 silly packumentCache full:https://registry.npmjs.org/@emotion%2fstyled cache-miss
+23 http fetch GET 200 https://registry.npmjs.org/@emotion%2fstyled 492ms (cache miss)
+24 silly fetch manifest @mui/icons-material@^5.15.15
+25 silly packumentCache full:https://registry.npmjs.org/@mui%2ficons-material cache-miss
+26 http fetch GET 200 https://registry.npmjs.org/@mui%2ficons-material 1931ms (cache miss)
+27 silly fetch manifest @mui/lab@^5.0.0-alpha.170
+28 silly packumentCache full:https://registry.npmjs.org/@mui%2flab cache-miss
+29 http fetch GET 200 https://registry.npmjs.org/@mui%2flab 400ms (cache miss)
+30 silly fetch manifest @mui/material@^5.15.15
+31 silly packumentCache full:https://registry.npmjs.org/@mui%2fmaterial cache-miss
+32 http fetch GET 200 https://registry.npmjs.org/@mui%2fmaterial 177ms (cache miss)
+33 silly fetch manifest @mui/x-charts@^6.19.5
+34 silly packumentCache full:https://registry.npmjs.org/@mui%2fx-charts cache-miss
+35 http fetch GET 200 https://registry.npmjs.org/@mui%2fx-charts 876ms (cache miss)
+36 silly fetch manifest @mui/x-data-grid@^6.19.5
+37 silly packumentCache full:https://registry.npmjs.org/@mui%2fx-data-grid cache-miss
+38 http fetch GET 200 https://registry.npmjs.org/@mui%2fx-data-grid 1944ms (cache miss)
+39 silly fetch manifest @mui/x-date-pickers@^6.19.5
+40 silly packumentCache full:https://registry.npmjs.org/@mui%2fx-date-pickers cache-miss
+41 http fetch GET 200 https://registry.npmjs.org/@mui%2fx-date-pickers 250ms (cache miss)
+42 silly fetch manifest @react-google-maps/api@^2.20.8
+43 silly packumentCache full:https://registry.npmjs.org/@react-google-maps%2fapi cache-miss
+44 http fetch GET 200 https://registry.npmjs.org/@react-google-maps%2fapi 620ms (cache miss)
+45 silly fetch manifest axios@^1.6.8
+46 silly packumentCache full:https://registry.npmjs.org/axios cache-miss
+47 http fetch GET 200 https://registry.npmjs.org/axios 169ms (cache miss)
+48 silly fetch manifest cors@^2.8.6
+49 silly packumentCache full:https://registry.npmjs.org/cors cache-miss
+50 http fetch GET 200 https://registry.npmjs.org/cors 334ms (cache miss)
+51 silly fetch manifest date-fns@^2.30.0
+52 silly packumentCache full:https://registry.npmjs.org/date-fns cache-miss
+53 http fetch GET 200 https://registry.npmjs.org/date-fns 538ms (cache miss)
+54 silly fetch manifest file-saver@^2.0.5
+55 silly packumentCache full:https://registry.npmjs.org/file-saver cache-miss
+56 http fetch GET 200 https://registry.npmjs.org/file-saver 81ms (cache miss)
+57 silly fetch manifest framer-motion@^10.18.0
+58 silly packumentCache full:https://registry.npmjs.org/framer-motion cache-miss
+59 http fetch GET 200 https://registry.npmjs.org/framer-motion 458ms (cache miss)
+60 silly fetch manifest leaflet@^1.9.4
+61 silly packumentCache full:https://registry.npmjs.org/leaflet cache-miss
+62 http fetch GET 200 https://registry.npmjs.org/leaflet 93ms (cache miss)
+63 silly fetch manifest lucide-react@^0.452.0
+64 silly packumentCache full:https://registry.npmjs.org/lucide-react cache-miss
+65 http fetch GET 200 https://registry.npmjs.org/lucide-react 294ms (cache miss)
+66 silly fetch manifest react@^18.2.0
+67 silly packumentCache full:https://registry.npmjs.org/react cache-miss
+68 http fetch GET 200 https://registry.npmjs.org/react 315ms (cache miss)
+69 silly fetch manifest react-chartjs-2@^5.3.1
+70 silly packumentCache full:https://registry.npmjs.org/react-chartjs-2 cache-miss
+71 http fetch GET 200 https://registry.npmjs.org/react-chartjs-2 120ms (cache miss)
+72 silly fetch manifest react-dom@^18.2.0
+73 silly packumentCache full:https://registry.npmjs.org/react-dom cache-miss
+74 http fetch GET 200 https://registry.npmjs.org/react-dom 571ms (cache miss)
+75 silly fetch manifest react-leaflet@^4.2.1
+76 silly packumentCache full:https://registry.npmjs.org/react-leaflet cache-miss
+77 http fetch GET 200 https://registry.npmjs.org/react-leaflet 344ms (cache miss)
+78 silly fetch manifest react-router-dom@^6.22.3
+79 silly packumentCache full:https://registry.npmjs.org/react-router-dom cache-miss
+80 http fetch GET 200 https://registry.npmjs.org/react-router-dom 431ms (cache miss)
+81 silly fetch manifest react-scripts@^5.0.1
+82 silly packumentCache full:https://registry.npmjs.org/react-scripts cache-miss
+83 http fetch GET 200 https://registry.npmjs.org/react-scripts 122ms (cache miss)
+84 silly fetch manifest react-webcam@^7.2.0
+85 silly packumentCache full:https://registry.npmjs.org/react-webcam cache-miss
+86 http fetch GET 200 https://registry.npmjs.org/react-webcam 326ms (cache miss)
+87 silly fetch manifest socket.io-client@^4.8.3
+88 silly packumentCache full:https://registry.npmjs.org/socket.io-client cache-miss
+89 http fetch GET 200 https://registry.npmjs.org/socket.io-client 97ms (cache miss)
+90 silly fetch manifest web-vitals@^2.1.4
+91 silly packumentCache full:https://registry.npmjs.org/web-vitals cache-miss
+92 http fetch GET 200 https://registry.npmjs.org/web-vitals 113ms (cache miss)
+93 silly fetch manifest xlsx@^0.18.5
+94 silly packumentCache full:https://registry.npmjs.org/xlsx cache-miss
+95 http fetch GET 200 https://registry.npmjs.org/xlsx 117ms (cache miss)
+96 silly placeDep ROOT @date-io/date-fns@ OK for: client@0.1.0 want: ^2.17.0
+97 silly placeDep ROOT @emotion/react@ OK for: client@0.1.0 want: ^11.11.4
+98 silly placeDep ROOT @emotion/styled@ OK for: client@0.1.0 want: ^11.11.0
+99 silly placeDep ROOT @mui/icons-material@ OK for: client@0.1.0 want: ^5.15.15
+100 silly placeDep ROOT @mui/lab@ OK for: client@0.1.0 want: ^5.0.0-alpha.170
+101 silly placeDep ROOT @mui/material@ OK for: client@0.1.0 want: ^5.15.15
+102 silly placeDep ROOT @mui/x-charts@ OK for: client@0.1.0 want: ^6.19.5
+103 silly placeDep ROOT @mui/x-data-grid@ OK for: client@0.1.0 want: ^6.19.5
+104 silly placeDep ROOT @mui/x-date-pickers@ OK for: client@0.1.0 want: ^6.19.5
+105 silly placeDep ROOT @react-google-maps/api@ OK for: client@0.1.0 want: ^2.20.8
+106 silly placeDep ROOT axios@ OK for: client@0.1.0 want: ^1.6.8
+107 silly placeDep ROOT cors@ OK for: client@0.1.0 want: ^2.8.6
+108 silly placeDep ROOT date-fns@ OK for: client@0.1.0 want: ^2.30.0
+109 silly placeDep ROOT file-saver@ OK for: client@0.1.0 want: ^2.0.5
+110 silly placeDep ROOT framer-motion@ OK for: client@0.1.0 want: ^10.18.0
+111 silly placeDep ROOT leaflet@ OK for: client@0.1.0 want: ^1.9.4
+112 silly placeDep ROOT lucide-react@ OK for: client@0.1.0 want: ^0.452.0
+113 silly placeDep ROOT react@ OK for: client@0.1.0 want: ^18.2.0
+114 silly placeDep ROOT react-chartjs-2@ OK for: client@0.1.0 want: ^5.3.1
+115 silly placeDep ROOT react-dom@ OK for: client@0.1.0 want: ^18.2.0
+116 silly placeDep ROOT react-leaflet@ OK for: client@0.1.0 want: ^4.2.1
+117 silly placeDep ROOT react-router-dom@ OK for: client@0.1.0 want: ^6.22.3
+118 silly placeDep ROOT react-scripts@ OK for: client@0.1.0 want: ^5.0.1
+119 silly placeDep ROOT react-webcam@ OK for: client@0.1.0 want: ^7.2.0
+120 silly placeDep ROOT socket.io-client@ OK for: client@0.1.0 want: ^4.8.3
+121 silly placeDep ROOT web-vitals@ OK for: client@0.1.0 want: ^2.1.4
+122 silly placeDep ROOT xlsx@ OK for: client@0.1.0 want: ^0.18.5
+123 verbose type system
+124 verbose stack FetchError: Invalid response body while trying to fetch https://registry.npmjs.org/@date-io%2fdate-fns: EPERM: operation not permitted, unlink 'C:\solarcrm\frontend\solar_frontend\.npm-cache\_cacache\tmp\a6df6de3'
+124 verbose stack     at C:\Program Files\nodejs\node_modules\npm\node_modules\minipass-fetch\lib\body.js:170:15
+124 verbose stack     at async Response.json (C:\Program Files\nodejs\node_modules\npm\node_modules\minipass-fetch\lib\body.js:75:17)
+124 verbose stack     at async RegistryFetcher.packument (C:\Program Files\nodejs\node_modules\npm\node_modules\pacote\lib\registry.js:98:25)
+124 verbose stack     at async RegistryFetcher.manifest (C:\Program Files\nodejs\node_modules\npm\node_modules\pacote\lib\registry.js:128:23)
+124 verbose stack     at async #fetchManifest (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1199:20)
+124 verbose stack     at async #nodeFromEdge (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1037:19)
+124 verbose stack     at async #buildDepStep (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:901:11)
+124 verbose stack     at async Arborist.buildIdealTree (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:181:7)
+124 verbose stack     at async Promise.all (index 1)
+124 verbose stack     at async Arborist.reify (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\reify.js:131:5)
+125 error code EPERM
+126 error syscall unlink
+127 error path C:\solarcrm\frontend\solar_frontend\.npm-cache\_cacache\tmp\a6df6de3
+128 error errno EPERM
+129 error FetchError: Invalid response body while trying to fetch https://registry.npmjs.org/@date-io%2fdate-fns: EPERM: operation not permitted, unlink 'C:\solarcrm\frontend\solar_frontend\.npm-cache\_cacache\tmp\a6df6de3'
+129 error     at C:\Program Files\nodejs\node_modules\npm\node_modules\minipass-fetch\lib\body.js:170:15
+129 error     at async Response.json (C:\Program Files\nodejs\node_modules\npm\node_modules\minipass-fetch\lib\body.js:75:17)
+129 error     at async RegistryFetcher.packument (C:\Program Files\nodejs\node_modules\npm\node_modules\pacote\lib\registry.js:98:25)
+129 error     at async RegistryFetcher.manifest (C:\Program Files\nodejs\node_modules\npm\node_modules\pacote\lib\registry.js:128:23)
+129 error     at async #fetchManifest (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1199:20)
+129 error     at async #nodeFromEdge (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1037:19)
+129 error     at async #buildDepStep (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:901:11)
+129 error     at async Arborist.buildIdealTree (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:181:7)
+129 error     at async Promise.all (index 1)
+129 error     at async Arborist.reify (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\reify.js:131:5) {
+129 error   code: 'EPERM',
+129 error   errno: 'EPERM',
+129 error   syscall: 'unlink',
+129 error   path: 'C:\\solarcrm\\frontend\\solar_frontend\\.npm-cache\\_cacache\\tmp\\a6df6de3',
+129 error   type: 'system',
+129 error   requiredBy: '.'
+129 error }
+130 error
+130 error The operation was rejected by your operating system.
+130 error It's possible that the file was already in use (by a text editor or antivirus),
+130 error or that you lack permissions to access it.
+130 error
+130 error If you believe this might be a permissions issue, please double-check the
+130 error permissions of the file and its containing directories, or try running
+130 error the command again as root/Administrator.
+131 silly unfinished npm timer reify 1779792065799
+132 silly unfinished npm timer reify:loadTrees 1779792065949
+133 verbose cwd C:\solarcrm\frontend\solar_frontend
+134 verbose os Windows_NT 10.0.26200
+135 verbose node v20.20.2
+136 verbose npm  v10.8.2
+137 notice
+137 notice New major version of npm available! 10.8.2 -> 11.15.0
+137 notice Changelog: https://github.com/npm/cli/releases/tag/v11.15.0
+137 notice To update run: npm install -g npm@11.15.0
+137 notice  { force: true, [Symbol(proc-log.meta)]: true }
+138 verbose exit 1
+139 verbose code 1
+140 error A complete log of this run can be found in: C:\solarcrm\frontend\solar_frontend\.npm-cache\_logs\2026-05-26T10_41_02_672Z-debug-0.log
