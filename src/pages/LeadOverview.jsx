@@ -129,7 +129,7 @@ import {
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 import { format, parseISO, isValid } from "date-fns";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 // ========== CONSTANTS & UTILITIES ==========
 const PRIMARY_COLOR = "#4569ea";
@@ -1478,6 +1478,7 @@ const LeadOverview = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1592,6 +1593,15 @@ const LeadOverview = () => {
   const openEditDialog = useCallback((lead) => { setLeadToEdit(lead); setEditModalOpen(true); }, []);
   const openViewDialog = useCallback((lead) => { setLeadToView(lead); setViewModalOpen(true); }, []);
   const openDeleteDialog = useCallback(() => { setLeadsToDelete(selectedLeads); setDeleteDialogOpen(true); }, [selectedLeads]);
+
+  useEffect(() => {
+    const leadFromState = location.state?.openEditLead;
+    if (!leadFromState?._id) return;
+
+    setLeadToEdit(leadFromState);
+    setEditModalOpen(true);
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.pathname, location.state, navigate]);
 
   const handleSort = useCallback((column) => { if (sortBy === column) setSortOrder(sortOrder === "asc" ? "desc" : "asc"); else { setSortBy(column); setSortOrder("asc"); } }, [sortBy, sortOrder]);
   const handleResetFilters = useCallback(() => { setSearchTerm(""); setStatusFilter("all"); setPeriod("Today"); setPage(0); setSelectedLeads([]); setSelectAll(false); }, []);

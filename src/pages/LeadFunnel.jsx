@@ -932,6 +932,7 @@ export default function LeadFunnelDashboard() {
   const [period, setPeriod] = useState("Today");
   const [stageFilter, setStageFilter] = useState("all");
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [moveNextStageLoading, setMoveNextStageLoading] = useState(false);
 
   // Pagination state
   const [pagination, setPagination] = useState({
@@ -1092,6 +1093,49 @@ export default function LeadFunnelDashboard() {
     setSelectedLead(lead);
     setOpenDialog(true);
   };
+
+  const handleEditLead = useCallback((lead) => {
+    if (!lead?._id) return;
+    navigate("/all-leads", { state: { openEditLead: lead } });
+  }, [navigate]);
+
+  const handleCallLead = useCallback((lead) => {
+    const phone = String(lead?.phone || "").trim();
+    if (!phone) return;
+    window.location.href = `tel:${phone}`;
+  }, []);
+
+  const handleEmailLead = useCallback((lead) => {
+    const email = String(lead?.email || "").trim();
+    if (!email) return;
+    window.location.href = `mailto:${email}`;
+  }, []);
+
+  const handleMoveNextStage = useCallback(async (lead, currentStage) => {
+    const currentIndex = STAGE_ORDER.indexOf(currentStage);
+    const nextStage = currentIndex >= 0 ? STAGE_ORDER[currentIndex + 1] : null;
+    if (!lead?._id || !nextStage) return;
+
+    try {
+      setMoveNextStageLoading(true);
+      const response = await fetchAPI(`/lead/updateLead/${lead._id}`, {
+        method: "PUT",
+        body: JSON.stringify({ status: nextStage }),
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.message || "Failed to move lead to next stage");
+      }
+
+      setOpenDialog(false);
+      setSelectedLead(null);
+      await fetchFunnelData();
+    } catch (err) {
+      setError(err.message || "Failed to move lead to next stage");
+    } finally {
+      setMoveNextStageLoading(false);
+    }
+  }, [fetchAPI, fetchFunnelData]);
 
   const handlePageChange = (event, newPage) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
@@ -1792,6 +1836,11 @@ export default function LeadFunnelDashboard() {
         stage={selectedStage}
         isMobile={isMobile}
         stageColor={stageConfig.color}
+        onEditLead={handleEditLead}
+        onCallLead={handleCallLead}
+        onEmailLead={handleEmailLead}
+        onMoveNextStage={handleMoveNextStage}
+        moveNextStageLoading={moveNextStageLoading}
       />
 
       {/* Mobile FAB */}
@@ -2178,10 +2227,23 @@ const LeadTable = ({ leads, stageColor, onView }) => {
 };
 
 // Component: Lead Detail Dialog
-const LeadDetailDialog = ({ open, onClose, lead, stage, isMobile, stageColor }) => {
+const LeadDetailDialog = ({
+  open,
+  onClose,
+  lead,
+  stage,
+  isMobile,
+  stageColor,
+  onEditLead,
+  onCallLead,
+  onEmailLead,
+  onMoveNextStage,
+  moveNextStageLoading,
+}) => {
   if (!lead) return null;
 
   const config = STAGE_CONFIG[stage] || STAGE_CONFIG.Visit;
+  const nextStage = STAGE_ORDER[STAGE_ORDER.indexOf(stage) + 1] || null;
 
   return (
     <Dialog
@@ -2353,6 +2415,7 @@ const LeadDetailDialog = ({ open, onClose, lead, stage, isMobile, stageColor }) 
                       variant="outlined"
                       startIcon={<Edit />}
                       size="small"
+                      onClick={() => onEditLead?.(lead)}
                       sx={{ borderRadius: 2 }}
                     >
                       Edit Lead
@@ -2362,6 +2425,8 @@ const LeadDetailDialog = ({ open, onClose, lead, stage, isMobile, stageColor }) 
                       variant="outlined"
                       startIcon={<Phone />}
                       size="small"
+                      onClick={() => onCallLead?.(lead)}
+                      disabled={!lead?.phone}
                       sx={{ borderRadius: 2 }}
                     >
                       Call Lead
@@ -2371,6 +2436,8 @@ const LeadDetailDialog = ({ open, onClose, lead, stage, isMobile, stageColor }) 
                       variant="outlined"
                       startIcon={<Email />}
                       size="small"
+                      onClick={() => onEmailLead?.(lead)}
+                      disabled={!lead?.email}
                       sx={{ borderRadius: 2 }}
                     >
                       Send Email
@@ -2408,13 +2475,19 @@ const LeadDetailDialog = ({ open, onClose, lead, stage, isMobile, stageColor }) 
         <Button
           variant="contained"
           fullWidth={isMobile}
+          onClick={() => onMoveNextStage?.(lead, stage)}
+          disabled={!nextStage || moveNextStageLoading}
           sx={{
             bgcolor: PRIMARY_COLOR,
             borderRadius: 2,
             "&:hover": { bgcolor: SECONDARY_COLOR },
           }}
         >
-          Move to Next Stage
+          {moveNextStageLoading
+            ? "Updating..."
+            : nextStage
+              ? `Move to ${nextStage}`
+              : "No Next Stage"}
         </Button>
       </DialogActions>
     </Dialog>

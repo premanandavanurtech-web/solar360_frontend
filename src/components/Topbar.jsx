@@ -47,7 +47,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from "../contexts/AuthContext";
 
-const API = "http://localhost:9001/api/v1";
+const API = "https://solar-backend-6vaa.onrender.com/api/v1";
 const BACKEND_ORIGIN = API.replace(/\/api\/v1\/?$/, "");
 
 const getToken = () =>
