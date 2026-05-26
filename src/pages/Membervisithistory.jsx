@@ -83,39 +83,43 @@ const normalizePhotoUrl = (rawUrl) => {
 
   const trimmedUrl = rawUrl.trim().replace(/\\/g, "/");
   if (!trimmedUrl) return null;
+  const withoutApiPrefix = trimmedUrl.replace(/^\/?api\/v1(?=\/)/i, "");
 
-  if (trimmedUrl.startsWith("data:") || trimmedUrl.startsWith("blob:")) {
-    return trimmedUrl;
+  if (withoutApiPrefix.startsWith("data:") || withoutApiPrefix.startsWith("blob:")) {
+    return withoutApiPrefix;
   }
 
-  if (trimmedUrl.startsWith("/public/")) {
-    return `${BACKEND_ORIGIN}${trimmedUrl}`;
+  if (withoutApiPrefix.startsWith("/public/")) {
+    return `${BACKEND_ORIGIN}${withoutApiPrefix}`;
   }
 
-  if (trimmedUrl.startsWith("/uploads/")) {
-    return `${BACKEND_ORIGIN}/public${trimmedUrl}`;
+  if (withoutApiPrefix.startsWith("/uploads/")) {
+    return `${BACKEND_ORIGIN}/public${withoutApiPrefix}`;
   }
 
-  if (trimmedUrl.startsWith("/")) {
-    return `${BACKEND_ORIGIN}${trimmedUrl}`;
+  if (withoutApiPrefix.startsWith("/")) {
+    return `${BACKEND_ORIGIN}${withoutApiPrefix}`;
   }
 
-  if (!/^https?:\/\//i.test(trimmedUrl)) {
-    const cleanPath = trimmedUrl.replace(/^\/+/, "");
-    return `${BACKEND_ORIGIN}/${cleanPath.startsWith("uploads/") ? "public/" : ""}${cleanPath}`;
+  if (!/^https?:\/\//i.test(withoutApiPrefix)) {
+    const cleanPath = withoutApiPrefix.replace(/^\/+/, "");
+    const pathWithoutApi = cleanPath.replace(/^api\/v1\//i, "");
+    return `${BACKEND_ORIGIN}/${pathWithoutApi.startsWith("uploads/") ? "public/" : ""}${pathWithoutApi}`;
   }
 
   try {
-    const parsedUrl = new URL(trimmedUrl);
-    if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname) && parsedUrl.pathname.startsWith("/uploads/")) {
-      return `${parsedUrl.origin}/public${parsedUrl.pathname}`;
+    const parsedUrl = new URL(withoutApiPrefix);
+    const pathname = parsedUrl.pathname.replace(/^\/api\/v1(?=\/)/i, "");
+    if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname) && pathname.startsWith("/uploads/")) {
+      return `${parsedUrl.origin}/public${pathname}`;
     }
-    if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname) && parsedUrl.pathname.startsWith("/public/")) {
-      return `${parsedUrl.origin}${parsedUrl.pathname}`;
+    if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname) && pathname.startsWith("/public/")) {
+      return `${parsedUrl.origin}${pathname}`;
     }
+    parsedUrl.pathname = pathname;
     return parsedUrl.toString();
   } catch {
-    return trimmedUrl;
+    return withoutApiPrefix;
   }
 };
 
@@ -127,12 +131,15 @@ const extractPhotoValue = (photoLike) => {
   return (
     photoLike.url ||
     photoLike.uri ||
+    photoLike.photoUrl ||
+    photoLike.imageUrl ||
     photoLike.secure_url ||
     photoLike.downloadURL ||
     photoLike.path ||
     photoLike.location ||
     photoLike.filename ||
     photoLike.filePath ||
+    photoLike.file_url ||
     photoLike.src ||
     null
   );
@@ -144,7 +151,10 @@ const getPhotoUrlCandidates = (rawPhoto) => {
 
   const candidates = [primaryUrl];
   const pushBackendPaths = (pathname) => {
-    const normalizedPath = pathname.replace(/\\/g, "/").replace(/^\/+/, "");
+    const normalizedPath = pathname
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "")
+      .replace(/^api\/v1\//i, "");
     if (!normalizedPath) return;
 
     const filename = normalizedPath.split("/").filter(Boolean).pop();
@@ -174,19 +184,20 @@ const getPhotoUrlCandidates = (rawPhoto) => {
 
   try {
     const parsedUrl = new URL(primaryUrl);
+    const normalizedPathname = parsedUrl.pathname.replace(/^\/api\/v1(?=\/)/i, "");
     if (
       KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname) &&
-      (parsedUrl.pathname.startsWith("/public/") || parsedUrl.pathname.startsWith("/uploads/"))
+      (normalizedPathname.startsWith("/public/") || normalizedPathname.startsWith("/uploads/"))
     ) {
-      const publicPath = parsedUrl.pathname.startsWith("/uploads/")
-        ? `/public${parsedUrl.pathname}`
-        : parsedUrl.pathname;
+      const publicPath = normalizedPathname.startsWith("/uploads/")
+        ? `/public${normalizedPathname}`
+        : normalizedPathname;
       PHOTO_BACKEND_ORIGINS.forEach((origin) => {
         candidates.push(`${origin}${publicPath}`);
       });
     }
     if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname)) {
-      pushBackendPaths(parsedUrl.pathname);
+      pushBackendPaths(parsedUrl.pathname.replace(/^\/api\/v1(?=\/)/i, ""));
     }
   } catch {
     pushBackendPaths(primaryUrl);
@@ -310,6 +321,12 @@ const isVisitInDateRange = (visit, dateRange) => {
     visitTime >= startTime &&
     visitTime <= endTime
   );
+};
+
+const formatStayDuration = (minutes) => {
+  const value = Number(minutes) || 0;
+  if (value >= 60) return `${Math.floor(value / 60)}h ${value % 60}m`;
+  return `${value} min`;
 };
 
 // ─── Route Connector ──────────────────────────────────────────────────────────
@@ -661,6 +678,77 @@ const VisitCard = ({ visit: v, index, isLast, fixedBatteryInfo, fixedBatteryChip
   );
 };
 
+const StayedLocationCard = ({ stay }) => {
+  const latestEvent = Array.isArray(stay?.events) && stay.events.length
+    ? [...stay.events].sort((a, b) => new Date(b.endTime).getTime() - new Date(a.endTime).getTime())[0]
+    : null;
+  const startTime = latestEvent?.startTime || null;
+  const endTime = latestEvent?.endTime || stay?.lastEndTime || null;
+  const totalMinutes = Number(stay?.totalDurationMinutes) || 0;
+  const visitCount = Number(stay?.visitCount) || 0;
+
+  return (
+    <Box sx={{ display: "flex", gap: 2, position: "relative", mb: 2 }}>
+      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+        <Box sx={{
+          width: 40, height: 40, borderRadius: "50%",
+          bgcolor: WARNING,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: `0 2px 8px ${alpha(WARNING, 0.3)}`,
+        }}>
+          <Timer sx={{ fontSize: 17, color: "#fff" }} />
+        </Box>
+      </Box>
+
+      <Box sx={{ flex: 1, minWidth: 0, pt: 0.25 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 0.4 }}>
+          <Typography sx={{ fontWeight: 700, color: "#0f172a", fontSize: "0.88rem", lineHeight: 1.3 }}>
+            {stay?.locationName || "Stayed location"}
+          </Typography>
+          {endTime && (
+            <Typography sx={{ fontSize: "0.72rem", fontWeight: 600, color: "#94a3b8", flexShrink: 0 }}>
+              {fmt(endTime)}
+            </Typography>
+          )}
+        </Box>
+
+        {stay?.address && (
+          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.4, mb: 0.5 }}>
+            <LocationOn sx={{ fontSize: 12, color: WARNING, mt: "2px", flexShrink: 0 }} />
+            <Typography sx={{
+              color: "#475569", fontSize: "0.75rem", lineHeight: 1.4,
+              display: "-webkit-box", WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical", overflow: "hidden",
+            }}>
+              {stay.address}
+            </Typography>
+          </Box>
+        )}
+
+        <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 0.5 }}>
+          <Chip
+            size="small"
+            label={`${visitCount} time${visitCount === 1 ? "" : "s"} stayed`}
+            sx={{ bgcolor: alpha(WARNING, 0.1), color: WARNING, fontWeight: 700, fontSize: "0.65rem", height: 20 }}
+          />
+          <Chip
+            size="small"
+            label={`${formatStayDuration(totalMinutes)} total`}
+            sx={{ bgcolor: "#f8fafc", color: "#64748b", fontWeight: 700, fontSize: "0.65rem", height: 20, border: "1px solid #e2e8f0" }}
+          />
+          {startTime && endTime && (
+            <Chip
+              size="small"
+              label={`${fmt(startTime)} - ${fmt(endTime)}`}
+              sx={{ bgcolor: alpha(PRIMARY, 0.06), color: PRIMARY, fontWeight: 700, fontSize: "0.65rem", height: 20 }}
+            />
+          )}
+        </Box>
+      </Box>
+    </Box>
+  );
+};
+
 // ─── Filter Drawer ────────────────────────────────────────────────────────────
 const FilterDrawer = ({ open, onClose, filters, onApply }) => {
   const [local, setLocal] = useState(filters);
@@ -802,6 +890,7 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
   const [mapDistance,      setMapDistance]      = useState(null);
   const [autoVisitToast,   setAutoVisitToast]   = useState(null);
   const [dwellInfo,        setDwellInfo]        = useState(null);
+  const [stayedLocations,  setStayedLocations]  = useState([]);
   const [liveBatteryInfo,  setLiveBatteryInfo]  = useState({ percentage: null, isCharging: false, recordedAt: null });
   const [punchBatteryInfo, setPunchBatteryInfo] = useState({ percentage: null, isCharging: false, recordedAt: null });
 
@@ -960,6 +1049,28 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
     } catch (e) { console.warn("GPS distance fetch failed:", e.message); }
   }, [filters.dateRange, targetUserId]);
 
+  const fetchStayedLocations = useCallback(async () => {
+    if (!targetUserId || !isSingleDayFilter(filters.dateRange)) {
+      setStayedLocations([]);
+      return;
+    }
+
+    try {
+      const selectedDate = getSelectedDayKey(filters.dateRange);
+      const res = await apiFetch("/location/stays", {
+        date: selectedDate,
+        salesmanId: targetUserId,
+        minimumStayMinutes: 15,
+      });
+      const data = res?.data || res?.result || res;
+      const locations = data?.stayedLocations || [];
+      setStayedLocations(Array.isArray(locations) ? locations : []);
+    } catch (e) {
+      console.warn("Stayed locations fetch failed:", e.message);
+      setStayedLocations([]);
+    }
+  }, [filters.dateRange, targetUserId]);
+
   const fetchLatestBattery = useCallback(async () => {
     if (!targetUserId) return;
     try {
@@ -1007,8 +1118,9 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
     fetchStats();
     fetchPunchInStatus();
     fetchGpsDistance();
+    fetchStayedLocations();
     fetchLatestBattery();
-  }, [filters, userId, authUserId, fetchVisits, fetchStats, fetchPunchInStatus, fetchGpsDistance, fetchLatestBattery]);
+  }, [filters, userId, authUserId, targetUserId, fetchVisits, fetchStats, fetchPunchInStatus, fetchGpsDistance, fetchStayedLocations, fetchLatestBattery]);
 
   const handleRefresh = () => {
     setPage(1);
@@ -1016,14 +1128,15 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
     fetchStats();
     fetchPunchInStatus();
     fetchGpsDistance();
+    fetchStayedLocations();
     fetchLatestBattery();
   };
 
   useEffect(() => {
     if (!hasPunchedOut) return;
-    const timer = setTimeout(() => { fetchVisits(1, false); fetchGpsDistance(); }, 2000);
+    const timer = setTimeout(() => { fetchVisits(1, false); fetchGpsDistance(); fetchStayedLocations(); }, 2000);
     return () => clearTimeout(timer);
-  }, [hasPunchedOut, fetchVisits, fetchGpsDistance]);
+  }, [hasPunchedOut, fetchVisits, fetchGpsDistance, fetchStayedLocations]);
 
   useEffect(() => {
     if (!targetUserId) return;
@@ -1031,11 +1144,12 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
     const interval = setInterval(() => {
       fetchVisits(1, false);
       fetchGpsDistance();
+      fetchStayedLocations();
       fetchPunchInStatus();
       fetchLatestBattery();
     }, 12_000);
     return () => clearInterval(interval);
-  }, [targetUserId, filters.dateRange, fetchVisits, fetchGpsDistance, fetchPunchInStatus, fetchLatestBattery]);
+  }, [targetUserId, filters.dateRange, fetchVisits, fetchGpsDistance, fetchStayedLocations, fetchPunchInStatus, fetchLatestBattery]);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const selectedMapDate = isSingleDayFilter(filters.dateRange)
@@ -1052,9 +1166,19 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
   const mapDistanceKm   = Number(mapDistance?.totalKm || 0);
   const gpsDistanceKm   = Number(gpsDistance?.totalKm || 0);
   const displayDistanceKm = mapDistanceKm > 0 ? mapDistanceKm : gpsDistanceKm > 0 ? gpsDistanceKm : totalDist;
-  const avgTime         = visibleVisits.length
-    ? Math.round(visibleVisits.reduce((s, v) => s + (v.timeSpentMinutes || 0), 0) / visibleVisits.length)
-      : 0;
+  const stayedStopCount = stayedLocations.reduce(
+    (sum, stay) => sum + Math.max(1, Number(stay.visitCount) || 0),
+    0,
+  );
+  const totalStopCount = visibleVisits.length + stayedStopCount;
+  const totalVisitMinutes = visibleVisits.reduce((s, v) => s + (v.timeSpentMinutes || 0), 0);
+  const totalStayedMinutes = stayedLocations.reduce(
+    (sum, stay) => sum + (Number(stay.totalDurationMinutes) || 0),
+    0,
+  );
+  const avgTime = totalStopCount
+    ? Math.round((totalVisitMinutes + totalStayedMinutes) / totalStopCount)
+    : 0;
   const completedCount  = visibleVisits.filter(v => v.status === "Completed").length;
   const inProgressCount = visibleVisits.filter(v => v.status === "InProgress").length;
   const cancelledCount  = visibleVisits.filter(v => v.status === "Cancelled").length;
@@ -1223,7 +1347,7 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
                 <Box sx={{ position: "absolute", bottom: 48, left: 10, zIndex: 1000, bgcolor: "rgba(255,255,255,0.95)", borderRadius: "10px", px: 1.5, py: 0.75, display: "flex", alignItems: "center", gap: 1, boxShadow: "0 2px 10px rgba(0,0,0,0.12)", border: "1px solid #e2e8f0" }}>
                   <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: WARNING, animation: "dp 1.5s ease-in-out infinite", "@keyframes dp": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } } }} />
                   <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#0f172a" }}>Stopped {dwellInfo.mins} min</Typography>
-                  {dwellInfo.mins < 10 && <Typography sx={{ fontSize: "0.65rem", color: "#94a3b8" }}>· visit in {10 - dwellInfo.mins} min</Typography>}
+                  {dwellInfo.mins < 15 && <Typography sx={{ fontSize: "0.65rem", color: "#94a3b8" }}>· visit in {15 - dwellInfo.mins} min</Typography>}
                 </Box>
               )}
 
@@ -1285,7 +1409,7 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
                 </Box>
                 {loading ? <Skeleton width={60} height={32} /> : (
                   <Typography sx={{ fontSize: "1.4rem", fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px", lineHeight: 1 }}>
-                    {visibleVisits.length}{" "}
+                    {totalStopCount}{" "}
                     <Typography component="span" sx={{ fontSize: "0.75rem", fontWeight: 400, color: "#94a3b8" }}>stops</Typography>
                   </Typography>
                 )}
@@ -1395,6 +1519,7 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
 
                 <Typography sx={{ fontSize: "0.72rem", color: "#94a3b8" }}>
                   · {loading ? "…" : `${visibleVisits.length} visit${visibleVisits.length !== 1 ? "s" : ""}`}
+                  {stayedLocations.length > 0 ? ` · ${stayedLocations.length} stayed` : ""}
                 </Typography>
               </Box>
               <Badge badgeContent={filters.statuses?.length || 0} color="primary"
@@ -1422,7 +1547,7 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
                     </Box>
                   ))}
                 </Box>
-              ) : visibleVisits.length === 0 ? (
+              ) : visibleVisits.length === 0 && stayedLocations.length === 0 ? (
                 <Box sx={{ flex: 1, display: "flex", flexDirection: "column", p: 3 }}>
                   {isPunchedIn && !hasPunchedOut ? (
                     <Box sx={{ display: "flex", gap: 2 }}>
@@ -1511,6 +1636,28 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
                     </Box>
                   )}
 
+                  {stayedLocations.length > 0 && (
+                    <Box sx={{ mt: 1.5, mb: 2 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1.25 }}>
+                        <Timer sx={{ fontSize: 15, color: WARNING }} />
+                        <Typography sx={{ fontSize: "0.78rem", color: "#0f172a", fontWeight: 800 }}>
+                          Stayed 15+ Minutes
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={`${stayedLocations.length}`}
+                          sx={{ height: 18, bgcolor: alpha(WARNING, 0.12), color: WARNING, fontSize: "0.62rem", fontWeight: 800 }}
+                        />
+                      </Box>
+                      {stayedLocations.map((stay, index) => (
+                        <StayedLocationCard
+                          key={`${stay.lat || "stay"}-${stay.lng || index}-${stay.lastEndTime || index}`}
+                          stay={stay}
+                        />
+                      ))}
+                    </Box>
+                  )}
+
                   {/* ── Visit cards with route connectors between them ── */}
                   {sortedVisits.map((v, i) => (
                     <Box key={v._id || i}>
@@ -1528,7 +1675,6 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
                     </Box>
                   ))}
 
-                  {/* ── Punch Out footer ── */}
                   {hasPunchedOut && punchOutLocation?.time && (
                     <Box sx={{ display: "flex", gap: 2, mt: 0 }}>
                       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>

@@ -37,6 +37,7 @@ import TeamAttendance from "./pages/TeamAttendance";
 import Notifications from "./pages/Notifications";
 import LeaveManagement from "./pages/LeaveManagement";
 
+
 const theme = createTheme({
   palette: {
     primary: { main: "#3566bb", light: "#2172c9", dark: "#0a479b", contrastText: "#fff" },
@@ -117,6 +118,7 @@ function App() {
                         <Route path="add-visit" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><VisitDetails /></ProtectedRoute>} />
                         <Route path="bank-at-pending" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><BankAtPending /></ProtectedRoute>} />
                         <Route path="disbursement" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Disbursement /></ProtectedRoute>} />
+                        
 
                         {/* ── ATTENDANCE ───────────────────────────────────────────────────
                             /attendance              → own attendance (any role)

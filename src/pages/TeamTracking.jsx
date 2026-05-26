@@ -50,6 +50,39 @@
   const avatarColors = ["#4569ea","#7c3aed","#0ea5e9","#f59e0b","#10b981","#f43f5e","#8b5cf6","#06b6d4"];
   const getAvatarColor = (name = "") => avatarColors[name.charCodeAt(0) % avatarColors.length];
 
+  const TRACKED_ROLES = ["ZSM", "Incharge", "TEAM"];
+  const ROLE_LABELS = {
+    ZSM: "Operation Lead",
+    Incharge: "Incharge",
+    TEAM: "Team Member",
+  };
+  const ROLE_SORT_ORDER = {
+    ZSM: 0,
+    Incharge: 1,
+    TEAM: 2,
+  };
+
+  const normalizeUserRole = (role = "") => {
+    const normalized = String(role).trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if (normalized === "operation_lead" || normalized === "operationlead") return "ZSM";
+    if (normalized === "asm" || normalized === "inchange" || normalized === "incharge") return "Incharge";
+    if (normalized === "team") return "TEAM";
+    if (normalized === "zsm") return "ZSM";
+    return role || "TEAM";
+  };
+
+  const getRoleLabel = (role) => ROLE_LABELS[normalizeUserRole(role)] || role || "Team Member";
+
+  const uniqUsersById = (users = []) => {
+    const seen = new Set();
+    return users.filter((user) => {
+      const id = String(user?._id || user?.id || "");
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  };
+
   // Map dutyStatus from backend → UI status key
   const getDutyStatus = (att, user) => {
     if (!att || !att.punchIn?.time) return "offline";
@@ -80,6 +113,20 @@
       color: "#64748b",
       dotColor: "#94a3b8",
       pulse: false,
+    },
+    location_off: {
+      label: "Location Off",
+      bg: alpha("#ef4444", 0.1),
+      color: "#dc2626",
+      dotColor: "#ef4444",
+      pulse: true,
+    },
+    no_signal: {
+      label: "No Signal",
+      bg: alpha("#f59e0b", 0.12),
+      color: "#d97706",
+      dotColor: "#f59e0b",
+      pulse: true,
     },
   };
 
@@ -159,7 +206,7 @@
           </Badge>
           <Box>
             <Typography fontWeight={700} fontSize="0.88rem" color="#0f172a" lineHeight={1.3}>{member.name}</Typography>
-            <Typography fontSize="0.7rem" color="#94a3b8" fontWeight={500}>{member.role}</Typography>
+            <Typography fontSize="0.7rem" color="#94a3b8" fontWeight={500}>{member.roleLabel}</Typography>
           </Box>
         </Stack>
         <StatusChip status={member.status} />
@@ -213,7 +260,7 @@
   // ── Table Row Skeleton ────────────────────────────────────────────────────────
   const TableRowSkeleton = () => (
     <TableRow>
-      {[1,2,3,4,5].map((i) => (
+      {[1,2,3,4,5,6,7].map((i) => (
         <TableCell key={i} sx={{ py: 2.25 }}>
           <Skeleton variant="rectangular" height={36} sx={{ borderRadius: 1 }} />
         </TableCell>
@@ -243,23 +290,42 @@
         const headers = getAuthHeaders();
         const today = new Date().toISOString().split("T")[0];
 
-        // Step 1: Fetch team members
+        // Step 1: Fetch field users: operation leads, incharges, and team members.
         let rawUsers = [];
         try {
-          const usersRes = await axios.get(`${API}/api/v1/user/getManagerUnderUserList`, {
-            headers, params: { limit: 200 },
+          const usersRes = await axios.get(`${API}/api/v1/user/getAllUsers`, {
+            headers, params: { page: 1, limit: 100 },
           });
           rawUsers = usersRes.data?.result?.users || usersRes.data?.data?.users || [];
+          rawUsers = rawUsers.filter((user) => TRACKED_ROLES.includes(normalizeUserRole(user.role)));
         } catch (e) {
           if (handleAuthError(e)) return;
           console.error("Users fetch failed:", e.message);
         }
 
+        if (rawUsers.length === 0) {
+          try {
+            const fallbackRes = await axios.get(`${API}/api/v1/user/getManagerUnderUserList`, {
+              headers, params: { page: 1, limit: 100 },
+            });
+            rawUsers = fallbackRes.data?.result?.users || fallbackRes.data?.data?.users || [];
+          } catch (e) {
+            if (handleAuthError(e)) return;
+            console.error("Fallback team users fetch failed:", e.message);
+          }
+        }
+
+        rawUsers = uniqUsersById(rawUsers).sort((a, b) => {
+          const roleDiff = (ROLE_SORT_ORDER[normalizeUserRole(a.role)] ?? 99) - (ROLE_SORT_ORDER[normalizeUserRole(b.role)] ?? 99);
+          if (roleDiff !== 0) return roleDiff;
+          return `${a.firstName || ""} ${a.lastName || ""}`.localeCompare(`${b.firstName || ""} ${b.lastName || ""}`);
+        });
+
         // Step 2: Fetch today's attendance (for punch-in locations)
         let attendances = [];
         try {
           const attRes = await axios.get(`${API}/api/v1/attendance`, {
-            headers, params: { startDate: today, endDate: today, limit: 200 },
+            headers, params: { startDate: today, endDate: today, limit: 500 },
           });
           attendances = attRes.data?.result?.attendances || attRes.data?.data?.attendances || [];
         } catch (e) {
@@ -279,7 +345,7 @@ try {
   console.error("Visits fetch failed:", e.message);
 }
 
-        // Step 4: Fetch latest battery logs for the team
+        // Step 4: Fetch latest battery logs for field users
         let batteryMap = {};
         try {
           const userIds = rawUsers.map((u) => String(u._id || u.id)).filter(Boolean);
@@ -303,25 +369,53 @@ try {
           console.error("Battery fetch failed:", e.message);
         }
 
-        // Step 5: Map attendance by userId
+        // Step 5: Fetch tracking status for field users
+        let trackingStatusMap = {};
+        try {
+          const userIds = rawUsers.map((u) => String(u._id || u.id)).filter(Boolean);
+          if (userIds.length > 0) {
+            const trackingRes = await axios.get(`${API}/api/v1/tracking-status`, {
+              headers, params: { userIds: userIds.join(",") },
+            });
+            const trackingStatuses = trackingRes.data?.data || trackingRes.data?.result || [];
+            trackingStatuses.forEach((entry) => {
+              const key = String(entry.userId || entry.user?._id || entry.user || "");
+              if (key) {
+                trackingStatusMap[key] = entry;
+              }
+            });
+          }
+        } catch (e) {
+          if (handleAuthError(e)) return;
+          console.error("Tracking status fetch failed:", e.message);
+        }
+
+        // Step 6: Map attendance by userId
         const attMap = {};
         attendances.forEach((a) => {
           const uid = String(a.user?._id || a.user?.id || a.user || "");
           if (uid) attMap[uid] = a;
         });
 
-        // Step 6: Count visits by userId
+        // Step 7: Count visits by userId
         const visitCountMap = {};
         visits.forEach((v) => {
           const uid = String(v.user?._id || v.user?.id || v.user || "");
           if (uid) visitCountMap[uid] = (visitCountMap[uid] || 0) + 1;
         });
 
-        // Step 7: Merge into member objects
+        // Step 8: Merge into member objects
         const merged = rawUsers.map((u) => {
           const uid = String(u._id || u.id || "");
           const att = attMap[uid] || null;
-          const status = getDutyStatus(att, u);
+          const baseStatus = getDutyStatus(att, u);
+          const trackingStatus = trackingStatusMap[uid] || null;
+          const status =
+            baseStatus === "active" && trackingStatus?.derivedState === "location_off"
+              ? "location_off"
+              : baseStatus === "active" && trackingStatus?.derivedState === "no_signal"
+              ? "no_signal"
+              : baseStatus;
           const punchInTime = att?.punchIn?.time ? formatTime(att.punchIn.time) : null;
           const punchOutTime = att?.punchOut?.time ? formatTime(att.punchOut.time) : null;
           const punchBattery = att?.punchIn?.battery || att?.metadata?.batteryAtPunchIn || null;
@@ -345,7 +439,8 @@ try {
             name: `${u.firstName || ""} ${u.lastName || ""}`.trim(),
             firstName: u.firstName || "",
             lastName: u.lastName || "",
-            role: u.role || "TEAM",
+            role: normalizeUserRole(u.role || "TEAM"),
+            roleLabel: getRoleLabel(u.role || "TEAM"),
             email: u.email || "",
             phoneNumber: u.phoneNumber || "",
             initials: (u.firstName?.[0] || "").toUpperCase() + (u.lastName?.[0] || "").toUpperCase(),
@@ -364,6 +459,9 @@ try {
             visits: visitCountMap[uid] || 0,
             batteryPercentage: resolvedBatteryPercentage,
             isCharging: resolvedIsCharging,
+            lastHeartbeatAt: trackingStatus?.lastHeartbeatAt || null,
+            trackingState: trackingStatus?.derivedState || "ok",
+            trackingReason: trackingStatus?.lastLocationOffReason || "",
           };
         });
 
@@ -401,7 +499,7 @@ try {
 
     const SUMMARY_CARDS = [
       {
-        title: "Total Members",
+        title: "Total Field Users",
         value: loading ? "—" : String(summary.total),
         icon: <Groups />,
         iconBg: alpha("#3b82f6", 0.1),
@@ -559,10 +657,10 @@ try {
           {/* ── Section Header ───────────────────────────────────────────── */}
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
             <Typography fontWeight={700} fontSize={{ xs: "0.9rem", md: "1rem" }} color="#0f172a">
-              Team Member Status
+              Field User Status
               {!loading && (
                 <Typography component="span" sx={{ ml: 1, fontSize: "0.72rem", color: "#94a3b8", fontWeight: 400 }}>
-                  ({teamMembers.length} members)
+                  ({teamMembers.length} field users)
                 </Typography>
               )}
             </Typography>
@@ -601,7 +699,7 @@ try {
                         navigate(`/member-history/${member.id}`, {
                           state: {
                             memberName: member.name,
-                            memberRole: member.role,
+                            memberRole: member.roleLabel,
                             memberPhone: member.phoneNumber,
                             memberEmail: member.email,
                             fromTeam: true,
@@ -614,7 +712,7 @@ try {
               )}
               <Box sx={{ pt: 2, pb: 3, textAlign: "center" }}>
                 <Typography variant="caption" sx={{ color: "#94a3b8", fontSize: "0.72rem", display: "block", mb: 1.5 }}>
-                  Showing {teamMembers.length} team members
+                  Showing {teamMembers.length} field users
                 </Typography>
               </Box>
             </>
@@ -630,7 +728,7 @@ try {
                       bgcolor: "#f8fafc",
                       "& .MuiTableCell-root": { borderBottom: "1px solid #e8edf5", py: 1.75, color: "#94a3b8", fontWeight: 700, fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.06em" },
                     }}>
-                      <TableCell sx={{ pl: 3 }}>Team Member</TableCell>
+                      <TableCell sx={{ pl: 3 }}>Member</TableCell>
                       <TableCell>Status</TableCell>
                       <TableCell align="center">Punch-In Location</TableCell>
                       <TableCell align="center">Punch-In Time</TableCell>
@@ -644,8 +742,8 @@ try {
                       [1, 2, 3, 4, 5].map((i) => <TableRowSkeleton key={i} />)
                     ) : teamMembers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} align="center" sx={{ py: 6, color: "#94a3b8" }}>
-                          No team members found
+                        <TableCell colSpan={7} align="center" sx={{ py: 6, color: "#94a3b8" }}>
+                          No field users found
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -675,17 +773,11 @@ try {
                                   {member.name}
                                 </Typography>
                                 <Typography variant="caption" sx={{ color: "#94a3b8", fontSize: "0.7rem", fontWeight: 500 }}>
-                                  {member.role}
+                                  {member.roleLabel}
                                 </Typography>
                               </Box>
                             </Stack>
                           </TableCell>
-<TableCell align="center" sx={{ py: 2.25 }}>
-  <BatteryChip
-    percentage={member.batteryPercentage}
-    isCharging={member.isCharging}
-  />
-</TableCell>
 
                           {/* Status */}
                           <TableCell sx={{ py: 2.25 }}>
@@ -734,6 +826,14 @@ try {
                             )}
                           </TableCell>
 
+                          {/* Battery */}
+                          <TableCell align="center" sx={{ py: 2.25 }}>
+                            <BatteryChip
+                              percentage={member.batteryPercentage}
+                              isCharging={member.isCharging}
+                            />
+                          </TableCell>
+
                           {/* Visits Today */}
                           <TableCell align="center" sx={{ py: 2.25 }}>
                             <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, px: 1.25, py: 0.4, borderRadius: "0.375rem", bgcolor: alpha(PRIMARY, 0.06) }}>
@@ -750,7 +850,7 @@ try {
                               {member.status === "active" && (
                                 <Tooltip title="Track Live Location">
                                   <IconButton size="small"
-                                    onClick={() => navigate(`/member-history/${member.id}`, { state: { memberName: member.name, memberRole: member.role, memberPhone: member.phoneNumber, memberEmail: member.email, fromTeam: true } })}
+                                    onClick={() => navigate(`/member-history/${member.id}`, { state: { memberName: member.name, memberRole: member.roleLabel, memberPhone: member.phoneNumber, memberEmail: member.email, fromTeam: true } })}
                                     sx={{
                                       color: "#10b981", borderRadius: "0.5rem", width: 32, height: 32,
                                       border: `1px solid ${alpha("#10b981", 0.3)}`, bgcolor: alpha("#10b981", 0.05),
@@ -765,7 +865,7 @@ try {
                                   navigate(`/member-history/${member.id}`, {
                                     state: {
                                       memberName: member.name,
-                                      memberRole: member.role,
+                                      memberRole: member.roleLabel,
                                       memberPhone: member.phoneNumber,
                                       memberEmail: member.email,
                                       fromTeam: true,
@@ -792,7 +892,7 @@ try {
               {/* Pagination */}
               <Box sx={{ px: 3, py: 2, borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <Typography variant="caption" sx={{ color: "#94a3b8", fontSize: "0.72rem" }}>
-                  Showing {teamMembers.length} team members
+                  Showing {teamMembers.length} field users
                 </Typography>
                 <Stack direction="row" spacing={0.5}>
                   {paginationLabels.map((label, i) => {

@@ -3,9 +3,9 @@
   "name": "Solar Software Management",
   "icons": [
     {
-      "src": "logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "logo.png",
+      "sizes": "253x200",
+      "type": "image/png"
     }
   ],
   "start_url": ".",

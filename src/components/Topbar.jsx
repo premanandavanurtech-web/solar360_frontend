@@ -48,6 +48,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from "../contexts/AuthContext";
 
 const API = "http://localhost:9001/api/v1";
+const BACKEND_ORIGIN = API.replace(/\/api\/v1\/?$/, "");
 
 const getToken = () =>
   localStorage.getItem("token") ||
@@ -55,8 +56,21 @@ const getToken = () =>
   localStorage.getItem("accessToken") ||
   "";
 
-const getAvatarUrl = (avatar) =>
-  avatar ? avatar.replace("/public/public/", "/public/") : "";
+const getAvatarUrl = (avatar) => {
+  if (!avatar) return "";
+
+  const normalizedAvatar = avatar.replace("/public/public/", "/public/");
+
+  if (/^https?:\/\//i.test(normalizedAvatar)) {
+    return normalizedAvatar;
+  }
+
+  const cleanPath = normalizedAvatar.startsWith("/")
+    ? normalizedAvatar
+    : `/${normalizedAvatar}`;
+
+  return `${BACKEND_ORIGIN}${cleanPath}`;
+};
 
 const Topbar = ({ 
   toggleDrawer, 
