@@ -18,11 +18,11 @@ import { useAuth } from "../contexts/AuthContext";
 import { stopTracking, isCurrentlyTracking } from "../utils/Locationtracker.js";
 import LiveTrackingMap from "../utils/Livetrackmap.jsx";
 
-const BASE_URL = "https://solar-backend-6vaa.onrender.com/api/v1";
+const BASE_URL = "https://vanurtech-solar-backend-1.onrender.com/api/v1";
 const BACKEND_ORIGIN = BASE_URL.replace(/\/api\/v1\/?$/, "");
 const PHOTO_BACKEND_ORIGINS = [
   BACKEND_ORIGIN,
-  "https://solar-backend-6vaa.onrender.com",
+  "https://vanurtech-solar-backend-1.onrender.com",
   "https://solar-backend-29z1.onrender.com",
 ].filter((origin, index, list) => origin && list.indexOf(origin) === index);
 const KNOWN_BACKEND_HOSTS = new Set([

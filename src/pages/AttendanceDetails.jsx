@@ -54,6 +54,7 @@ import {
 } from "@mui/icons-material";
 import { useAttendance } from "../hooks/useAttendance";
 import { format } from "date-fns";
+import { toBackendAssetUrl } from "../utils/backendAssetUrl";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PRIMARY = "#4569ea";
@@ -662,7 +663,7 @@ export default function AttendanceDetails({
                         "&:hover": { transform: "scale(1.06)", borderColor: PRIMARY },
                       }}
                     >
-                      <img src={p.url} alt={`photo-${i}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <img src={toBackendAssetUrl(p?.url || p?.path || p?.filename)} alt={`photo-${i}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     </Box>
                   ))}
                 </Stack>

@@ -46,9 +46,9 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from "../contexts/AuthContext";
+import { toBackendAssetUrl } from "../utils/backendAssetUrl";
 
-const API = "https://solar-backend-6vaa.onrender.com/api/v1";
-const BACKEND_ORIGIN = API.replace(/\/api\/v1\/?$/, "");
+const API = "https://vanurtech-solar-backend-1.onrender.com/api/v1";
 
 const getToken = () =>
   localStorage.getItem("token") ||
@@ -56,21 +56,7 @@ const getToken = () =>
   localStorage.getItem("accessToken") ||
   "";
 
-const getAvatarUrl = (avatar) => {
-  if (!avatar) return "";
-
-  const normalizedAvatar = avatar.replace("/public/public/", "/public/");
-
-  if (/^https?:\/\//i.test(normalizedAvatar)) {
-    return normalizedAvatar;
-  }
-
-  const cleanPath = normalizedAvatar.startsWith("/")
-    ? normalizedAvatar
-    : `/${normalizedAvatar}`;
-
-  return `${BACKEND_ORIGIN}${cleanPath}`;
-};
+const getAvatarUrl = (avatar) => toBackendAssetUrl(avatar);
 
 const Topbar = ({ 
   toggleDrawer, 
@@ -95,6 +81,7 @@ const Topbar = ({
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const [adminCurrentPassword, setAdminCurrentPassword] = useState('');
   const [profileForm, setProfileForm] = useState({
     firstName: '',
@@ -108,6 +95,11 @@ const Topbar = ({
 
   const { user, logout, updateLocalUser } = useAuth()
   //console.log("users11...", user)
+  const avatarSrc = avatarLoadFailed ? "" : getAvatarUrl(user?.avatar);
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [user?.avatar]);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -538,9 +530,12 @@ const Topbar = ({
                 onClick={handleProfileMenu}
               >
                 <Avatar
-                  src={getAvatarUrl(user?.avatar)}
+                  src={avatarSrc}
+                  imgProps={{
+                    onError: () => setAvatarLoadFailed(true),
+                  }}
                   sx={{
-                    bgcolor: user?.avatar ? 'transparent' : '#4569ea',
+                    bgcolor: avatarSrc ? 'transparent' : '#4569ea',
                     width: { xs: 32, sm: 36 },
                     height: { xs: 32, sm: 36 },
                     fontSize: { xs: '0.8rem', sm: '0.9rem' },
@@ -548,7 +543,7 @@ const Topbar = ({
                     color: '#ffffff',
                   }}
                 >
-                  {!user?.avatar && userInitials}
+                  {!avatarSrc && userInitials}
                 </Avatar>
                 {!isMobile && (
                   <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
@@ -615,9 +610,12 @@ const Topbar = ({
         <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Avatar
-              src={getAvatarUrl(user?.avatar)}
+              src={avatarSrc}
+              imgProps={{
+                onError: () => setAvatarLoadFailed(true),
+              }}
               sx={{
-                bgcolor: user?.avatar ? 'transparent' : '#4569ea',
+                bgcolor: avatarSrc ? 'transparent' : '#4569ea',
                 color: '#ffffff',
                 width: 48,
                 height: 48,
@@ -625,7 +623,7 @@ const Topbar = ({
                 fontWeight: 600,
               }}
             >
-              {!user?.avatar && userInitials}
+              {!avatarSrc && userInitials}
             </Avatar>
             <Box>
               <Typography fontWeight={600} fontSize="0.95rem" color="#333333">
@@ -683,10 +681,13 @@ const Topbar = ({
             {profileError && <Alert severity="error">{profileError}</Alert>}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Avatar
-                src={profileForm.avatar ? URL.createObjectURL(profileForm.avatar) : getAvatarUrl(user?.avatar)}
-                sx={{ width: 64, height: 64, bgcolor: '#4569ea' }}
+                src={profileForm.avatar ? URL.createObjectURL(profileForm.avatar) : avatarSrc}
+                imgProps={{
+                  onError: () => setAvatarLoadFailed(true),
+                }}
+                sx={{ width: 64, height: 64, bgcolor: avatarSrc || profileForm.avatar ? 'transparent' : '#4569ea' }}
               >
-                {!user?.avatar && userInitials}
+                {!profileForm.avatar && !avatarSrc && userInitials}
               </Avatar>
               {profileEditing ? (
                 <Button variant="outlined" component="label">

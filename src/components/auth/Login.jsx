@@ -32,7 +32,10 @@ import {
   CheckCircleOutline,
 } from "@mui/icons-material";
 import { useAuth } from "../../contexts/AuthContext";
-import logo from "../../assets/logo.png";
+import {
+  solarCrmLogoUri,
+  solarCrmLogoFallbackUri,
+} from "../../assets/solarCrmLogo";
 
 const COLOR = "#4569ea";
 const COLOR_LIGHT = "#5c7cec";
@@ -893,8 +896,12 @@ const Login = () => {
                 >
                   {/* Logo Image */}
                   <img
-                    src={logo}
+                    src={solarCrmLogoUri}
                     alt="Solar CRM logo"
+                    onError={(event) => {
+                      event.currentTarget.onerror = null;
+                      event.currentTarget.src = solarCrmLogoFallbackUri;
+                    }}
                     style={{
                       width: "84%",
                       height: "84%",

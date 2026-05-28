@@ -48,7 +48,10 @@ import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import ViewInAr from "@mui/icons-material/ViewInAr";
 import { useAuth } from "../contexts/AuthContext";
-import brandLogo from "../assets/logo.png";
+import {
+  solarCrmLogoUri,
+  solarCrmLogoFallbackUri,
+} from "../assets/solarCrmLogo";
 
 // ─── Color Constants ──────────────────────────────────────────────────────────
 const PRIMARY_COLOR = "#4569ea";
@@ -368,7 +371,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
           flexShrink: 0,
         }}
       >
-<Box component="img" src={brandLogo} alt="Solar CRM logo" sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5 }} />
+<Box component="img" src={solarCrmLogoUri} alt="Solar CRM logo" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = solarCrmLogoFallbackUri; }} sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5 }} />
       </Box>
       {!effectiveCollapsed && (
         <Box sx={{ overflow: "hidden" }}>
@@ -418,7 +421,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
             border: "2px solid rgba(255,255,255,0.28)",
           }}
         >
-          <Box component="img" src={brandLogo} alt="Solar CRM logo" sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5 }} />
+          <Box component="img" src={solarCrmLogoUri} alt="Solar CRM logo" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = solarCrmLogoFallbackUri; }} sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.5 }} />
         </Box>
         <Box>
           <Typography
@@ -707,7 +710,7 @@ export const MobileTopBar = ({ onMenuClick, title = "Dashboard" }) => {
               border: "1.5px solid rgba(255,255,255,0.25)",
             }}
           >
-            <Box component="img" src={brandLogo} alt="Solar CRM logo" sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.35 }} />
+            <Box component="img" src={solarCrmLogoUri} alt="Solar CRM logo" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = solarCrmLogoFallbackUri; }} sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.35 }} />
           </Box>
           <Typography
             variant="subtitle1"

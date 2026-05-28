@@ -19,6 +19,7 @@ import { styled, alpha } from '@mui/material/styles';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toBackendAssetUrl } from '../utils/backendAssetUrl';
 
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -32,7 +33,7 @@ L.Icon.Default.mergeOptions({
 });
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const BASE_URL  = 'https://solar-backend-6vaa.onrender.com/api/v1';
+const BASE_URL  = 'https://vanurtech-solar-backend-1.onrender.com/api/v1';
 const PRIMARY   = '#4569ea';
 const SECONDARY = '#1a237e';
 const SUCCESS   = '#4caf50';
@@ -141,7 +142,7 @@ const SuccessDialog = ({ open, visitData, onClose }) => {
         <Stack spacing={3} sx={{ mt: 2 }}>
           <Card sx={{ borderRadius: 3, overflow: 'hidden' }}>
             {visitData?.photos?.[0]?.url && (
-              <Box component="img" src={visitData.photos[0].url} alt="Visit" sx={{ width: '100%', height: 200, objectFit: 'cover' }} />
+              <Box component="img" src={toBackendAssetUrl(visitData.photos[0]?.url || visitData.photos[0]?.path || visitData.photos[0]?.filename)} alt="Visit" sx={{ width: '100%', height: 200, objectFit: 'cover' }} />
             )}
             <CardContent>
               <Typography variant="subtitle1" fontWeight={700} gutterBottom>{visitData?.locationName}</Typography>
