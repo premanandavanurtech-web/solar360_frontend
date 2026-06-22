@@ -47,8 +47,9 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from "../contexts/AuthContext";
 import { toBackendAssetUrl } from "../utils/backendAssetUrl";
+import { API_BASE_URL } from "../utils/apiConfig";
 
-const API = "http://localhost:9001/api/v1";
+const API = API_BASE_URL;
 
 const getToken = () =>
   localStorage.getItem("token") ||

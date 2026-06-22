@@ -22,8 +22,9 @@ import {
 } from "./Locationtracker";
 import { useSocket } from "./Usesocket.js";
 import { toast } from "../components/useToast.jsx";
+import { API_ORIGIN } from "./apiConfig";
 
-const API  = "https://vanurtech-solar-backend-1.onrender.com";
+const API  = API_ORIGIN;
 const GKEY = "AIzaSyCqM7uF9c0ZMQjdssHqSMJJ3mBcmz5RNS0";
 
 const MIN_MOVE_METRES = 12;

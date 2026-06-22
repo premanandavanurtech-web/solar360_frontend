@@ -9,6 +9,10 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
   Grid,
   IconButton,
@@ -4283,12 +4287,18 @@ const ThreeDDesign = () => {
     });
   }, [incomingLeadSeed]);
   const appliedIncomingLeadSeedRef = useRef("");
+  const savedRoofPoints = useMemo(
+    () => sanitizeRoofPoints(sourceLeadDesign?.points),
+    [sourceLeadDesign]
+  );
+  const savedRoofPointsKey = useMemo(
+    () => savedRoofPoints.map((point) => `${point.lat},${point.lng}`).join("|"),
+    [savedRoofPoints]
+  );
   const [map, setMap] = useState(null);
   const [searchText, setSearchText] = useState(() => incomingLeadSeed?.searchText || "");
   const [center, setCenter] = useState(() => incomingLeadSeed?.center || DEFAULT_CENTER);
-  const [roofPoints, setRoofPoints] = useState(() =>
-    sanitizeRoofPoints(sourceLeadDesign?.points)
-  );
+  const [roofPoints, setRoofPoints] = useState([]);
   const [status, setStatus] = useState("Ready");
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
@@ -4299,16 +4309,70 @@ const ThreeDDesign = () => {
   const [placeInfoOpen, setPlaceInfoOpen] = useState(
     () => Boolean(incomingLeadSeed?.selectedPlace)
   );
+  const [outlineChoiceOpen, setOutlineChoiceOpen] = useState(() => savedRoofPoints.length > 0);
+  const roofPolylineRef = useRef(null);
+  const roofPolygonRef = useRef(null);
+  const appliedSavedOutlineKeyRef = useRef("");
+
+  const clearRoofOverlays = useCallback(() => {
+    if (roofPolylineRef.current) {
+      try {
+        roofPolylineRef.current.setPath([]);
+        roofPolylineRef.current.setMap(null);
+      } catch {}
+      roofPolylineRef.current = null;
+    }
+
+    if (roofPolygonRef.current) {
+      try {
+        roofPolygonRef.current.setPaths([]);
+        roofPolygonRef.current.setMap(null);
+      } catch {}
+      roofPolygonRef.current = null;
+    }
+  }, []);
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_MAPS_KEY,
     libraries: MAP_LIBRARIES,
   });
 
-  const closedRoofPath = useMemo(
-    () => (roofPoints.length >= MIN_ROOF_POINTS ? [...roofPoints, roofPoints[0]] : roofPoints),
+  const roofOverlayKey = useMemo(
+    () => roofPoints.map((point) => `${point.lat},${point.lng}`).join("|"),
     [roofPoints]
   );
+
+  useEffect(() => {
+    if (!roofPoints.length) {
+      clearRoofOverlays();
+      return;
+    }
+
+    if (roofPoints.length < MIN_ROOF_POINTS && roofPolygonRef.current) {
+      try {
+        roofPolygonRef.current.setPaths([]);
+        roofPolygonRef.current.setMap(null);
+      } catch {}
+      roofPolygonRef.current = null;
+    }
+  }, [clearRoofOverlays, roofPoints]);
+
+  useEffect(() => {
+    if (!savedRoofPoints.length) {
+      appliedSavedOutlineKeyRef.current = "";
+      setOutlineChoiceOpen(false);
+      return;
+    }
+
+    if (appliedSavedOutlineKeyRef.current === savedRoofPointsKey) {
+      return;
+    }
+
+    appliedSavedOutlineKeyRef.current = savedRoofPointsKey;
+    setRoofPoints([]);
+    setOutlineChoiceOpen(true);
+    setStatus(`Saved outline found (${savedRoofPoints.length} points)`);
+  }, [savedRoofPoints, savedRoofPointsKey]);
 
   const handleSearchResults = useCallback((query, results = []) => {
     const nextResults = results
@@ -4374,6 +4438,7 @@ const ThreeDDesign = () => {
       setSelectedSearchPlace(result);
       setPlaceInfoOpen(true);
       setCenter(result.position);
+      clearRoofOverlays();
       setRoofPoints([]);
       setSearchResultsOpen(false);
       setSearchResults([]);
@@ -4385,7 +4450,7 @@ const ThreeDDesign = () => {
         map.setMapTypeId(window.google.maps.MapTypeId.SATELLITE);
       }
     },
-    [map]
+    [clearRoofOverlays, map]
   );
 
   const handleMapClick = useCallback((event) => {
@@ -4433,9 +4498,6 @@ const ThreeDDesign = () => {
     if (incomingLeadSeed?.selectedPlace) {
       setSelectedSearchPlace(incomingLeadSeed.selectedPlace);
       setPlaceInfoOpen(true);
-      setRoofPoints((currentPoints) =>
-        currentPoints.length ? currentPoints : sanitizeRoofPoints(sourceLeadDesign?.points)
-      );
       setStatus("Lead location loaded");
       return;
     }
@@ -4454,13 +4516,30 @@ const ThreeDDesign = () => {
   }, [map, selectedSearchPlace]);
 
   const clearSelection = () => {
+    clearRoofOverlays();
     setRoofPoints([]);
     setStatus("Selection cleared");
   };
 
+  const continueSavedOutline = useCallback(() => {
+    setRoofPoints(savedRoofPoints);
+    setOutlineChoiceOpen(false);
+    setStatus(`Continuing saved outline (${savedRoofPoints.length} points)`);
+  }, [savedRoofPoints]);
+
+  const startNewOutline = useCallback(() => {
+    clearRoofOverlays();
+    setRoofPoints([]);
+    setOutlineChoiceOpen(false);
+    setStatus("Start selecting roof points");
+  }, [clearRoofOverlays]);
+
   const undoPoint = () => {
     setRoofPoints((currentPoints) => {
       const nextPoints = currentPoints.slice(0, -1);
+      if (!nextPoints.length) {
+        clearRoofOverlays();
+      }
       setStatus(nextPoints.length ? `${nextPoints.length} roof points selected` : "Ready");
       return nextPoints;
     });
@@ -4608,7 +4687,14 @@ const ThreeDDesign = () => {
           ))}
           {roofPoints.length > 1 && (
             <Polyline
-              path={closedRoofPath}
+              key={`roof-polyline-${roofOverlayKey}`}
+              path={roofPoints}
+              onLoad={(polyline) => {
+                roofPolylineRef.current = polyline;
+              }}
+              onUnmount={() => {
+                roofPolylineRef.current = null;
+              }}
               options={{
                 strokeColor: "#f59e0b",
                 strokeOpacity: 1,
@@ -4619,7 +4705,14 @@ const ThreeDDesign = () => {
           )}
           {roofPoints.length >= 3 && (
             <Polygon
+              key={`roof-polygon-${roofOverlayKey}`}
               paths={roofPoints}
+              onLoad={(polygon) => {
+                roofPolygonRef.current = polygon;
+              }}
+              onUnmount={() => {
+                roofPolygonRef.current = null;
+              }}
               options={{
                 fillColor: "#10b981",
                 fillOpacity: 0.22,
@@ -4654,6 +4747,19 @@ const ThreeDDesign = () => {
           gap={1.2}
         >
           <Stack direction="row" alignItems="center" gap={1} sx={{ minWidth: { md: 235 } }}>
+            <IconButton
+              onClick={() => navigate(-1)}
+              sx={{
+                border: "1px solid",
+                borderColor: "divider",
+                bgcolor: "rgba(255,255,255,0.92)",
+                color: PRIMARY,
+                flexShrink: 0,
+                "&:hover": { bgcolor: alpha(PRIMARY, 0.08) },
+              }}
+            >
+              <ArrowBack fontSize="small" />
+            </IconButton>
             <Box
               sx={{
                 width: 36,
@@ -4836,6 +4942,31 @@ const ThreeDDesign = () => {
           </Stack>
         </Stack>
       </Paper>
+
+      <Dialog
+        open={outlineChoiceOpen}
+        disableEscapeKeyDown
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Saved outline found</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            This lead already has a saved roof outline with {savedRoofPoints.length} point{savedRoofPoints.length === 1 ? "" : "s"}.
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Do you want to continue editing the old outline or start a new one? Starting new will not delete the saved outline until you save again.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button variant="outlined" onClick={startNewOutline}>
+            Start New
+          </Button>
+          <Button variant="contained" onClick={continueSavedOutline}>
+            Continue Old Outline
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -15,9 +15,10 @@ import {
   MarkEmailRead as MarkEmailReadIcon,
   FiberManualRecord as FiberManualRecordIcon,
 } from "@mui/icons-material";
+import { API_BASE_URL } from "../utils/apiConfig";
 
 const PRIMARY = "#0f1f3d";
-const API = "http://localhost:9001/api/v1";
+const API = API_BASE_URL;
 
 const getToken = () =>
   localStorage.getItem("token") ||

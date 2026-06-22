@@ -30,8 +30,9 @@ import {
 } from "@mui/icons-material";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { API_BASE_URL } from "../utils/apiConfig";
 
-const BASE_URL = "http://localhost:9001/api/v1";
+const BASE_URL = API_BASE_URL;
 const PRIMARY = "#0f1f3d";
 const SUCCESS = "#22c55e";
 const WARNING = "#f59e0b";

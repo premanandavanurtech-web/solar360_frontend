@@ -13,8 +13,9 @@
   } from "@mui/icons-material";
   import axios from "axios";
   import { useNavigate } from "react-router-dom";
+  import { API_ORIGIN } from "../utils/apiConfig";
 
-  const API = "http://localhost:9001";
+  const API = API_ORIGIN;
   const PRIMARY = "#136dec";
 
   // ── Helpers ───────────────────────────────────────────────────────────────────

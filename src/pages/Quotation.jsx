@@ -36,6 +36,7 @@ import {
   LayoutGrid,
   Copy,
   MessageCircle,
+  ArrowLeft,
 } from "lucide-react"
 import "./Quotation.css"
 import { toBackendAssetUrl } from "../utils/backendAssetUrl"
@@ -629,7 +630,7 @@ function DownloadButton({ targetId }) {
     <button
       onClick={handleDownload}
       disabled={loading}
-      className="inline-flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground shadow-sm transition-colors hover:opacity-90 disabled:opacity-60"
+      className="inline-flex min-h-[50px] items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground shadow-sm transition-colors hover:opacity-90 disabled:opacity-60"
     >
       {loading ? (
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -1556,78 +1557,104 @@ export default function Page() {
   return (
     <main className="min-h-screen bg-background py-8">
       {!isSharedView && (
-      <div className="mx-auto w-full max-w-[1320px] px-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Quote Details</h1>
-          <p className="text-sm text-muted-foreground">
-            {quote.number} · Prepared for {client.name}
-          </p>
-        </div>
-        <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <span>Template:</span>
-          <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-foreground">Platinum</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() =>
-              navigate("/quotation/edit", {
-                state: {
-                  mode: "edit",
-                  quotationTitle: client.name,
-                  quotationData: savedQuotation,
-                },
-              })
-            }
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary/70 px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
-          >
-            <PencilLine className="h-4 w-4" aria-hidden="true" />
-            Edit
-          </button>
-          <button
-            onClick={() => window.alert("Template switching is not connected yet.")}
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary/50"
-          >
-            <LayoutGrid className="h-4 w-4" aria-hidden="true" />
-            Choose Template
-          </button>
-          <button
-            onClick={handleShareLink}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
-          >
-            <Share2 className="h-4 w-4" aria-hidden="true" />
-            Share Link
-          </button>
-          <button
-            onClick={() => window.open(detailPageHref, "_blank", "noopener,noreferrer")}
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary/50"
-          >
-            <ExternalLink className="h-4 w-4" aria-hidden="true" />
-            Open in New Tab
-          </button>
-          <button
-            onClick={() => window.print()}
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary/50"
-          >
-            <Printer className="h-4 w-4" aria-hidden="true" />
-            Print
-          </button>
-          <DownloadButton targetId="quotation" />
-        </div>
-      </div>
-      )}
-      {!isSharedView && savedQuotation?.savedAt && (
-        <div className="mx-auto mb-4 w-full max-w-[1320px] px-4 text-xs font-semibold text-muted-foreground">
-          Last edited quotation loaded.
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentQuotation(null)
-              setSavedQuotation(null)
-            }}
-            className="ml-3 rounded border border-border px-2 py-1 text-foreground hover:bg-secondary/50"
-          >
-            Reset
-          </button>
+        <div className="mx-auto w-full max-w-[1320px] px-4">
+          <div className="overflow-hidden rounded-[28px] border border-border bg-card/95 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+            <div className="border-b border-border bg-gradient-to-r from-slate-50 via-white to-slate-50/70 px-5 py-5 sm:px-7">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="mb-3 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => navigate(-1)}
+                      className="inline-flex items-center gap-2 rounded-xl border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-secondary/50"
+                    >
+                      <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                      Back
+                    </button>
+                    <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+                      Quote Preview
+                    </span>
+                  </div>
+                  <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-[2rem]">Quote Details</h1>
+                  <p className="mt-2 text-sm text-muted-foreground sm:text-[15px]">
+                    {quote.number} · Prepared for <span className="font-semibold text-foreground">{client.name}</span>
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <span className="font-medium">Template</span>
+                    <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-foreground">Platinum</span>
+                    {savedQuotation?.savedAt && (
+                      <>
+                        <span className="hidden text-slate-300 sm:inline">•</span>
+                        <span className="font-medium text-sky-700">Last edited quotation loaded</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCurrentQuotation(null)
+                            setSavedQuotation(null)
+                          }}
+                          className="rounded-lg border border-border bg-white px-3 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/50"
+                        >
+                          Reset
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="w-full max-w-[720px]">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <button
+                      onClick={() =>
+                        navigate("/quotation/edit", {
+                          state: {
+                            mode: "edit",
+                            quotationTitle: client.name,
+                            quotationData: savedQuotation,
+                          },
+                        })
+                      }
+                      className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-border bg-secondary/70 px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
+                    >
+                      <PencilLine className="h-4 w-4" aria-hidden="true" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => window.alert("Template switching is not connected yet.")}
+                      className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-border bg-white px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary/50"
+                    >
+                      <LayoutGrid className="h-4 w-4" aria-hidden="true" />
+                      Choose Template
+                    </button>
+                    <button
+                      onClick={handleShareLink}
+                      className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-slate-800 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
+                    >
+                      <Share2 className="h-4 w-4" aria-hidden="true" />
+                      Share Link
+                    </button>
+                  </div>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <button
+                      onClick={() => window.open(detailPageHref, "_blank", "noopener,noreferrer")}
+                      className="inline-flex min-h-[50px] items-center justify-center gap-2 rounded-2xl border border-border bg-white px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary/50"
+                    >
+                      <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                      Open in New Tab
+                    </button>
+                    <button
+                      onClick={() => window.print()}
+                      className="inline-flex min-h-[50px] items-center justify-center gap-2 rounded-2xl border border-border bg-white px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary/50"
+                    >
+                      <Printer className="h-4 w-4" aria-hidden="true" />
+                      Print
+                    </button>
+                    <DownloadButton targetId="quotation" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
       <div id="quotation" className="mx-auto w-full max-w-[1320px] px-4">

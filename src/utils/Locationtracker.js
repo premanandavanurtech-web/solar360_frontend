@@ -15,8 +15,9 @@
 // 5. MIN_MOVE_METRES = 8 with accuracy-aware gating to suppress stationary GPS drift.
 
 import { toast } from "../components/useToast.jsx";
+import { API_ORIGIN } from "./apiConfig";
 
-const API = "https://vanurtech-solar-backend-1.onrender.com";
+const API = API_ORIGIN;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

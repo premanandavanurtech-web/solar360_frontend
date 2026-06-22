@@ -5,8 +5,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
+import { API_ORIGIN } from "../utils/apiConfig";
 
-const API = "http://localhost:9001";
+const API = API_ORIGIN;
 
 export const useLiveBattery = (userId, token) => {
   const [percentage, setPercentage]   = useState(null);   // 0–100 or null if unavailable

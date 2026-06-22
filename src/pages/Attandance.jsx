@@ -40,9 +40,10 @@ import {
   simulateTrackingMovement,
 } from "../utils/Locationtracker";
 import { useSocket } from "../utils/Usesocket.js";
+import { API_ORIGIN } from "../utils/apiConfig";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const API       = "http://localhost:9001";
+const API       = API_ORIGIN;
 const PRIMARY   = "#0f1f3d";
 const SECONDARY = "#1a237e";
 const SUCCESS   = "#22c55e";

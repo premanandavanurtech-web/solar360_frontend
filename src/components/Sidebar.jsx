@@ -52,10 +52,7 @@ import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import ViewInAr from "@mui/icons-material/ViewInAr";
 import { useAuth } from "../contexts/AuthContext";
-import {
-  solarCrmLogoUri,
-  solarCrmLogoFallbackUri,
-} from "../assets/solarCrmLogo";
+import sidebarLogo from "../assets/sidebar-logo.webp";
 
 // ─── Design tokens (WHITE SIDEBAR + BLUE ACCENTS) ────────────────────────────
 const NAVY        = "#0f1f3d";
@@ -454,8 +451,8 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         }}
       >
         <Box
-          component="img" src={solarCrmLogoUri} alt="Solar CRM"
-          onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = solarCrmLogoFallbackUri; }}
+          component="img" src={sidebarLogo} alt="Solar CRM"
+          onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = sidebarLogo; }}
           sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.4 }}
         />
       </Box>
@@ -463,10 +460,10 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         <Box sx={{ overflow: "hidden" }}>
           <Typography variant="subtitle1" color={TEXT_PRIMARY} fontWeight={800}
             sx={{ lineHeight: 1.2, letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>
-            Solar CRM
+            Vanurtech Pvt Ltd
           </Typography>
           <Typography variant="caption" sx={{ color: TEXT_SECONDARY, fontSize: "0.68rem" }}>
-            CRM Dashboard
+            Solar Software Inc
           </Typography>
         </Box>
       )}
@@ -491,8 +488,8 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
           border: `1px solid ${BORDER_COLOR}`,
           boxShadow: "0 6px 16px rgba(30,64,175,0.14)",
         }}>
-          <Box component="img" src={solarCrmLogoUri} alt="Solar CRM"
-            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = solarCrmLogoFallbackUri; }}
+          <Box component="img" src={sidebarLogo} alt="Solar CRM"
+            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = sidebarLogo; }}
             sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.4 }}
           />
         </Box>
@@ -670,8 +667,8 @@ export const MobileTopBar = ({ onMenuClick, title = "Dashboard" }) => {
             display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
             boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
           }}>
-            <Box component="img" src={solarCrmLogoUri} alt="Solar CRM"
-              onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = solarCrmLogoFallbackUri; }}
+            <Box component="img" src={sidebarLogo} alt="Solar CRM"
+              onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = sidebarLogo; }}
               sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.35 }}
             />
           </Box>

@@ -19,8 +19,9 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import LiveTrackMap from "../utils/Livetrackmap";
+import { API_ORIGIN } from "../utils/apiConfig";
 
-const API = "http://localhost:9001";
+const API = API_ORIGIN;
 
 const avatarColors = [
   "#0f1f3d", "#7c3aed", "#0ea5e9", "#f59e0b",

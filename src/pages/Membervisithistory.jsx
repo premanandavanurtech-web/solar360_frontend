@@ -18,12 +18,12 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { stopTracking, isCurrentlyTracking } from "../utils/Locationtracker.js";
 import LiveTrackingMap from "../utils/Livetrackmap.jsx";
+import { API_BASE_URL, API_ORIGIN } from "../utils/apiConfig";
 
-const BASE_URL = "http://localhost:9001/api/v1";
-const BACKEND_ORIGIN = BASE_URL.replace(/\/api\/v1\/?$/, "");
+const BASE_URL = API_BASE_URL;
+const BACKEND_ORIGIN = API_ORIGIN;
 const PHOTO_BACKEND_ORIGINS = [
   BACKEND_ORIGIN,
-  "http://localhost:9001",
   "https://solar-backend-29z1.onrender.com",
 ].filter((origin, index, list) => origin && list.indexOf(origin) === index);
 const KNOWN_BACKEND_HOSTS = new Set([
