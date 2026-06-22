@@ -37,7 +37,7 @@ import {
   solarCrmLogoFallbackUri,
 } from "../../assets/solarCrmLogo";
 
-const COLOR = "#4569ea";
+const COLOR = "#0f1f3d";
 const COLOR_LIGHT = "#5c7cec";
 const COLOR_DARK = "#3a5ac8";
 const COLOR_VERY_LIGHT = "#e8edff";

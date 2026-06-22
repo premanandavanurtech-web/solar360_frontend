@@ -78,11 +78,11 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
-const PRIMARY = "#4569ea";
+const PRIMARY = "#0f1f3d";
 const SECONDARY = "#1a237e";
 const SUCCESS = "#22c55e";
 const WARNING = "#f59e0b";
-const API_BASE = "https://vanurtech-solar-backend-1.onrender.com/api/v1";
+const API_BASE = "http://localhost:9001/api/v1";
 
 // Role-based access control
 const ALLOWED_ROLES = ["Incharge", "ZSM", "Admin_panel", "TEAM"];

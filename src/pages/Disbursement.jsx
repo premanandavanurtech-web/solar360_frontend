@@ -145,8 +145,12 @@ import { useNavigate } from "react-router-dom";
 import AlertTitle from "@mui/material/AlertTitle";
 
 // ========== CONSTANTS & CONFIGURATION ==========
-const PRIMARY_COLOR = "#4569ea";
+const PRIMARY_COLOR = "#0f1f3d";
 const SECONDARY_COLOR = "#1a237e";
+const GRADIENT_MAIN =
+  "linear-gradient(135deg, #0f1f3d 0%, #1a3a6b 60%, #2563eb 100%)";
+const GRADIENT_BLUE = "linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)";
+const GRADIENT_CARD = "linear-gradient(135deg, #f8faff, #eff6ff)";
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 25, 50];
 const DEFAULT_ITEMS_PER_PAGE = 10;
 const ALLOWED_ROLES = ["Admin_panel", "ZSM", "Incharge", "TEAM"];
@@ -165,30 +169,42 @@ const PERIOD_OPTIONS = [
   { value: "This Month", label: "This Month", icon: <DateRange /> },
   { value: "All", label: "All Time", icon: <DateRange /> },
 ];
+const CARD_STRIPES = [
+  "linear-gradient(90deg, #2563eb, #60a5fa)",
+  "linear-gradient(90deg, #d97706, #fbbf24)",
+  "linear-gradient(90deg, #16a34a, #4ade80)",
+  "linear-gradient(90deg, #7c3aed, #a78bfa)",
+];
+const CARD_ICON_BG = [
+  "linear-gradient(135deg, #dbeafe, #93c5fd)",
+  "linear-gradient(135deg, #fef3c7, #fcd34d)",
+  "linear-gradient(135deg, #dcfce7, #86efac)",
+  "linear-gradient(135deg, #ede9fe, #c4b5fd)",
+];
 
 // Disbursement Status Configuration
 const DISBURSEMENT_STATUS_OPTIONS = ["pending", "completed", "cancelled"];
 
 const DISBURSEMENT_STATUS_CONFIG = {
   pending: {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #fef3c7, #fde68a)",
+    color: "#92400e",
     icon: <PendingActions sx={{ fontSize: 16 }} />,
     label: "Pending",
     description: "Disbursement is pending",
     order: 1,
   },
   completed: {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+    color: "#14532d",
     icon: <CheckCircle sx={{ fontSize: 16 }} />,
     label: "Completed",
     description: "Disbursement completed successfully",
     order: 2,
   },
   cancelled: {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #fee2e2, #fecaca)",
+    color: "#b91c1c",
     icon: <Cancel sx={{ fontSize: 16 }} />,
     label: "Cancelled",
     description: "Disbursement cancelled",
@@ -205,20 +221,20 @@ const LEAD_STATUS_OPTIONS = [
 
 const LEAD_STATUS_CONFIG = {
   Disbursement: {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+    color: "#1e40af",
     icon: <Payment sx={{ fontSize: 16 }} />,
     description: "Loan disbursement in progress",
   },
   "Installation Completion": {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+    color: "#14532d",
     icon: <CheckCircle sx={{ fontSize: 16 }} />,
     description: "Installation completed",
   },
   "Missed Leads": {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #fee2e2, #fecaca)",
+    color: "#b91c1c",
     icon: <Cancel sx={{ fontSize: 16 }} />,
     description: "Lead lost or not converted",
   },
@@ -2550,12 +2566,24 @@ const SummaryCard = ({ card, index }) => (
       sx={{
         p: { xs: 1.5, sm: 2, md: 2.5 },
         borderRadius: 3,
+        position: "relative",
+        overflow: "hidden",
         border: `1px solid ${alpha(card.color, 0.1)}`,
         boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
         transition: "transform 0.2s",
         "&:hover": {
           transform: "translateY(-2px)",
           boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
+        },
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "4px",
+          borderRadius: "16px 16px 0 0",
+          background: CARD_STRIPES[index % CARD_STRIPES.length],
         },
       }}
     >
@@ -2572,7 +2600,7 @@ const SummaryCard = ({ card, index }) => (
               width: { xs: 32, sm: 40, md: 48 },
               height: { xs: 32, sm: 40, md: 48 },
               borderRadius: { xs: 1.5, sm: 2 },
-              bgcolor: alpha(card.color, 0.1),
+              background: CARD_ICON_BG[index % CARD_ICON_BG.length],
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -3421,26 +3449,54 @@ export default function DisbursementPage() {
                       </InputAdornment>
                     ),
                   }}
-                  sx={{ maxWidth: 400 }}
+                  sx={{
+                    maxWidth: 400,
+                    "& .MuiOutlinedInput-root": {
+                      "&.Mui-focused fieldset": {
+                        borderColor: "#3b82f6",
+                        boxShadow: "0 0 0 3px rgba(37,99,235,.12)",
+                      },
+                    },
+                  }}
                 />
 
-                <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <InputLabel>Period</InputLabel>
-                  <Select
-                    value={period}
-                    label="Period"
-                    onChange={(e) => setPeriod(e.target.value)}
-                  >
-                    {PERIOD_OPTIONS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          {option.icon}
-                          <span>{option.label}</span>
-                        </Stack>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Stack direction="row" spacing={0.75}>
+                  {PERIOD_OPTIONS.map((option) => (
+                    <Button
+                      key={option.value}
+                      size="small"
+                      onClick={() => setPeriod(option.value)}
+                      sx={{
+                        borderRadius: "50px",
+                        px: 2,
+                        py: 0.75,
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        background:
+                          period === option.value ? GRADIENT_BLUE : "transparent",
+                        color:
+                          period === option.value ? "#fff" : PRIMARY_COLOR,
+                        border: `1px solid ${
+                          period === option.value
+                            ? "transparent"
+                            : alpha(PRIMARY_COLOR, 0.2)
+                        }`,
+                        boxShadow:
+                          period === option.value
+                            ? "0 2px 8px rgba(37,99,235,.3)"
+                            : "none",
+                        "&:hover": {
+                          background:
+                            period === option.value
+                              ? GRADIENT_BLUE
+                              : alpha(PRIMARY_COLOR, 0.06),
+                        },
+                      }}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </Stack>
 
                 <FormControl size="small" sx={{ minWidth: 150 }}>
                   <InputLabel>Disbursement Status</InputLabel>
@@ -3502,7 +3558,7 @@ export default function DisbursementPage() {
                     p: 3,
                     borderRadius: 2,
                     borderColor: alpha(PRIMARY_COLOR, 0.2),
-                    bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                    background: GRADIENT_CARD,
                   }}
                 >
                   <Grid container spacing={3}>
@@ -3791,7 +3847,8 @@ export default function DisbursementPage() {
                   <TableRow>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3800,7 +3857,8 @@ export default function DisbursementPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3831,7 +3889,8 @@ export default function DisbursementPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3840,7 +3899,8 @@ export default function DisbursementPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3849,7 +3909,8 @@ export default function DisbursementPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3880,7 +3941,8 @@ export default function DisbursementPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3889,7 +3951,8 @@ export default function DisbursementPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3926,7 +3989,8 @@ export default function DisbursementPage() {
                                 sx={{
                                   width: 32,
                                   height: 32,
-                                  bgcolor: PRIMARY_COLOR,
+                                  background: GRADIENT_MAIN,
+                                  color: "#fff",
                                   fontSize: "0.875rem",
                                 }}
                               >
@@ -3974,7 +4038,7 @@ export default function DisbursementPage() {
                                 icon={disbursementStatusConfig.icon}
                                 size="small"
                                 sx={{
-                                  bgcolor: disbursementStatusConfig.bg,
+                                  background: disbursementStatusConfig.bg,
                                   color: disbursementStatusConfig.color,
                                   fontWeight: 600,
                                   minWidth: 80,
@@ -3990,7 +4054,7 @@ export default function DisbursementPage() {
                                 icon={leadStatusConfig.icon}
                                 size="small"
                                 sx={{
-                                  bgcolor: leadStatusConfig.bg,
+                                  background: leadStatusConfig.bg,
                                   color: leadStatusConfig.color,
                                   fontWeight: 600,
                                   minWidth: 80,
@@ -4043,10 +4107,11 @@ export default function DisbursementPage() {
                                   size="small"
                                   onClick={() => handleViewClick(lead)}
                                   sx={{
-                                    bgcolor: alpha(PRIMARY_COLOR, 0.1),
-                                    color: PRIMARY_COLOR,
+                                    background: GRADIENT_MAIN,
+                                    color: "#fff",
                                     "&:hover": {
-                                      bgcolor: alpha(PRIMARY_COLOR, 0.2),
+                                      background: GRADIENT_MAIN,
+                                      opacity: 0.92,
                                     },
                                   }}
                                 >
@@ -4062,10 +4127,13 @@ export default function DisbursementPage() {
                                       handleStatusUpdateClick(lead)
                                     }
                                     sx={{
-                                      bgcolor: alpha(PRIMARY_COLOR, 0.1),
-                                      color: PRIMARY_COLOR,
+                                      background:
+                                        "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                                      color: "#1e40af",
                                       "&:hover": {
-                                        bgcolor: alpha(PRIMARY_COLOR, 0.2),
+                                        background:
+                                          "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                                        opacity: 0.92,
                                       },
                                     }}
                                   >

@@ -14,7 +14,7 @@
   import axios from "axios";
   import { useNavigate } from "react-router-dom";
 
-  const API = "https://vanurtech-solar-backend-1.onrender.com";
+  const API = "http://localhost:9001";
   const PRIMARY = "#136dec";
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@
     return address.full || address.short || [address.road, address.city].filter(Boolean).join(", ") || null;
   };
 
-  const avatarColors = ["#4569ea","#7c3aed","#0ea5e9","#f59e0b","#10b981","#f43f5e","#8b5cf6","#06b6d4"];
+  const avatarColors = ["#0f1f3d","#7c3aed","#0ea5e9","#f59e0b","#10b981","#f43f5e","#8b5cf6","#06b6d4"];
   const getAvatarColor = (name = "") => avatarColors[name.charCodeAt(0) % avatarColors.length];
 
   const TRACKED_ROLES = ["ZSM", "Incharge", "TEAM"];
@@ -72,6 +72,17 @@
   };
 
   const getRoleLabel = (role) => ROLE_LABELS[normalizeUserRole(role)] || role || "Team Member";
+
+  const getMemberHistoryState = (member) => ({
+    memberId: member.id,
+    userId: member.id,
+    user: { _id: member.id, id: member.id },
+    memberName: member.name,
+    memberRole: member.roleLabel,
+    memberPhone: member.phoneNumber,
+    memberEmail: member.email,
+    fromTeam: true,
+  });
 
   const uniqUsersById = (users = []) => {
     const seen = new Set();
@@ -288,7 +299,12 @@
 
       try {
         const headers = getAuthHeaders();
-        const today = new Date().toISOString().split("T")[0];
+        const now = new Date();
+        const today = [
+          now.getFullYear(),
+          String(now.getMonth() + 1).padStart(2, "0"),
+          String(now.getDate()).padStart(2, "0"),
+        ].join("-");
 
         // Step 1: Fetch field users: operation leads, incharges, and team members.
         let rawUsers = [];
@@ -697,13 +713,7 @@ try {
                       member={member}
                       onViewDetails={() =>
                         navigate(`/member-history/${member.id}`, {
-                          state: {
-                            memberName: member.name,
-                            memberRole: member.roleLabel,
-                            memberPhone: member.phoneNumber,
-                            memberEmail: member.email,
-                            fromTeam: true,
-                          },
+                          state: getMemberHistoryState(member),
                         })
                       }
                     />
@@ -850,7 +860,7 @@ try {
                               {member.status === "active" && (
                                 <Tooltip title="Track Live Location">
                                   <IconButton size="small"
-                                    onClick={() => navigate(`/member-history/${member.id}`, { state: { memberName: member.name, memberRole: member.roleLabel, memberPhone: member.phoneNumber, memberEmail: member.email, fromTeam: true } })}
+                                    onClick={() => navigate(`/member-history/${member.id}`, { state: getMemberHistoryState(member) })}
                                     sx={{
                                       color: "#10b981", borderRadius: "0.5rem", width: 32, height: 32,
                                       border: `1px solid ${alpha("#10b981", 0.3)}`, bgcolor: alpha("#10b981", 0.05),
@@ -863,13 +873,7 @@ try {
                               <Button size="small" variant="outlined"
                                 onClick={() =>
                                   navigate(`/member-history/${member.id}`, {
-                                    state: {
-                                      memberName: member.name,
-                                      memberRole: member.roleLabel,
-                                      memberPhone: member.phoneNumber,
-                                      memberEmail: member.email,
-                                      fromTeam: true,
-                                    },
+                                    state: getMemberHistoryState(member),
                                   })
                                 }
                                 sx={{

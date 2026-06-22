@@ -64,7 +64,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
-const PRIMARY = "#4569ea";
+const PRIMARY = "#0f1f3d";
 const SECONDARY = "#1a237e";
 const SUCCESS = "#4caf50";
 const ERROR = "#f44336";
@@ -298,7 +298,7 @@ export default function CreateLeadPage() {
         notes: formData.notes.trim() || null,
         source: formData.source,
         createdBy: user?._id || null,
-        assignedTo: user?._id || null,
+        assignedTo: user?.role === "TEAM" ? user?._id || null : null,
         status: "New",
       };
       
@@ -984,7 +984,7 @@ export default function CreateLeadPage() {
                     • <strong>Phone Number:</strong> Enter any valid phone number format.
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    • <strong>Auto-assignment:</strong> Leads are automatically assigned to you as the creator.
+                    • <strong>Assignment:</strong> TEAM users are auto-assigned; admin-created leads stay unassigned until assigned manually.
                   </Typography>
                 </Stack>
               </Box>

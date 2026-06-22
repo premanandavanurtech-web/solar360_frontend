@@ -159,7 +159,7 @@ import { useNavigate } from "react-router-dom";
 // New Color Theme - Clean and Modern
 const COLORS = {
   primary: {
-    main: "#4569ea",
+    main: "#0f1f3d",
     light: "#60a5fa",
     dark: "#1d4ed8",
     bg: "#eff6ff",
@@ -345,6 +345,11 @@ const PERIOD_OPTIONS = [
   { value: "year", label: "This Year", icon: <CalendarToday /> },
   { value: "all", label: "All Time", icon: <DateRange /> },
 ];
+
+const GRADIENT_MAIN =
+  "linear-gradient(135deg, #0f1f3d 0%, #1a3a6b 60%, #2563eb 100%)";
+const GRADIENT_BLUE = "linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)";
+const GRADIENT_CARD = "linear-gradient(135deg, #f8faff, #eff6ff)";
 
 // ========== MOBILE FILTER DRAWER ==========
 const MobileFilterDrawer = ({
@@ -1351,8 +1356,8 @@ const DesktopTableRow = ({ expense, onMenuOpen }) => {
         <Box display="flex" alignItems="center" gap={2}>
           <Avatar
             sx={{
-              bgcolor: alpha(categoryConfig.color, 0.1),
-              color: categoryConfig.color,
+              background: GRADIENT_MAIN,
+              color: "#fff",
               width: 40,
               height: 40,
               borderRadius: 2,
@@ -1406,7 +1411,10 @@ const DesktopTableRow = ({ expense, onMenuOpen }) => {
           size="small"
           label={categoryConfig.label}
           sx={{
-            bgcolor: alpha(categoryConfig.color, 0.1),
+            background: `linear-gradient(135deg, ${alpha(
+              categoryConfig.color,
+              0.18,
+            )}, ${alpha(categoryConfig.color, 0.08)})`,
             color: categoryConfig.color,
             fontWeight: 500,
             fontSize: "0.75rem",
@@ -1426,7 +1434,7 @@ const DesktopTableRow = ({ expense, onMenuOpen }) => {
           label={statusConfig.label}
           icon={statusConfig.icon}
           sx={{
-            bgcolor: statusConfig.bg,
+            background: `linear-gradient(135deg, ${statusConfig.bg}, #ffffff)`,
             color: statusConfig.color,
             fontWeight: 500,
             fontSize: "0.75rem",
@@ -1447,7 +1455,8 @@ const DesktopTableRow = ({ expense, onMenuOpen }) => {
               width: 28,
               height: 28,
               fontSize: "0.75rem",
-              bgcolor: COLORS.neutral[500],
+              background: GRADIENT_MAIN,
+              color: "#fff",
               borderRadius: 1.5,
             }}
           >
@@ -1466,7 +1475,16 @@ const DesktopTableRow = ({ expense, onMenuOpen }) => {
         <IconButton
           size="small"
           onClick={(e) => onMenuOpen(e, expense)}
-          sx={{ color: COLORS.neutral[500] }}
+          sx={{
+            background: "linear-gradient(135deg,#eff6ff,#dbeafe)",
+            color: "#1e40af",
+            border: `1px solid ${alpha("#2563eb", 0.2)}`,
+            borderRadius: 2,
+            "&:hover": {
+              background: "linear-gradient(135deg,#eff6ff,#dbeafe)",
+              opacity: 0.92,
+            },
+          }}
         >
           <MoreVert sx={{ fontSize: 20 }} />
         </IconButton>
@@ -3463,6 +3481,10 @@ export default function ExpensesPage() {
                 sx={{
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#3b82f6",
+                      boxShadow: "0 0 0 3px rgba(37,99,235,.12)",
+                    },
                   },
                 }}
                 InputProps={{
@@ -3516,7 +3538,15 @@ export default function ExpensesPage() {
                   value={filters.period}
                   onChange={(e) => handleFilterChange("period", e.target.value)}
                   label="Period"
-                  sx={{ borderRadius: 2 }}
+                  sx={{
+                    borderRadius: 2,
+                    background:
+                      filters.period !== "month" ? GRADIENT_BLUE : "transparent",
+                    color: filters.period !== "month" ? "#fff" : COLORS.primary.main,
+                    "& .MuiSelect-icon": {
+                      color: filters.period !== "month" ? "#fff" : COLORS.primary.main,
+                    },
+                  }}
                 >
                   {TIME_PERIODS.map((p) => (
                     <MenuItem key={p.value} value={p.value}>
@@ -3649,11 +3679,14 @@ export default function ExpensesPage() {
               </Box>
             ) : (
               <Paper sx={{ borderRadius: 3, overflow: "hidden" }}>
-                <TableContainer>
-                  <Table>
-                    <TableHead
-                      sx={{ bgcolor: alpha(COLORS.primary.main, 0.05) }}
-                    >
+              <TableContainer>
+                <Table>
+                  <TableHead
+                    sx={{
+                      bgcolor: "transparent",
+                      background: "linear-gradient(180deg, #f8faff, #eff6ff)",
+                    }}
+                  >
                       <TableRow>
                         <TableCell sx={{ fontWeight: 600 }}>Expense</TableCell>
                         <TableCell sx={{ fontWeight: 600 }}>Amount</TableCell>

@@ -1,927 +1,1979 @@
-// components/VisitDetails.jsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Box, Paper, Typography, Button, TextField, Grid, Stack,
-  IconButton, LinearProgress, Alert, Chip, CircularProgress,
-  Dialog, DialogTitle, DialogContent, DialogActions,
-  useTheme, useMediaQuery, Fade, Zoom, Slide, Card, CardContent,
-  InputAdornment, FormHelperText, BottomNavigation, BottomNavigationAction,
-  Fab, Badge, FormControlLabel, Radio, RadioGroup, FormControl,
-} from '@mui/material';
+  Alert,
+  alpha,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogTitle,
+  FormHelperText,
+  Grid,
+  IconButton,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 import {
-  AddAPhoto, PhotoCamera, Route, LocationOn, AccessTime,
-  Cancel, GpsFixed, CheckCircle, ArrowBack, Business, Notes,
-  Person, Phone, Email, Save, MyLocation, GpsOff, Wifi, WifiOff,
-  Dashboard, History, CameraAlt, Delete, Refresh, Fullscreen,
-  Close, PersonAdd,
-} from '@mui/icons-material';
-import { styled, alpha } from '@mui/material/styles';
-import { format } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { toBackendAssetUrl } from '../utils/backendAssetUrl';
+  ArrowBack,
+  ArrowForward,
+  CameraAlt,
+  CheckCircle,
+  Close,
+  CloudUploadOutlined,
+  Email,
+  HomeWorkOutlined,
+  LocationOn,
+  MyLocation,
+  Phone,
+  Search,
+  Tag,
+  WhatsApp,
+} from "@mui/icons-material";
+import { Autocomplete, GoogleMap, MarkerF, useJsApiLoader } from "@react-google-maps/api";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { buildApiUrl } from "../utils/apiConfig";
+import { toBackendAssetUrl } from "../utils/backendAssetUrl";
 
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+const PRIMARY = "#e8703a";
+const PRIMARY_DARK = "#d05e2a";
+const PRIMARY_LIGHT = "#fff4ef";
+const SURFACE = "#ffffff";
+const SURFACE_ALT = "#f6f7f9";
+const BORDER = "#e8eaed";
+const TEXT = "#18181b";
+const TEXT_SUB = "#52525b";
+const TEXT_MUTED = "#a1a1aa";
+const ERROR_COLOR = "#dc2626";
+const SUCCESS = "#16a34a";
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+const DEFAULT_CENTER = { lat: 20.5937, lng: 78.9629 };
+const GOOGLE_MAPS_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyCqM7uF9c0ZMQjdssHqSMJJ3mBcmz5RNS0";
+const GOOGLE_MAP_CONTAINER_STYLE = { width: "100%", height: "100%" };
+const GOOGLE_MAP_LIBRARIES = ["places"];
+const SITE_SURVEY_DRAFT_STORAGE_KEY = "site-survey-active-draft";
 
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-const BASE_URL  = 'https://vanurtech-solar-backend-1.onrender.com/api/v1';
-const PRIMARY   = '#4569ea';
-const SECONDARY = '#1a237e';
-const SUCCESS   = '#4caf50';
-const ERROR_COL = '#f44336';
-const WARNING   = '#ff9800';
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const ROOF_TYPES = ["Flat Roof", "Sloped Roof", "Metal Roof", "Tile Roof", "Concrete Roof"];
+const ROOF_MATERIALS = ["Concrete", "Metal Sheet", "Tile", "Asphalt", "Wood"];
+const ROOF_CONDITIONS = ["Excellent", "Good", "Fair", "Poor", "Needs Repair"];
+const SHADING_OPTIONS = ["Trees", "Buildings", "Water Tank", "Antenna/Satellite", "None"];
+const SITE_ACCESS_OPTIONS = ["Easy", "Moderate", "Difficult", "Very Difficult"];
+const EARTHING_OPTIONS = ["Yes", "No", "Needs Upgrade"];
+const PHASE_OPTIONS = ["Single Phase", "Three Phase"];
+const PANEL_BRANDS = ["Waaree", "Adani", "Tata Power", "Vikram Solar", "Renewsys"];
+const INVERTER_BRANDS = ["Growatt", "SMA", "Fronius", "Sungrow", "Huawei"];
+const INVERTER_TYPES = ["String Inverter", "Microinverter", "Hybrid Inverter"];
 
 const getToken = () =>
-  localStorage.getItem('token') ||
-  localStorage.getItem('authToken') ||
-  localStorage.getItem('accessToken') || '';
+  localStorage.getItem("token") ||
+  localStorage.getItem("authToken") ||
+  localStorage.getItem("accessToken") ||
+  "";
 
-// ─── Haversine distance (km) — defined at module level, reused anywhere ───────
-const GKEY = 'AIzaSyCqM7uF9c0ZMQjdssHqSMJJ3mBcmz5RNS0';
+const getLeadFullName = (lead) => [lead?.firstName, lead?.lastName].filter(Boolean).join(" ").trim();
 
-async function getRoadDistanceKm(lat1, lng1, lat2, lng2) {
-  try {
-    const res  = await fetch(
-      `${BASE_URL}/location/route-distance?originLat=${lat1}&originLng=${lng1}&destLat=${lat2}&destLng=${lng2}`,
-      { headers: { Authorization: `Bearer ${getToken()}` } }
-    );
-    const data = await res.json();
-    if (data?.distanceKm != null) return data.distanceKm;
-    console.warn('[Distance] route-distance API returned:', data);
-    return 0;
-  } catch (e) {
-    console.warn('[Distance] getRoadDistanceKm failed:', e.message);
-    return 0;
+const normalizeLocationText = (value) => String(value || "").trim().toLowerCase();
+
+const getUsableLocationText = (lead, ...values) => {
+  const leadName = getLeadFullName(lead);
+  const companyName = String(lead?.companyName || "").trim();
+  const blockedLabels = new Set(
+    [leadName, companyName]
+      .map(normalizeLocationText)
+      .filter(Boolean)
+  );
+
+  for (const value of values) {
+    const trimmedValue = String(value || "").trim();
+    if (!trimmedValue) continue;
+    if (!blockedLabels.has(normalizeLocationText(trimmedValue))) {
+      return trimmedValue;
+    }
   }
-}
 
-// ─── Styled components ────────────────────────────────────────────────────────
-const UploadArea = styled(Box)(({ theme }) => ({
-  border: `2px dashed ${alpha(PRIMARY, 0.3)}`,
-  borderRadius: 16,
-  padding: theme.spacing(3),
-  textAlign: 'center',
-  cursor: 'pointer',
-  transition: 'all 0.2s',
-  backgroundColor: alpha(PRIMARY, 0.02),
-  minHeight: 200,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  '&:hover': {
-    borderColor: PRIMARY,
-    backgroundColor: alpha(PRIMARY, 0.05),
-    transform: 'scale(1.02)',
-  },
-}));
+  return "";
+};
 
-const FormSection = styled(Paper)(({ theme }) => ({
-  padding: theme.spacing(2.5),
-  borderRadius: 16,
-  backgroundColor: '#fff',
-  boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-  marginBottom: theme.spacing(2),
-  overflow: 'hidden',
-  isolation: 'isolate',
-  [theme.breakpoints.down('sm')]: { padding: theme.spacing(2) },
-}));
-
-const ImagePreview = styled(Box)(({ theme }) => ({
-  position: 'relative',
-  width: '100%',
-  height: 250,
-  borderRadius: 16,
-  overflow: 'hidden',
-  '& img': { width: '100%', height: '100%', objectFit: 'cover' },
-  '& .overlay': {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
-    display: 'flex',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    padding: theme.spacing(2),
-    opacity: 0,
-    transition: 'opacity 0.2s',
-    [theme.breakpoints.down('sm')]: { opacity: 1 },
-    '&:hover': { opacity: 1 },
-  },
-}));
-
-// ─── Success Dialog ───────────────────────────────────────────────────────────
-const SuccessDialog = ({ open, visitData, onClose }) => {
-  const navigate = useNavigate();
-  const theme    = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={isMobile}
-      PaperProps={{ sx: { borderRadius: isMobile ? 0 : 4 } }}
-      TransitionComponent={isMobile ? Slide : Zoom} transitionDuration={300}>
-      <DialogTitle sx={{ textAlign: 'center', pt: 4 }}>
-        <Zoom in={open}>
-          <Box sx={{ width: 80, height: 80, borderRadius: '50%', bgcolor: alpha(SUCCESS, 0.1), display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
-            <CheckCircle sx={{ fontSize: 48, color: SUCCESS }} />
-          </Box>
-        </Zoom>
-        <Typography variant={isMobile ? 'h6' : 'h5'} fontWeight={800}>Visit Created Successfully!</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Your visit has been recorded and synced</Typography>
-      </DialogTitle>
-      <DialogContent>
-        <Stack spacing={3} sx={{ mt: 2 }}>
-          <Card sx={{ borderRadius: 3, overflow: 'hidden' }}>
-            {visitData?.photos?.[0]?.url && (
-              <Box component="img" src={toBackendAssetUrl(visitData.photos[0]?.url || visitData.photos[0]?.path || visitData.photos[0]?.filename)} alt="Visit" sx={{ width: '100%', height: 200, objectFit: 'cover' }} />
-            )}
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} gutterBottom>{visitData?.locationName}</Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Paper sx={{ p: 1.5, bgcolor: alpha(PRIMARY, 0.05), borderRadius: 2 }}>
-                    <Typography variant="caption" color="text.secondary">Latitude</Typography>
-                    <Typography variant="body2" fontWeight={600}>{visitData?.coordinates?.lat?.toFixed(6)}°</Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={6}>
-                  <Paper sx={{ p: 1.5, bgcolor: alpha(PRIMARY, 0.05), borderRadius: 2 }}>
-                    <Typography variant="caption" color="text.secondary">Longitude</Typography>
-                    <Typography variant="body2" fontWeight={600}>{visitData?.coordinates?.lng?.toFixed(6)}°</Typography>
-                  </Paper>
-                </Grid>
-              </Grid>
-              {visitData?.distanceFromPreviousKm > 0 && (
-                <Chip
-                  icon={<Route />}
-                  label={`${Number(visitData.distanceFromPreviousKm).toFixed(2)} km from previous location`}
-                  size="small"
-                  sx={{ mt: 2, bgcolor: alpha(PRIMARY, 0.08), color: PRIMARY, fontWeight: 700 }}
-                />
-              )}
-            </CardContent>
-          </Card>
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ p: 3, justifyContent: 'center', gap: 2, flexDirection: isMobile ? 'column' : 'row' }}>
-        <Button fullWidth={isMobile} variant="outlined" onClick={onClose} sx={{ borderRadius: 2, px: 4, borderColor: PRIMARY, color: PRIMARY }}>Close</Button>
-        <Button fullWidth={isMobile} variant="contained" onClick={() => { onClose(); navigate('/total-visits'); }}
-          sx={{ borderRadius: 2, px: 4, bgcolor: PRIMARY, '&:hover': { bgcolor: SECONDARY } }}>View All Visits</Button>
-      </DialogActions>
-    </Dialog>
+const getPreferredLocationLabel = (lead, siteSurvey = null) => {
+  return getUsableLocationText(
+    lead,
+    siteSurvey?.locationName,
+    lead?.address,
+    lead?.city
   );
 };
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-export default function VisitDetails({ onClose, onSave }) {
-  const theme    = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const navigate = useNavigate();
-  const { isLoaded: isGoogleMapLoaded, loadError: googleMapLoadError } = useJsApiLoader({
-    googleMapsApiKey: GKEY,
-  });
-  const cameraInputRef = useRef(null);
+const getTodayAttendanceFromResponse = (payload) => {
+  const attendanceRows = payload?.result?.attendances || payload?.attendances || [];
+  const today = new Date().toDateString();
+  return attendanceRows.find((row) => new Date(row?.date).toDateString() === today) || null;
+};
 
-  const [loading,          setLoading]          = useState(false);
-  const [location,         setLocation]         = useState(null);
-  const [locationLoading,  setLocationLoading]  = useState(true);
-  const [locationAttempts, setLocationAttempts] = useState(0);
-  const [geocoding,        setGeocoding]        = useState(false);
-  const [imageFile,        setImageFile]        = useState(null);
-  const [preview,          setPreview]          = useState(null);
-  const [formData,         setFormData]         = useState({
-    locationName: '', remarks: '', contactPerson: '', phone: '', email: '',
-  });
+const extractApiErrorMessage = (payload, fallback) =>
+  payload?.message ||
+  payload?.error?.message ||
+  payload?.result?.message ||
+  fallback;
 
-  // ── Previous location for distance chain A→B→C→D ─────────────────────────
-  const [prevLocation, setPrevLocation] = useState(null); // { lat, lng, label }
-const [roadDistanceKm,      setRoadDistanceKm]      = useState(null);
-const [roadDistanceLoading, setRoadDistanceLoading] = useState(false);
-  // 'yes' | 'no' | 'other'
-  const [isLeadCreated,    setIsLeadCreated]    = useState('no');
+const getExistingSiteSurvey = (lead) =>
+  lead?.siteSurvey && typeof lead.siteSurvey === "object" ? lead.siteSurvey : null;
 
-  const [error,            setError]            = useState(null);
-  const [success,          setSuccess]          = useState(false);
-  const [createdVisit,     setCreatedVisit]     = useState(null);
-  const [validationErrors, setValidationErrors] = useState({});
-  const [bottomNav,        setBottomNav]        = useState(0);
-  const [fullscreenImage,  setFullscreenImage]  = useState(false);
-  const [isOnline,         setIsOnline]         = useState(navigator.onLine);
-
-  // autocomplete
-  const [suggestions,     setSuggestions]     = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [searchingLeads,  setSearchingLeads]  = useState(false);
-
-  // punch-in
-  const [punchInAddress, setPunchInAddress] = useState(null);
-  const [punchInTime,    setPunchInTime]    = useState(null);
-  // store punch-in coords so fetchPrevLocation can fall back to them
-  const [punchInCoords,  setPunchInCoords]  = useState(null);
-
-  // ── online listener ───────────────────────────────────────────────────────
-  useEffect(() => {
-    const on  = () => setIsOnline(true);
-    const off = () => setIsOnline(false);
-    window.addEventListener('online',  on);
-    window.addEventListener('offline', off);
-    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
-  }, []);
-
-
-
-useEffect(() => {
-  if (!prevLocation || !location) { setRoadDistanceKm(null); return; }
-  let cancelled = false;
-  setRoadDistanceLoading(true);
-  getRoadDistanceKm(prevLocation.lat, prevLocation.lng, location.lat, location.lng)
-    .then(km => { if (!cancelled) setRoadDistanceKm(km); })
-    .finally(() => { if (!cancelled) setRoadDistanceLoading(false); });
-  return () => { cancelled = true; };
-}, [prevLocation, location]);
-  // ── Punch-in fetch — also saves coords for distance fallback ─────────────
-  useEffect(() => {
-    const fetchPunchIn = async () => {
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        const res   = await fetch(
-          `${BASE_URL}/attendance?startDate=${today}&endDate=${today}&limit=1`,
-          { headers: { Authorization: `Bearer ${getToken()}` } }
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        const list = data?.data?.attendances || data?.result?.attendances || data?.data || [];
-        const att  = Array.isArray(list) ? list[0] : list;
-        if (att?.punchIn?.time && !att?.punchOut?.time) {
-          const addr = att.punchIn?.address;
-          setPunchInAddress(typeof addr === 'string' ? addr : addr?.full || addr?.short || null);
-          setPunchInTime(att.punchIn.time);
-
-          // ✅ Save punch-in coords — used as fallback "previous" location
-          const piLat = att.punchIn?.latitude  ?? att.punchIn?.lat;
-          const piLng = att.punchIn?.longitude ?? att.punchIn?.lng;
-          if (piLat && piLng) {
-            setPunchInCoords({ lat: parseFloat(piLat), lng: parseFloat(piLng) });
-          }
-        }
-      } catch (e) { console.warn('Punch-in fetch failed:', e.message); }
-    };
-    fetchPunchIn();
-  }, []);
-
-  // ── Fetch previous location for distance chain ────────────────────────────
-  // Runs after punchInCoords is ready (dep array includes it).
-  // Priority: last visit of today → punch-in coords → null (no distance)
-  useEffect(() => {
-    const fetchPrevLocation = async () => {
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        const res   = await fetch(
-          `${BASE_URL}/visit?startDate=${today}&endDate=${today}&limit=1&sort=-createdAt`,
-          { headers: { Authorization: `Bearer ${getToken()}` } }
-        );
-        const data   = await res.json();
-        const visits = data?.result?.visits || data?.data?.visits || data?.data || [];
-        const last   = Array.isArray(visits) ? visits[0] : null;
-
-        if (last?.coordinates?.lat && last?.coordinates?.lng) {
-  setPrevLocation({
-    lat:   parseFloat(last.coordinates.lat),
-    lng:   parseFloat(last.coordinates.lng),
-            label: last.locationName || 'Previous visit',
-          });
-          console.log('[Distance] Previous = last visit:', last.locationName);
-        } else if (punchInCoords) {
-          // ✅ No visits yet today — fall back to punch-in location (A→B)
-          setPrevLocation({ ...punchInCoords, label: 'Punch-in location' });
-          console.log('[Distance] Previous = punch-in location');
-        } else {
-          // No previous reference available — distance will be 0
-          setPrevLocation(null);
-          console.log('[Distance] No previous location found');
-        }
-      } catch (e) {
-        console.warn('[Distance] fetchPrevLocation failed:', e.message);
-        // Still fall back to punch-in coords if the visit fetch fails
-        if (punchInCoords) {
-          setPrevLocation({ ...punchInCoords, label: 'Punch-in location' });
-        }
-      }
-    };
-    fetchPrevLocation();
-  }, [punchInCoords]); // re-runs once punchInCoords is populated
-
-  // ── reverse geocode ───────────────────────────────────────────────────────
-  const reverseGeocode = useCallback(async (lat, lng) => {
-    try {
-      setGeocoding(true);
-      const res  = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GKEY}`
-      );
-      const data = await res.json();
-      if (data?.status === 'OK' && Array.isArray(data.results) && data.results.length > 0) {
-        return data.results[0].formatted_address || null;
-      }
-      console.warn('Reverse geocode returned:', data?.status || 'UNKNOWN_STATUS');
-    } catch (e) { console.warn('Reverse geocode failed:', e); }
-    finally     { setGeocoding(false); }
-    return null;
-  }, []);
-
-  // ── geolocation ───────────────────────────────────────────────────────────
-  const getCurrentLocation = useCallback((highAccuracy = true, attempt = 0) => {
-    setLocationLoading(true);
-    setError(null);
-    if (!navigator.geolocation) {
-      setError('Geolocation not supported');
-      setLocationLoading(false);
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setLocation({ lat, lng, accuracy: pos.coords.accuracy });
-        setLocationAttempts(0);
-        setLocationLoading(false);
-        const name = await reverseGeocode(lat, lng);
-        if (name) setFormData(prev => ({
-          ...prev,
-          locationName: prev.locationName.trim() === '' ? name : prev.locationName,
-        }));
-      },
-      (err) => {
-        if ((err.code === err.TIMEOUT || err.code === 3) && highAccuracy && attempt < 1) {
-          setError('High accuracy timeout, retrying…');
-          setLocationAttempts(attempt + 1);
-          setTimeout(() => getCurrentLocation(false, attempt + 1), 1000);
-          return;
-        }
-        if ((err.code === err.TIMEOUT || err.code === 3) && attempt < 2) {
-          setError(`Location timeout — retrying (${attempt + 1}/3)…`);
-          setLocationAttempts(attempt + 1);
-          setTimeout(() => getCurrentLocation(highAccuracy, attempt + 1), 2000);
-          return;
-        }
-        setError(err.code === 1 ? 'Location permission denied.' : err.message || 'Failed to get location');
-        setLocationLoading(false);
-      },
-      { enableHighAccuracy: highAccuracy, timeout: 15000, maximumAge: 0 }
-    );
-  }, [reverseGeocode]);
-
-  useEffect(() => { getCurrentLocation(); }, []);
-
-  // ── lead autocomplete ─────────────────────────────────────────────────────
-  const searchLeads = useCallback(async (query) => {
-    if (!query || query.trim().length < 1) { setSuggestions([]); setShowSuggestions(false); return; }
-    try {
-      setSearchingLeads(true);
-      const res  = await fetch(
-        `${BASE_URL}/lead/getAll?search=${encodeURIComponent(query)}&limit=5`,
-        { headers: { Authorization: `Bearer ${getToken()}` } }
-      );
-      const data = await res.json();
-      const leads = data?.result?.leads || data?.result || [];
-      setSuggestions(leads);
-      setShowSuggestions(leads.length > 0);
-    } catch (e) { console.warn('Lead search failed:', e); }
-    finally { setSearchingLeads(false); }
-  }, []);
-
-  const handleSelectSuggestion = (lead) => {
-    setFormData(prev => ({
-      ...prev,
-      contactPerson: `${lead.firstName} ${lead.lastName}`.trim(),
-      phone: lead.phone || '',
-      email: lead.email || '',
-    }));
-    setSuggestions([]);
-    setShowSuggestions(false);
-  };
-
-  // ── camera ────────────────────────────────────────────────────────────────
-  const handleCameraCapture = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { setError('Image must be under 10 MB'); return; }
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-      setError('Only JPG, PNG, WebP, HEIC, and HEIF images are supported');
-      return;
-    }
-    setImageFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => setPreview(reader.result);
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  };
-
-  const handleRemovePhoto = () => {
-    setImageFile(null);
-    setPreview(null);
-    if (cameraInputRef.current) cameraInputRef.current.value = '';
-  };
-
-  // ── form helpers ──────────────────────────────────────────────────────────
-  const handleChange = (field) => (e) => {
-    setFormData(p => ({ ...p, [field]: e.target.value }));
-    if (validationErrors[field]) setValidationErrors(p => ({ ...p, [field]: '' }));
-  };
-
-  const handleLeadToggle = (e) => {
-    setIsLeadCreated(e.target.value);
-    if (e.target.value === 'yes') { setSuggestions([]); setShowSuggestions(false); }
-  };
-
-  // ── validation ────────────────────────────────────────────────────────────
-  const validate = () => {
-    const errors = {};
-    if (!imageFile)                    errors.photo        = 'Please capture a photo';
-    if (!formData.locationName.trim()) errors.locationName = 'Location name is required';
-    if (!location)                     errors.location     = 'Location coordinates are required';
-    const leadOptionCreatesLead = isLeadCreated === 'yes' || isLeadCreated === 'no';
-    if (leadOptionCreatesLead) {
-      if (
-        !formData.contactPerson.trim() &&
-        !formData.phone.trim() &&
-        !formData.email.trim()
-      ) {
-        errors.contactPerson = 'Enter at least one contact detail';
-      }
-      if (formData.phone && !/^[0-9+\-\s()]{10,15}$/.test(formData.phone)) errors.phone = 'Please enter a valid phone number';
-      if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errors.email = 'Please enter a valid email';
-    }
-    if (isLeadCreated === 'other' && !formData.remarks.trim()) {
-      errors.remarks = 'Description is required for Other';
-    }
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  // ── submit ────────────────────────────────────────────────────────────────
-const handleSubmit = async () => {
-  if (!validate()) { setError('Please fill all required fields correctly'); return; }
-  setLoading(true);
-  setError(null);
-
-  const now       = new Date();
-  const visitDate = now.toISOString().split('T')[0];
-  const visitTime = now.toTimeString().slice(0, 5);
-
-  const distanceKm = roadDistanceKm ?? 0;
-
+const parseStoredJson = (value) => {
   try {
-    const fd = new FormData();
-
-    fd.append('latitude',               location.lat.toString());
-    fd.append('longitude',              location.lng.toString());
-    fd.append('locationName',           formData.locationName.trim());
-    fd.append('isLeadCreated',          isLeadCreated);
-    fd.append('visitDate',              visitDate);
-    fd.append('visitTime',              visitTime);
-    fd.append('visitStatus',            'Completed');
-    fd.append('distanceFromPreviousKm', distanceKm.toFixed(3));
-
-    if (formData.remarks.trim()) fd.append('remarks', formData.remarks.trim());
-
-    // Send contact fields when provided for non-"other" visits.
-    if (isLeadCreated === 'yes' || isLeadCreated === 'no') {
-      if (formData.contactPerson.trim()) fd.append('contactPerson', formData.contactPerson.trim());
-      if (formData.phone.trim())         fd.append('phone',         formData.phone.trim());
-      if (formData.email.trim())         fd.append('email',         formData.email.trim());
-    }
-
-    fd.append('photos', imageFile);
-
-    // ✅ Single API call — backend handles visit + lead creation based on isLeadCreated
-    const visitRes  = await fetch(`${BASE_URL}/visit`, {
-      method:  'POST',
-      headers: { Authorization: `Bearer ${getToken()}` },
-      body:    fd,
-    });
-    const visitJson = await visitRes.json();
-    if (!visitRes.ok) throw new Error(visitJson.message || `HTTP ${visitRes.status}`);
-
-    // Update prevLocation for next visit in same session
-    setPrevLocation({
-      lat:   location.lat,
-      lng:   location.lng,
-      label: formData.locationName.trim(),
-    });
-
-    const visitResult = visitJson?.result ?? visitJson?.data ?? visitJson;
-    const visitData = visitResult?.visit ?? visitResult;
-    const createdLead = visitResult?.lead ?? visitData?.leadCreated ?? null;
-    const createdLeadId =
-      createdLead?._id ||
-      (typeof createdLead === 'string' ? createdLead : null) ||
-      visitData?.leadCreated?._id ||
-      (typeof visitData?.leadCreated === 'string' ? visitData.leadCreated : null);
-
-    if (!visitData?._id) {
-      throw new Error(visitJson?.message || visitResult?.message || 'Visit was created, but the app could not read the response');
-    }
-
-    if ((isLeadCreated === 'yes' || isLeadCreated === 'no') && !createdLeadId) {
-      throw new Error(
-        visitResult?.leadCreationError ||
-        visitJson?.leadCreationError ||
-        'Visit was saved, but lead was not created. Please check backend lead creation.'
-      );
-    }
-
-    setCreatedVisit(visitData);
-    setSuccess(true);
-    if (onSave) onSave(visitData);
-
-    setImageFile(null);
-    setPreview(null);
-    setFormData({ locationName: '', remarks: '', contactPerson: '', phone: '', email: '' });
-    setIsLeadCreated('no');
-
-  } catch (err) {
-    console.error('Visit creation error:', err);
-    setError(err.message || 'Failed to create visit');
-  } finally {
-    setLoading(false);
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
   }
 };
 
-  const canSubmit = !loading;
-  const mapCenter  = location ? [location.lat, location.lng] : [22.5726, 88.3639];
+const readSiteSurveyDraft = () => {
+  if (typeof window === "undefined") return null;
+  return parseStoredJson(window.localStorage.getItem(SITE_SURVEY_DRAFT_STORAGE_KEY));
+};
 
-  // ── Computed distance preview (shown on map section) ─────────────────────
+const buildLeadDraftSnapshot = (lead) => {
+  if (!lead || typeof lead !== "object") return null;
+  return {
+    _id: lead._id || "",
+    firstName: lead.firstName || "",
+    lastName: lead.lastName || "",
+    companyName: lead.companyName || "",
+    phone: lead.phone || "",
+    email: lead.email || "",
+    address: lead.address || "",
+    city: lead.city || "",
+    pincode: lead.pincode || "",
+    siteSurvey: getExistingSiteSurvey(lead),
+  };
+};
+
+const makeInitialSurveyData = (lead, siteSurvey = null) => {
+  const general = siteSurvey?.general || {};
+  return {
+    roofType: general.roofType || "",
+    roofMaterial: general.roofMaterial || "",
+    roofCondition: general.roofCondition || "",
+    shadingIssues: Array.isArray(general.shadingIssues) ? general.shadingIssues : [],
+    siteAccess: general.siteAccess || "",
+    existingElectricalLoad: general.existingElectricalLoad || "",
+    mainDistributionBoardLocation: general.mainDistributionBoardLocation || "",
+    earthingAvailable: general.earthingAvailable || "",
+    phaseType: general.phaseType || "",
+    recommendedPanelBrand: general.recommendedPanelBrand || "",
+    recommendedInverterBrand: general.recommendedInverterBrand || "",
+    inverterType: general.inverterType || "",
+    availableRoofArea: general.availableRoofArea || "",
+    usableRoofArea: general.usableRoofArea || "",
+    distanceFromRoofToDb: general.distanceFromRoofToDb || "",
+    customerExpectations: general.customerExpectations || "",
+    specialRequirements: general.specialRequirements || "",
+    challengesConcerns: general.challengesConcerns || "",
+    locationName: getPreferredLocationLabel(lead, siteSurvey),
+    latitude:
+      siteSurvey?.latitude !== undefined && siteSurvey?.latitude !== null
+        ? String(siteSurvey.latitude)
+        : "",
+    longitude:
+      siteSurvey?.longitude !== undefined && siteSurvey?.longitude !== null
+        ? String(siteSurvey.longitude)
+        : "",
+    remarks: siteSurvey?.remarks || "",
+  };
+};
+
+const buildPersistedPhotoList = (storedPhotos = []) => {
+  return storedPhotos
+    .map((photo, index) => {
+      const preview =
+        typeof photo === "string"
+          ? photo
+          : photo?.url || photo?.uri || photo?.path || photo?.location || photo?.src || "";
+      if (!preview) return null;
+      const normalizedPreview = toBackendAssetUrl(preview);
+      if (!normalizedPreview) return null;
+
+      return {
+        id: `existing-${index}-${String(preview).slice(-18)}`,
+        file: null,
+        preview: normalizedPreview,
+        persistedUrl: preview,
+      };
+    })
+    .filter(Boolean);
+};
+
+const buildInitialPhotos = (siteSurvey = null) => {
+  const storedPhotos = Array.isArray(siteSurvey?.photos) ? siteSurvey.photos : [];
+  return buildPersistedPhotoList(storedPhotos);
+};
+
+const buildDraftPhotos = (draftPhotos = [], siteSurvey = null) => {
+  const restoredPhotos = buildPersistedPhotoList(Array.isArray(draftPhotos) ? draftPhotos : []);
+  return restoredPhotos.length ? restoredPhotos : buildInitialPhotos(siteSurvey);
+};
+
+const mergeSurveyDraftData = (baseData, draftData) => {
+  if (!draftData || typeof draftData !== "object") return baseData;
+  return {
+    ...baseData,
+    ...draftData,
+    shadingIssues: Array.isArray(draftData.shadingIssues)
+      ? draftData.shadingIssues.filter(Boolean)
+      : baseData.shadingIssues,
+    locationName:
+      typeof draftData.locationName === "string" ? draftData.locationName : baseData.locationName,
+    latitude:
+      draftData.latitude !== undefined && draftData.latitude !== null
+        ? String(draftData.latitude)
+        : baseData.latitude,
+    longitude:
+      draftData.longitude !== undefined && draftData.longitude !== null
+        ? String(draftData.longitude)
+        : baseData.longitude,
+    remarks: typeof draftData.remarks === "string" ? draftData.remarks : baseData.remarks,
+  };
+};
+
+const getPersistedPhotoRefs = (photos = []) =>
+  photos
+    .filter((photo) => !photo?.file && (photo?.persistedUrl || photo?.preview))
+    .map((photo) => photo.persistedUrl || photo.preview)
+    .filter(Boolean);
+
+const getDraftStep = (draft) => {
+  const step = Number(draft?.currentStep);
+  return step >= 1 && step <= 3 ? step : 1;
+};
+
+
+/* ─── Shared section wrapper ─── */
+function SectionCard({ icon, title, badge, children }) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        borderRadius: 3,
+        border: `1px solid ${BORDER}`,
+        overflow: "hidden",
+        mb: 2,
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{
+          px: 2.5,
+          py: 1.5,
+          borderBottom: `1px solid ${BORDER}`,
+          bgcolor: "#fafafa",
+        }}
+      >
+        <Stack direction="row" spacing={1.25} alignItems="center">
+          <Box
+            sx={{
+              width: 30,
+              height: 30,
+              borderRadius: 1.5,
+              bgcolor: PRIMARY_LIGHT,
+              color: PRIMARY,
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
+            {icon}
+          </Box>
+          <Typography sx={{ fontSize: "0.92rem", fontWeight: 700, color: TEXT }}>
+            {title}
+          </Typography>
+        </Stack>
+        {badge && (
+          <Chip
+            label={badge}
+            size="small"
+            sx={{
+              height: 22,
+              bgcolor: "#f0f0f0",
+              color: TEXT_MUTED,
+              fontSize: "0.7rem",
+              fontWeight: 600,
+              borderRadius: 999,
+            }}
+          />
+        )}
+      </Stack>
+      <Box sx={{ p: 2.5 }}>{children}</Box>
+    </Paper>
+  );
+}
+
+/* ─── Field label ─── */
+function FieldLabel({ children, required }) {
+  return (
+    <Typography
+      sx={{
+        fontSize: "0.78rem",
+        fontWeight: 600,
+        color: TEXT_SUB,
+        mb: 0.75,
+        letterSpacing: "0.01em",
+      }}
+    >
+      {children}
+      {required && (
+        <Box component="span" sx={{ color: ERROR_COLOR, ml: 0.4 }}>
+          *
+        </Box>
+      )}
+    </Typography>
+  );
+}
+
+/* ─── Pill selector (radio) ─── */
+function PillGroup({ options, value, onChange }) {
+  return (
+    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+      {options.map((opt) => {
+        const sel = value === opt;
+        return (
+          <Box
+            key={opt}
+            onClick={() => onChange(opt)}
+            sx={{
+              px: 1.5,
+              py: 0.6,
+              borderRadius: 2,
+              border: `1.5px solid ${sel ? PRIMARY : BORDER}`,
+              bgcolor: sel ? PRIMARY_LIGHT : SURFACE,
+              color: sel ? PRIMARY : TEXT_SUB,
+              fontWeight: sel ? 700 : 500,
+              fontSize: "0.8rem",
+              cursor: "pointer",
+              userSelect: "none",
+              transition: "all 0.15s",
+              "&:hover": { borderColor: PRIMARY, bgcolor: PRIMARY_LIGHT },
+            }}
+          >
+            {opt}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+/* ─── Pill selector (checkbox / multi) ─── */
+function CheckPillGroup({ options, value = [], onChange }) {
+  return (
+    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+      {options.map((opt) => {
+        const sel = value.includes(opt);
+        return (
+          <Box
+            key={opt}
+            onClick={() => onChange(opt)}
+            sx={{
+              px: 1.5,
+              py: 0.6,
+              borderRadius: 2,
+              border: `1.5px solid ${sel ? PRIMARY : BORDER}`,
+              bgcolor: sel ? PRIMARY_LIGHT : SURFACE,
+              color: sel ? PRIMARY : TEXT_SUB,
+              fontWeight: sel ? 700 : 500,
+              fontSize: "0.8rem",
+              cursor: "pointer",
+              userSelect: "none",
+              transition: "all 0.15s",
+              "&:hover": { borderColor: PRIMARY, bgcolor: PRIMARY_LIGHT },
+            }}
+          >
+            {opt}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+/* ─── Photo thumbnail ─── */
+function UploadPreview({ photo, onRemove }) {
+  if (!photo?.preview) return null;
+
+  const photoLabel =
+    photo?.file?.name ||
+    photo?.persistedUrl?.split?.("/")?.pop?.() ||
+    "Survey photo";
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#f8fafc', pb: isMobile ? 8 : 4 }}>
+    <Box
+      sx={{
+        position: "relative",
+        width: 96,
+        height: 96,
+        borderRadius: 2,
+        overflow: "hidden",
+        border: `1.5px solid ${BORDER}`,
+        flexShrink: 0,
+      }}
+    >
+      <Box
+        component="img"
+        src={photo.preview}
+        alt={photoLabel}
+        sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+      />
+      <IconButton
+        size="small"
+        onClick={() => onRemove(photo?.id)}
+        sx={{
+          position: "absolute",
+          top: 4,
+          right: 4,
+          width: 22,
+          height: 22,
+          bgcolor: "rgba(0,0,0,0.6)",
+          color: "#fff",
+          "&:hover": { bgcolor: "rgba(0,0,0,0.8)" },
+        }}
+      >
+        <Close sx={{ fontSize: 13 }} />
+      </IconButton>
+    </Box>
+  );
+}
 
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment"
-        onChange={handleCameraCapture} style={{ display: 'none' }} />
-
-      {/* Header */}
-      <Paper sx={{ p: isMobile ? 2 : 3, borderRadius: 0, background: `linear-gradient(135deg, ${PRIMARY} 0%, ${SECONDARY} 100%)`, color: 'white', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <IconButton onClick={() => onClose ? onClose() : navigate(-1)} sx={{ color: 'white' }}><ArrowBack /></IconButton>
-            <Box>
-              <Typography variant={isMobile ? 'h6' : 'h5'} fontWeight={700}>Create New Visit</Typography>
-              <Typography variant="caption" sx={{ opacity: 0.9 }}>{format(new Date(), 'EEEE, MMMM d, yyyy')}</Typography>
-            </Box>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.5, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
-            {isOnline
-              ? <><Wifi sx={{ fontSize: 16 }} /><Typography variant="caption">Connected</Typography></>
-              : <><WifiOff sx={{ fontSize: 16 }} /><Typography variant="caption">Offline</Typography></>}
-          </Box>
+/* ─── Success dialog ─── */
+function SuccessDialog({ open, onClose, leadName }) {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <DialogTitle sx={{ textAlign: "center", pt: 4 }}>
+        <Box
+          sx={{
+            width: 72,
+            height: 72,
+            borderRadius: "50%",
+            bgcolor: alpha(SUCCESS, 0.1),
+            display: "grid",
+            placeItems: "center",
+            mx: "auto",
+            mb: 2,
+          }}
+        >
+          <CheckCircle sx={{ fontSize: 40, color: SUCCESS }} />
         </Box>
+        <Typography variant="h6" sx={{ color: TEXT, fontWeight: 800 }}>
+          Site Survey Saved
+        </Typography>
+        <Typography variant="body2" sx={{ color: TEXT_MUTED, mt: 0.75 }}>
+          {leadName
+            ? `Survey for ${leadName} was saved successfully.`
+            : "Survey details were saved successfully."}
+        </Typography>
+      </DialogTitle>
+      <DialogActions sx={{ justifyContent: "center", pb: 3.5, px: 3 }}>
+        <Button
+          variant="contained"
+          onClick={onClose}
+          disableElevation
+          sx={{
+            borderRadius: 2,
+            px: 3.5,
+            py: 1,
+            bgcolor: PRIMARY,
+            fontWeight: 700,
+            textTransform: "none",
+            fontSize: "0.88rem",
+            "&:hover": { bgcolor: PRIMARY_DARK },
+          }}
+        >
+          Done
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+/* ════════════════════════════════════════════════
+   MAIN COMPONENT
+════════════════════════════════════════════════ */
+export default function VisitDetails({ onClose, onSave }) {
+  const navigate = useNavigate();
+  const locationState = useLocation();
+  const { fetchAPI, getUserRole } = useAuth();
+  const incomingLead = locationState.state?.lead || null;
+  const restoredDraft = useMemo(() => readSiteSurveyDraft(), []);
+  const canUseRestoredDraft = useMemo(() => {
+    if (!restoredDraft) return false;
+    if (!incomingLead?._id) return true;
+    return restoredDraft?.lead?._id === incomingLead._id;
+  }, [incomingLead?._id, restoredDraft]);
+  const [lead, setLead] = useState(() =>
+    incomingLead || (canUseRestoredDraft ? restoredDraft?.lead || null : null)
+  );
+  const existingSiteSurvey = useMemo(() => getExistingSiteSurvey(lead), [lead]);
+  const currentUserRole = getUserRole?.() || null;
+  const restoredDraftRef = useRef(canUseRestoredDraft && Boolean(restoredDraft));
+
+  const { isLoaded: isGoogleMapLoaded, loadError: googleMapLoadError } = useJsApiLoader({
+    googleMapsApiKey: GOOGLE_MAPS_KEY,
+    libraries: GOOGLE_MAP_LIBRARIES,
+  });
+
+  const [currentStep, setCurrentStep] = useState(() =>
+    canUseRestoredDraft ? getDraftStep(restoredDraft) : 1
+  );
+  const [surveyData, setSurveyData] = useState(() => {
+    const baseData = makeInitialSurveyData(
+      incomingLead || (canUseRestoredDraft ? restoredDraft?.lead : lead),
+      existingSiteSurvey
+    );
+    return canUseRestoredDraft ? mergeSurveyDraftData(baseData, restoredDraft?.surveyData) : baseData;
+  });
+  const [photos, setPhotos] = useState(() =>
+    canUseRestoredDraft
+      ? buildDraftPhotos(restoredDraft?.photos, existingSiteSurvey)
+      : buildInitialPhotos(existingSiteSurvey)
+  );
+  const [validationErrors, setValidationErrors] = useState({});
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationAttempts, setLocationAttempts] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [submittedVisit, setSubmittedVisit] = useState(null);
+  const [locationSearch, setLocationSearch] = useState(() =>
+    canUseRestoredDraft
+      ? getUsableLocationText(
+          lead,
+          restoredDraft?.locationSearch,
+          restoredDraft?.surveyData?.locationName,
+          existingSiteSurvey?.locationName,
+          lead?.address,
+          lead?.city
+        )
+      : getPreferredLocationLabel(lead, existingSiteSurvey)
+  );
+  const [searchingAddress, setSearchingAddress] = useState(false);
+  const fileInputRef = useRef(null);
+  const autocompleteRef = useRef(null);
+
+  const leadName = useMemo(
+    () => getLeadFullName(lead) || lead?.companyName || "Site Survey",
+    [lead]
+  );
+  const avatarLabel = useMemo(() => {
+    const seed = leadName || "SS";
+    return (
+      seed
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((p) => p[0]?.toUpperCase())
+        .join("") || "SS"
+    );
+  }, [leadName]);
+
+  const mapCenter = useMemo(() => {
+    if (surveyData.latitude && surveyData.longitude)
+      return { lat: Number(surveyData.latitude), lng: Number(surveyData.longitude) };
+    return DEFAULT_CENTER;
+  }, [surveyData.latitude, surveyData.longitude]);
+  const markerPosition = useMemo(() => {
+    if (surveyData.latitude && surveyData.longitude) {
+      return { lat: Number(surveyData.latitude), lng: Number(surveyData.longitude) };
+    }
+    return mapCenter;
+  }, [mapCenter, surveyData.latitude, surveyData.longitude]);
+  const surveyMarkerAnimation = useMemo(() => {
+    if (!isGoogleMapLoaded || !window.google?.maps?.Animation) return undefined;
+    return window.google.maps.Animation.DROP;
+  }, [isGoogleMapLoaded]);
+
+  useEffect(() => {
+    if (incomingLead) setLead(incomingLead);
+  }, [incomingLead]);
+
+  const updateField = useCallback((field, value) => {
+    setSurveyData((prev) => ({ ...prev, [field]: value }));
+    setValidationErrors((prev) => ({ ...prev, [field]: "" }));
+    setError("");
+  }, []);
+
+  const toggleCheckboxValue = useCallback((field, value) => {
+    setSurveyData((prev) => {
+      const current = prev[field] || [];
+      const next =
+        current.includes(value)
+          ? current.filter((i) => i !== value)
+          : value === "None"
+          ? ["None"]
+          : [...current.filter((i) => i !== "None"), value];
+      return { ...prev, [field]: next };
+    });
+    setValidationErrors((prev) => ({ ...prev, [field]: "" }));
+    setError("");
+  }, []);
+
+  const reverseGeocode = useCallback(async (lat, lng) => {
+    try {
+      const res = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_KEY}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const addr = data?.results?.[0]?.formatted_address;
+        if (addr) return addr;
+      }
+      const res2 = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
+        { headers: { Accept: "application/json" } }
+      );
+      if (!res2.ok) return "";
+      const data2 = await res2.json();
+      return data2?.display_name || "";
+    } catch {
+      return "";
+    }
+  }, []);
+
+  const applyCoordinates = useCallback(
+    async (lat, lng, options = {}) => {
+      const { shouldPrefillLocation = true, forcedLocationName = "" } = options;
+      updateField("latitude", Number(lat).toFixed(6));
+      updateField("longitude", Number(lng).toFixed(6));
+      if (forcedLocationName) {
+        updateField("locationName", forcedLocationName);
+        setLocationSearch(forcedLocationName);
+        return;
+      }
+      if (shouldPrefillLocation && !surveyData.locationName.trim()) {
+        const label = await reverseGeocode(lat, lng);
+        if (label) {
+          updateField("locationName", label);
+          setLocationSearch(label);
+        }
+      }
+    },
+    [reverseGeocode, surveyData.locationName, updateField]
+  );
+
+  const getCurrentLocation = useCallback(
+    (attempt = 0) => {
+      if (!navigator.geolocation) {
+        setError("Geolocation is not supported by this browser.");
+        return;
+      }
+      setLocationLoading(true);
+      setError("");
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          await applyCoordinates(pos.coords.latitude, pos.coords.longitude, {
+            shouldPrefillLocation: true,
+          });
+          setLocationAttempts(0);
+          setLocationLoading(false);
+        },
+        (geoError) => {
+          if ((geoError.code === 3 || geoError.code === geoError.TIMEOUT) && attempt < 2) {
+            const next = attempt + 1;
+            setLocationAttempts(next);
+            setTimeout(() => getCurrentLocation(next), 1200);
+            return;
+          }
+          setLocationLoading(false);
+          setError(
+            geoError.code === 1
+              ? "Location permission denied."
+              : "Unable to capture current location."
+          );
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      );
+    },
+    [applyCoordinates]
+  );
+
+  useEffect(() => {
+    if (surveyData.latitude && surveyData.longitude) return;
+    if (existingSiteSurvey?.latitude && existingSiteSurvey?.longitude) return;
+    getCurrentLocation();
+  }, [
+    existingSiteSurvey?.latitude,
+    existingSiteSurvey?.longitude,
+    getCurrentLocation,
+    surveyData.latitude,
+    surveyData.longitude,
+  ]);
+
+  useEffect(() => {
+    if (!lead) return;
+    if (restoredDraftRef.current) {
+      restoredDraftRef.current = false;
+      return;
+    }
+    setSurveyData(makeInitialSurveyData(lead, existingSiteSurvey));
+    setPhotos(buildInitialPhotos(existingSiteSurvey));
+    setLocationSearch(getPreferredLocationLabel(lead, existingSiteSurvey));
+  }, [existingSiteSurvey, lead]);
+
+  useEffect(() => {
+    const hasDraftableData =
+      Boolean(lead?._id) ||
+      Boolean(locationSearch.trim()) ||
+      Boolean(surveyData.locationName.trim()) ||
+      Boolean(surveyData.latitude) ||
+      Boolean(surveyData.longitude) ||
+      photos.length > 0;
+
+    if (!hasDraftableData) return;
+
+    try {
+      window.localStorage.setItem(
+        SITE_SURVEY_DRAFT_STORAGE_KEY,
+        JSON.stringify({
+          lead: buildLeadDraftSnapshot(lead),
+          currentStep,
+          locationSearch,
+          surveyData,
+          photos: getPersistedPhotoRefs(photos),
+          savedAt: new Date().toISOString(),
+        })
+      );
+    } catch {
+      // Ignore storage failures and continue using in-memory form state.
+    }
+  }, [currentStep, lead, locationSearch, photos, surveyData]);
+
+  useEffect(() => {
+    return () => {
+      photos.forEach((photo) => {
+        if (photo?.preview?.startsWith?.("blob:")) {
+          URL.revokeObjectURL(photo.preview);
+        }
+      });
+    };
+  }, [photos]);
+
+  const addFiles = useCallback((fileList) => {
+    const picked = Array.from(fileList || []);
+    if (!picked.length) return;
+    const valid = [];
+    let localError = "";
+    picked.forEach((file) => {
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        localError = "Only JPG, PNG, WEBP, HEIC, and HEIF images are supported.";
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        localError = "Each image must be under 10 MB.";
+        return;
+      }
+      valid.push({
+        id: `${file.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+        file,
+        preview: URL.createObjectURL(file),
+      });
+    });
+    if (localError) setError(localError);
+    if (valid.length) {
+      setPhotos((prev) => [...prev, ...valid]);
+      setValidationErrors((prev) => ({ ...prev, photos: "" }));
+      setError("");
+    }
+  }, []);
+
+  const handleFileChange = useCallback(
+    (e) => {
+      addFiles(e.target.files);
+      e.target.value = "";
+    },
+    [addFiles]
+  );
+
+  const removePhoto = useCallback((photoId) => {
+    setPhotos((prev) => {
+      const t = prev.find((p) => p.id === photoId);
+      if (t?.preview?.startsWith?.("blob:")) URL.revokeObjectURL(t.preview);
+      return prev.filter((p) => p.id !== photoId);
+    });
+  }, []);
+
+  const handleMapPick = useCallback(
+    async (lat, lng) => {
+      await applyCoordinates(lat, lng, { shouldPrefillLocation: true });
+    },
+    [applyCoordinates]
+  );
+
+  const searchLocationOnMap = useCallback(async () => {
+    if (!locationSearch.trim()) {
+      setError("Enter a house name or address to search.");
+      return;
+    }
+    setSearchingAddress(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+          locationSearch.trim()
+        )}&key=${GOOGLE_MAPS_KEY}`
+      );
+      const payload = await res.json();
+      const result = payload?.results?.[0];
+      const coords = result?.geometry?.location;
+      if (!coords || typeof coords.lat !== "number" || typeof coords.lng !== "number")
+        throw new Error("No matching location found.");
+      const formattedAddress = result?.formatted_address || locationSearch.trim();
+      await applyCoordinates(coords.lat, coords.lng, {
+        shouldPrefillLocation: true,
+        forcedLocationName: formattedAddress,
+      });
+      setLocationSearch(formattedAddress);
+    } catch (e) {
+      setError(e.message || "Unable to find that address.");
+    } finally {
+      setSearchingAddress(false);
+    }
+  }, [applyCoordinates, locationSearch]);
+
+  const handleAutocompleteLoad = useCallback((ac) => {
+    autocompleteRef.current = ac;
+  }, []);
+
+  const handlePlaceChanged = useCallback(async () => {
+    const place = autocompleteRef.current?.getPlace?.();
+    const lat = place?.geometry?.location?.lat?.();
+    const lng = place?.geometry?.location?.lng?.();
+    if (typeof lat !== "number" || typeof lng !== "number") return;
+    const label = place?.formatted_address || place?.name || locationSearch.trim();
+    await applyCoordinates(lat, lng, { shouldPrefillLocation: true, forcedLocationName: label });
+    setLocationSearch(label);
+  }, [applyCoordinates, locationSearch]);
+
+  const validateStep = useCallback(
+    (step) => {
+      const errs = {};
+      if (step === 1) {
+        if (!surveyData.roofType) errs.roofType = "Required";
+        if (!surveyData.roofMaterial) errs.roofMaterial = "Required";
+        if (!surveyData.roofCondition) errs.roofCondition = "Required";
+        if (!surveyData.siteAccess) errs.siteAccess = "Required";
+        if (!surveyData.existingElectricalLoad) errs.existingElectricalLoad = "Required";
+        if (!surveyData.mainDistributionBoardLocation.trim())
+          errs.mainDistributionBoardLocation = "Required";
+        if (!surveyData.earthingAvailable) errs.earthingAvailable = "Required";
+        if (!surveyData.phaseType) errs.phaseType = "Required";
+        if (!surveyData.recommendedPanelBrand) errs.recommendedPanelBrand = "Required";
+        if (!surveyData.recommendedInverterBrand) errs.recommendedInverterBrand = "Required";
+        if (!surveyData.availableRoofArea) errs.availableRoofArea = "Required";
+        if (!surveyData.usableRoofArea) errs.usableRoofArea = "Required";
+      }
+      if (step === 2) {
+        if (!surveyData.latitude || !surveyData.longitude)
+          errs.coordinates = "GPS coordinates are required.";
+        if (!surveyData.locationName.trim()) errs.locationName = "Required";
+      }
+      if (step === 3) {
+        if (!photos.length) errs.photos = "At least one site photo is required.";
+      }
+      setValidationErrors((prev) => ({ ...prev, ...errs }));
+      return Object.keys(errs).length === 0;
+    },
+    [photos.length, surveyData]
+  );
+
+  const goStep = useCallback(
+    (dir) => {
+      if (dir > 0 && !validateStep(currentStep)) {
+        setError("Please fill in all required fields before continuing.");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      setError("");
+      setCurrentStep((prev) => Math.max(1, Math.min(3, prev + dir)));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [currentStep, validateStep]
+  );
+
+  const surveySummary = useMemo(() => {
+    const lines = [
+      "Site Survey Summary",
+      `Roof Type: ${surveyData.roofType || "-"}`,
+      `Roof Material: ${surveyData.roofMaterial || "-"}`,
+      `Roof Condition: ${surveyData.roofCondition || "-"}`,
+      `Shading Issues: ${surveyData.shadingIssues.length ? surveyData.shadingIssues.join(", ") : "-"}`,
+      `Site Access: ${surveyData.siteAccess || "-"}`,
+      `Existing Electrical Load (kW): ${surveyData.existingElectricalLoad || "-"}`,
+      `Main Distribution Board Location: ${surveyData.mainDistributionBoardLocation || "-"}`,
+      `Earthing Available: ${surveyData.earthingAvailable || "-"}`,
+      `Phase Type: ${surveyData.phaseType || "-"}`,
+      `Recommended Panel Brand: ${surveyData.recommendedPanelBrand || "-"}`,
+      `Recommended Inverter Brand: ${surveyData.recommendedInverterBrand || "-"}`,
+      `Inverter Type: ${surveyData.inverterType || "-"}`,
+      `Available Roof Area (sq ft): ${surveyData.availableRoofArea || "-"}`,
+      `Usable Roof Area (sq ft): ${surveyData.usableRoofArea || "-"}`,
+      `Distance from Roof to DB (meters): ${surveyData.distanceFromRoofToDb || "-"}`,
+      `Customer Expectations: ${surveyData.customerExpectations || "-"}`,
+      `Special Requirements: ${surveyData.specialRequirements || "-"}`,
+      `Challenges/Concerns: ${surveyData.challengesConcerns || "-"}`,
+      `Coordinates: ${surveyData.latitude || "-"}, ${surveyData.longitude || "-"}`,
+    ];
+    if (surveyData.remarks.trim()) lines.push(`Additional Notes: ${surveyData.remarks.trim()}`);
+    return lines.join("\n");
+  }, [surveyData]);
+
+  const ensurePunchInReady = useCallback(async () => {
+    if (currentUserRole === "Admin_panel") return;
+
+    const attendancePayload = await fetchAPI("/attendance?limit=31");
+    const todayAttendance = getTodayAttendanceFromResponse(attendancePayload);
+
+    if (!todayAttendance) {
+      throw new Error("No attendance record found for today. Please punch in first.");
+    }
+
+    if (!todayAttendance?.punchIn?.time) {
+      throw new Error("Please punch in before saving the site survey.");
+    }
+  }, [currentUserRole, fetchAPI]);
+
+  const handleSubmit = useCallback(async () => {
+    for (const step of [1, 2, 3]) {
+      if (!validateStep(step)) {
+        setCurrentStep(step);
+        setError("Please complete all required fields before submitting.");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await ensurePunchInReady();
+      const now = new Date();
+      const formData = new FormData();
+      const displayName = leadName || surveyData.locationName.trim() || "Site Survey";
+      const persistedPhotos = getPersistedPhotoRefs(photos);
+      formData.append("latitude", surveyData.latitude);
+      formData.append("longitude", surveyData.longitude);
+      formData.append("locationName", surveyData.locationName.trim() || displayName);
+      formData.append("isLeadCreated", "other");
+      formData.append("visitDate", now.toISOString().split("T")[0]);
+      formData.append("visitTime", now.toTimeString().slice(0, 5));
+      formData.append("visitStatus", "Completed");
+      formData.append("remarks", surveySummary);
+      if (lead?._id) {
+        formData.append("leadId", lead._id);
+        formData.append(
+          "siteSurveyData",
+          JSON.stringify({
+            ...surveyData,
+            photos: persistedPhotos,
+          })
+        );
+      }
+      const contactName = getLeadFullName(lead);
+      if (contactName) formData.append("contactPerson", contactName);
+      if (lead?.phone) formData.append("phone", lead.phone);
+      if (lead?.email) formData.append("email", lead.email);
+      if (lead?.address) formData.append("address", lead.address);
+      photos.forEach((photo) => {
+        if (photo.file) formData.append("photos", photo.file);
+      });
+      const res = await fetch(buildApiUrl("/visit"), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: formData,
+      });
+      const responseType = res.headers.get("content-type") || "";
+      const payload = responseType.includes("application/json") ? await res.json() : null;
+      if (!res.ok) throw new Error(extractApiErrorMessage(payload, `HTTP ${res.status}`));
+      const visitResult = payload?.result ?? payload?.data ?? payload;
+      const visitData = visitResult?.visit ?? visitResult;
+      try {
+        window.localStorage.removeItem(SITE_SURVEY_DRAFT_STORAGE_KEY);
+      } catch {
+        // Ignore storage cleanup failures after a successful save.
+      }
+      setSubmittedVisit(visitData);
+      if (onSave) onSave(visitData);
+      setSuccessOpen(true);
+    } catch (e) {
+      setError(e.message || "Failed to save site survey.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setSaving(false);
+    }
+  }, [ensurePunchInReady, lead, leadName, onSave, photos, surveyData, surveySummary, validateStep]);
+
+  const closeSuccess = useCallback(() => {
+    setSuccessOpen(false);
+    if (onClose) {
+      onClose(submittedVisit);
+      return;
+    }
+    if (lead?._id) {
+      navigate(`/all-leads/${lead._id}`, {
+        replace: true,
+        state: {
+          lead,
+          initialTab: "siteSurvey",
+        },
+      });
+      return;
+    }
+    navigate(-1);
+  }, [lead, navigate, onClose, submittedVisit]);
+
+  /* ── Step metadata ── */
+  const steps = [
+    { key: 1, label: "General Info", short: "General" },
+    { key: 2, label: "GPS Location", short: "GPS" },
+    { key: 3, label: "Site Photos", short: "Photos" },
+  ];
+
+  /* ── Contact chips ── */
+  const contactItems = [
+    { icon: <Phone sx={{ fontSize: 13 }} />, text: lead?.phone || "No phone", bg: "#e8f5e9", color: "#43a047" },
+    { icon: <Email sx={{ fontSize: 13 }} />, text: lead?.email || "No email", bg: "#e3f2fd", color: "#1e88e5" },
+    { icon: <LocationOn sx={{ fontSize: 13 }} />, text: lead?.address || lead?.city || "No address", bg: "#fce4ec", color: "#e53935" },
+    { icon: <Tag sx={{ fontSize: 13 }} />, text: lead?.pincode || "No pincode", bg: "#f3e5f5", color: "#8e24aa" },
+    { icon: <WhatsApp sx={{ fontSize: 13 }} />, text: "WhatsApp", bg: "#e8f5e9", color: "#25d366" },
+  ];
+
+  /* ─────────────────────────────────────────────
+     RENDER
+  ───────────────────────────────────────────── */
+  return (
+    <Box sx={{ minHeight: "100vh", bgcolor: SURFACE_ALT, color: TEXT, pb: 11 }}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleFileChange}
+        style={{ display: "none" }}
+      />
+
+      {/* ── TOP NAVBAR ── */}
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 0,
+          borderBottom: `1px solid ${BORDER}`,
+          px: { xs: 2, md: 3 },
+          py: 1.25,
+          position: "sticky",
+          top: 0,
+          zIndex: 30,
+          bgcolor: SURFACE,
+        }}
+      >
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            {/* Avatar */}
+            <Box
+              sx={{
+                width: 38,
+                height: 38,
+                borderRadius: 2,
+                background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_DARK} 100%)`,
+                color: "#fff",
+                display: "grid",
+                placeItems: "center",
+                fontSize: "0.78rem",
+                fontWeight: 800,
+                letterSpacing: "0.03em",
+                flexShrink: 0,
+              }}
+            >
+              {avatarLabel}
+            </Box>
+            <Box>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography sx={{ fontSize: "0.94rem", fontWeight: 700, color: TEXT }}>
+                  Site Survey
+                </Typography>
+                <Box
+                  sx={{
+                    px: 1,
+                    py: 0.2,
+                    borderRadius: 999,
+                    bgcolor: "#fff4ef",
+                    border: `1px solid #fdd8b4`,
+                    color: PRIMARY,
+                    fontSize: "0.65rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  EDITING
+                </Box>
+              </Stack>
+              <Typography sx={{ fontSize: "0.76rem", color: TEXT_MUTED, mt: 0.1 }}>
+                {leadName}
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<ArrowBack sx={{ fontSize: 13 }} />}
+            onClick={() => (onClose ? onClose() : navigate(-1))}
+            sx={{
+              borderRadius: 2,
+              px: 1.75,
+              py: 0.6,
+              borderColor: BORDER,
+              color: TEXT_SUB,
+              fontWeight: 600,
+              textTransform: "none",
+              fontSize: "0.8rem",
+              "&:hover": { bgcolor: SURFACE_ALT, borderColor: "#d0d0d0" },
+            }}
+          >
+            Back
+          </Button>
+        </Stack>
       </Paper>
 
-      <Box sx={{ px: isMobile ? 2 : 3, maxWidth: 1200, mx: 'auto' }}>
-
-        {/* Punch-in banner */}
-        {punchInAddress && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 3, px: 2, py: 1.25, mb: 2.5 }}>
-            <Box sx={{ width: 9, height: 9, borderRadius: '50%', bgcolor: '#22c55e', flexShrink: 0, animation: 'gp 1.5s ease-in-out infinite', '@keyframes gp': { '0%,100%': { opacity: 1, transform: 'scale(1)' }, '50%': { opacity: 0.4, transform: 'scale(0.75)' } } }} />
-            <LocationOn sx={{ fontSize: 15, color: '#16a34a', flexShrink: 0 }} />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: '#14532d', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{punchInAddress}</Typography>
-              {punchInTime && <Typography sx={{ fontSize: '0.68rem', color: '#16a34a', mt: 0.15 }}>On duty since {new Date(punchInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Typography>}
-            </Box>
-            <Chip label="On Duty" size="small" sx={{ height: 22, fontSize: '0.65rem', fontWeight: 800, bgcolor: 'transparent', border: '1px solid #86efac', color: '#16a34a', flexShrink: 0 }} />
-          </Box>
-        )}
-
-        {/* ✅ Distance preview banner — shows live A→B distance while user fills form */}
-{prevLocation && location && (
-  <Box sx={{ display:'flex', alignItems:'center', gap:1.5, bgcolor:alpha(PRIMARY,0.06), border:`1px solid ${alpha(PRIMARY,0.2)}`, borderRadius:3, px:2, py:1.25, mb:2.5 }}>
-    <Route sx={{ fontSize:16, color:PRIMARY, flexShrink:0 }} />
-    <Box sx={{ flex:1, minWidth:0 }}>
-      <Typography sx={{ fontSize:'0.78rem', fontWeight:700, color:PRIMARY }}>
-        Road distance from {prevLocation.label}
-      </Typography>
-      <Typography sx={{ fontSize:'0.68rem', color:PRIMARY, opacity:0.8, mt:0.15 }}>
-        Via road · driving route
-      </Typography>
-    </Box>
-    {roadDistanceLoading ? (
-      <CircularProgress size={16} sx={{ color:PRIMARY }} />
-    ) : roadDistanceKm !== null ? (
-      <Chip
-        label={`${roadDistanceKm.toFixed(2)} km`}
-        size="small"
-        sx={{ height:24, fontSize:'0.72rem', fontWeight:800, bgcolor:PRIMARY, color:'#fff', flexShrink:0 }}
-      />
-    ) : null}
-  </Box>
-)}
-        <Grid container spacing={isMobile ? 2 : 3}>
-
-          {/* Left column */}
-          <Grid item xs={12} md={6}>
-            <Stack spacing={2}>
-
-              {/* Camera */}
-              <FormSection>
-                <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, color: PRIMARY, mb: 2 }}>
-                  <CameraAlt /> Site Photo
-                  <Chip label="Required" size="small" color={imageFile ? 'success' : 'error'} sx={{ ml: 'auto', height: 24 }} />
-                </Typography>
-                <AnimatePresence mode="wait">
-                  {preview ? (
-                    <motion.div key="preview" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-                      <ImagePreview>
-                        <img src={preview} alt="Preview" onClick={() => setFullscreenImage(true)} />
-                        <Box className="overlay">
-                          <Button size="small" variant="contained" startIcon={<Fullscreen />} onClick={() => setFullscreenImage(true)} sx={{ bgcolor: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(5px)' }}>View</Button>
-                          <IconButton onClick={handleRemovePhoto} sx={{ bgcolor: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(5px)' }}><Delete /></IconButton>
-                        </Box>
-                      </ImagePreview>
-                    </motion.div>
-                  ) : (
-                    <motion.div key="upload" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-                      <UploadArea onClick={() => cameraInputRef.current?.click()} role="button" tabIndex={0}>
-                        <CameraAlt sx={{ fontSize: isMobile ? 40 : 48, color: alpha(PRIMARY, 0.5), mb: 2 }} />
-                        <Typography variant={isMobile ? 'body1' : 'h6'} fontWeight={600} color={PRIMARY}>Tap to open camera</Typography>
-                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>Take a photo of the site · Max 10 MB</Typography>
-                        <Button variant="contained" size={isMobile ? 'small' : 'medium'} startIcon={<PhotoCamera />}
-                          onClick={(e) => { e.stopPropagation(); cameraInputRef.current?.click(); }}
-                          sx={{ mt: 2, borderRadius: 2, bgcolor: PRIMARY, '&:hover': { bgcolor: SECONDARY } }}>Open Camera</Button>
-                      </UploadArea>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                {validationErrors.photo && <FormHelperText error sx={{ mt: 1 }}>{validationErrors.photo}</FormHelperText>}
-              </FormSection>
-
-              {/* Location name */}
-              <FormSection>
-                <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, color: PRIMARY, mb: 2 }}><Business /> Location Details</Typography>
-                <TextField fullWidth label="Location / Business Name *" placeholder="e.g., Client Office, Store Name"
-                  value={formData.locationName} onChange={handleChange('locationName')}
-                  error={!!validationErrors.locationName} helperText={validationErrors.locationName}
-                  disabled={loading} size={isMobile ? 'small' : 'medium'}
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start">
-                      {geocoding ? <CircularProgress size={16} sx={{ color: PRIMARY }} /> : <LocationOn sx={{ color: alpha(PRIMARY, 0.5) }} />}
-                    </InputAdornment>,
-                    endAdornment: geocoding
-                      ? <InputAdornment position="end"><Typography variant="caption" color="text.secondary">detecting…</Typography></InputAdornment>
-                      : null,
-                  }} />
-              </FormSection>
+      {/* ── CONTACT STRIP ── */}
+      <Box
+        sx={{
+          borderBottom: `1px solid ${BORDER}`,
+          px: { xs: 2, md: 3 },
+          py: 1,
+          bgcolor: SURFACE,
+          overflowX: "auto",
+        }}
+      >
+        <Stack direction="row" spacing={1.5} useFlexGap flexWrap="nowrap" sx={{ minWidth: "max-content" }}>
+          {contactItems.map((item) => (
+            <Stack key={item.text} direction="row" spacing={0.6} alignItems="center">
+              <Box
+                sx={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  bgcolor: item.bg,
+                  color: item.color,
+                  display: "grid",
+                  placeItems: "center",
+                  flexShrink: 0,
+                }}
+              >
+                {item.icon}
+              </Box>
+              <Typography sx={{ fontSize: "0.77rem", color: TEXT_SUB, whiteSpace: "nowrap" }}>
+                {item.text}
+              </Typography>
             </Stack>
-          </Grid>
-
-          {/* Right column */}
-          <Grid item xs={12} md={6}>
-            <Stack spacing={2}>
-
-              {/* Lead toggle */}
-              <FormSection>
-                <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, color: PRIMARY, mb: 2 }}>
-                  <PersonAdd /> New Lead Created?
-                </Typography>
-                <FormControl component="fieldset" fullWidth>
-                  <RadioGroup row value={isLeadCreated} onChange={handleLeadToggle}
-                    sx={{ justifyContent: 'space-around', bgcolor: alpha(PRIMARY, 0.05), borderRadius: 2, p: 1 }}>
-                    <FormControlLabel value="yes"   control={<Radio sx={{ color: PRIMARY }} />} label="Yes"   />
-                    <FormControlLabel value="no"    control={<Radio sx={{ color: PRIMARY }} />} label="No"    />
-                    <FormControlLabel value="other" control={<Radio sx={{ color: PRIMARY }} />} label="Other (Save Description Only)" />
-                  </RadioGroup>
-                </FormControl>
-              </FormSection>
-
-              {/* Contact Information */}
-              {isLeadCreated !== 'other' && (
-                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-                  <FormSection>
-                    <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, color: PRIMARY, mb: 2 }}>
-                      <Person /> Contact Information
-                      {isLeadCreated === 'yes' && <Chip label="Lead Created" size="small" color="success" sx={{ ml: 'auto', height: 24 }} />}
-                    </Typography>
-                    <Stack spacing={2}>
-                      <Box sx={{ position: 'relative' }}>
-                        <TextField
-                          fullWidth
-                          label={isLeadCreated === 'yes' ? 'Contact Person *' : 'Contact Person'}
-                          placeholder="Enter contact name"
-                          value={formData.contactPerson}
-                          onChange={(e) => {
-                            handleChange('contactPerson')(e);
-                            if (isLeadCreated === 'no') searchLeads(e.target.value);
-                          }}
-                          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                          onFocus={() => { if (isLeadCreated === 'no' && formData.contactPerson && suggestions.length > 0) setShowSuggestions(true); }}
-                          error={!!validationErrors.contactPerson}
-                          helperText={validationErrors.contactPerson}
-                          disabled={loading}
-                          size={isMobile ? 'small' : 'medium'}
-                          InputProps={{
-                            startAdornment: <InputAdornment position="start"><Person sx={{ color: alpha(PRIMARY, 0.5) }} /></InputAdornment>,
-                            endAdornment: searchingLeads && isLeadCreated === 'no'
-                              ? <InputAdornment position="end"><CircularProgress size={16} sx={{ color: PRIMARY }} /></InputAdornment>
-                              : null,
-                          }}
-                        />
-                        {isLeadCreated === 'no' && showSuggestions && suggestions.length > 0 && (
-                          <Paper elevation={8} sx={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999, borderRadius: 2, overflow: 'hidden', border: `1px solid ${alpha(PRIMARY, 0.2)}`, mt: 0.5 }}>
-                            {suggestions.map((lead, index) => (
-                              <Box key={lead._id} onMouseDown={() => handleSelectSuggestion(lead)}
-                                sx={{ px: 2, py: 1.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 1.5,
-                                  borderBottom: index < suggestions.length - 1 ? `1px solid ${alpha(PRIMARY, 0.08)}` : 'none',
-                                  '&:hover': { bgcolor: alpha(PRIMARY, 0.06) }, transition: 'background 0.15s' }}>
-                                <Box sx={{ width: 36, height: 36, borderRadius: '50%', bgcolor: alpha(PRIMARY, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  <Typography variant="caption" fontWeight={700} color={PRIMARY}>{lead.firstName?.[0]}{lead.lastName?.[0]}</Typography>
-                                </Box>
-                                <Box sx={{ flex: 1, minWidth: 0 }}>
-                                  <Typography variant="body2" fontWeight={700} noWrap>{lead.firstName} {lead.lastName}</Typography>
-                                  <Stack direction="row" spacing={1} alignItems="center">
-                                    {lead.phone && <Typography variant="caption" color="text.secondary" noWrap>📞 {lead.phone}</Typography>}
-                                    {lead.email && <Typography variant="caption" color="text.secondary" noWrap>✉ {lead.email}</Typography>}
-                                  </Stack>
-                                </Box>
-                                {lead.status && <Chip label={lead.status} size="small" sx={{ height: 20, fontSize: '0.6rem', fontWeight: 700, bgcolor: alpha(PRIMARY, 0.1), color: PRIMARY, flexShrink: 0 }} />}
-                              </Box>
-                            ))}
-                          </Paper>
-                        )}
-                      </Box>
-
-                      <TextField fullWidth label="Phone Number" placeholder="Enter phone number"
-                        value={formData.phone} onChange={handleChange('phone')}
-                        error={!!validationErrors.phone} helperText={validationErrors.phone}
-                        disabled={loading} size={isMobile ? 'small' : 'medium'}
-                        InputProps={{ startAdornment: <InputAdornment position="start"><Phone sx={{ color: alpha(PRIMARY, 0.5) }} /></InputAdornment> }} />
-
-                      <TextField fullWidth label="Email Address" placeholder="Enter email" type="email"
-                        value={formData.email} onChange={handleChange('email')}
-                        error={!!validationErrors.email} helperText={validationErrors.email}
-                        disabled={loading} size={isMobile ? 'small' : 'medium'}
-                        InputProps={{ startAdornment: <InputAdornment position="start"><Email sx={{ color: alpha(PRIMARY, 0.5) }} /></InputAdornment> }} />
-                    </Stack>
-                  </FormSection>
-                </motion.div>
-              )}
-
-              {/* MAP */}
-              <FormSection sx={{ padding: '0 !important' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, px: 2.5, pt: 2.5, pb: 1.5 }}>
-                  <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, color: PRIMARY }}><GpsFixed /> Your Location</Typography>
-                  <Button size="small" startIcon={locationLoading ? <CircularProgress size={14} /> : <Refresh />}
-                    onClick={() => getCurrentLocation()} disabled={locationLoading}
-                    sx={{ color: PRIMARY, width: isMobile ? '100%' : 'auto' }}>
-                    {locationLoading ? 'Locating…' : 'Refresh'}
-                  </Button>
-                </Box>
-                <Box sx={{ height: 280, position: 'relative' }}>
-                  {locationLoading && !location && (
-                    <Box sx={{ position: 'absolute', inset: 0, zIndex: 1000, bgcolor: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                      <CircularProgress size={36} sx={{ color: PRIMARY }} />
-                      <Typography variant="caption" color="text.secondary">
-                        {locationAttempts > 0 ? `Attempt ${locationAttempts}/3…` : 'Getting your location…'}
-                      </Typography>
-                      {locationAttempts > 0 && <LinearProgress sx={{ width: 120, borderRadius: 2 }} variant="determinate" value={Math.min(locationAttempts * 33, 99)} />}
-                    </Box>
-                  )}
-                  {!locationLoading && !location && (
-                    <Box sx={{ position: 'absolute', inset: 0, zIndex: 1000, bgcolor: 'rgba(255,255,255,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, p: 2 }}>
-                      <GpsOff sx={{ fontSize: 40, color: ERROR_COL }} />
-                      <Typography color="error" textAlign="center" variant="body2">{error || 'Failed to get location'}</Typography>
-                      <Button variant="contained" size="small" onClick={() => getCurrentLocation()} sx={{ mt: 1, borderRadius: 2, bgcolor: PRIMARY }}>Retry</Button>
-                    </Box>
-                  )}
-                  {googleMapLoadError ? (
-                    <Box sx={{ position: 'absolute', inset: 0, zIndex: 1000, bgcolor: 'rgba(255,255,255,0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, p: 2 }}>
-                      <GpsOff sx={{ fontSize: 40, color: ERROR_COL }} />
-                      <Typography color="error" textAlign="center" variant="body2">Failed to load Google Map</Typography>
-                    </Box>
-                  ) : !isGoogleMapLoaded ? (
-                    <Box sx={{ position: 'absolute', inset: 0, zIndex: 1000, bgcolor: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                      <CircularProgress size={36} sx={{ color: PRIMARY }} />
-                      <Typography variant="caption" color="text.secondary">Loading map...</Typography>
-                    </Box>
-                  ) : (
-                    <GoogleMap
-                      mapContainerStyle={{ height: '100%', width: '100%' }}
-                      center={location ? { lat: location.lat, lng: location.lng } : { lat: mapCenter[0], lng: mapCenter[1] }}
-                      zoom={location ? 17 : 13}
-                      options={{
-                        streetViewControl: false,
-                        mapTypeControl: true,
-                        fullscreenControl: false,
-                        clickableIcons: false,
-                        gestureHandling: 'cooperative',
-                      }}
-                    >
-                      {location && (
-                        <MarkerF
-                          position={{ lat: location.lat, lng: location.lng }}
-                          title={`You are here${location.accuracy ? ` | Accuracy +/-${location.accuracy.toFixed(0)} m` : ''}`}
-                        />
-                      )}
-                    </GoogleMap>
-                  )}
-                </Box>
-                <Box sx={{ px: 2.5, pt: 1.5, pb: 2 }}>
-                  {location && (
-                    <Box sx={{ px: 2, py: 1, bgcolor: alpha(PRIMARY, 0.04), borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <CheckCircle sx={{ fontSize: 16, color: SUCCESS }} />
-                        <Typography variant="caption" fontFamily="monospace" fontWeight={600} color="text.primary">
-                          {location.lat.toFixed(5)}°, {location.lng.toFixed(5)}°
-                        </Typography>
-                      </Box>
-                      {location.accuracy && (
-                        <Chip size="small" label={`±${location.accuracy.toFixed(0)} m`}
-                          sx={{ height: 22, fontSize: '0.65rem', fontWeight: 700,
-                            bgcolor: location.accuracy <= 20 ? alpha(SUCCESS, 0.12) : location.accuracy <= 50 ? alpha(WARNING, 0.12) : alpha(ERROR_COL, 0.12),
-                            color:  location.accuracy <= 20 ? SUCCESS : location.accuracy <= 50 ? WARNING : ERROR_COL }} />
-                      )}
-                    </Box>
-                  )}
-                  {validationErrors.location && <FormHelperText error sx={{ mt: 1 }}>{validationErrors.location}</FormHelperText>}
-                </Box>
-              </FormSection>
-
-              {/* Remarks */}
-              <FormSection>
-                <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, color: PRIMARY, mb: 2 }}><Notes /> Visit Notes</Typography>
-                <TextField fullWidth multiline rows={isMobile ? 3 : 4} placeholder="Enter any additional notes about the visit…"
-                  label={isLeadCreated === 'other' ? 'Description *' : 'Visit Notes'}
-                  value={formData.remarks} onChange={handleChange('remarks')} disabled={loading}
-                  error={!!validationErrors.remarks} helperText={validationErrors.remarks}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'action.hover' } }} />
-              </FormSection>
-            </Stack>
-          </Grid>
-        </Grid>
-
-        {/* Error alert */}
-        <AnimatePresence>
-          {error && !locationLoading && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-              <Alert severity={error.includes('timeout') ? 'warning' : 'error'} sx={{ mt: 3, borderRadius: 2 }} onClose={() => setError(null)}
-                action={error.toLowerCase().includes('location') && <Button color="inherit" size="small" onClick={() => getCurrentLocation()}>Retry</Button>}>
-                {error}
-              </Alert>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Action buttons */}
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 4, mb: isMobile ? 2 : 0, flexDirection: isMobile ? 'column' : 'row' }}>
-          <Button fullWidth={isMobile} variant="outlined" onClick={() => onClose ? onClose() : navigate(-1)} disabled={loading}
-            sx={{ px: 4, py: 1.5, borderRadius: 2, borderColor: PRIMARY, color: PRIMARY, '&:hover': { bgcolor: alpha(PRIMARY, 0.05) }, order: isMobile ? 2 : 1 }}>Cancel</Button>
-          <Button fullWidth={isMobile} variant="contained"
-            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
-            onClick={handleSubmit} disabled={!canSubmit}
-            sx={{ px: 4, py: 1.5, borderRadius: 2, bgcolor: PRIMARY, '&:hover': { bgcolor: SECONDARY }, '&.Mui-disabled': { bgcolor: alpha(PRIMARY, 0.3) }, order: isMobile ? 1 : 2 }}>
-            {loading ? 'Creating Visit…' : 'Create Visit'}
-          </Button>
-        </Box>
+          ))}
+        </Stack>
       </Box>
 
-      <SuccessDialog open={success} visitData={createdVisit} onClose={() => { setSuccess(false); onClose?.(); }} />
+      {/* ── STEP INDICATOR ── */}
+      <Box
+        sx={{
+          borderBottom: `1px solid ${BORDER}`,
+          bgcolor: SURFACE,
+          px: { xs: 2, md: 3 },
+          py: 0,
+        }}
+      >
+        <Stack
+          direction="row"
+          sx={{ maxWidth: 520, mx: "auto", position: "relative" }}
+        >
+          {steps.map((step, i) => {
+            const done = step.key < currentStep;
+            const active = step.key === currentStep;
+            return (
+              <Box
+                key={step.key}
+                sx={{
+                  flex: 1,
+                  py: 1.5,
+                  textAlign: "center",
+                  position: "relative",
+                  borderBottom: active ? `2.5px solid ${PRIMARY}` : "2.5px solid transparent",
+                  cursor: done ? "pointer" : "default",
+                }}
+                onClick={() => {
+                  if (done) setCurrentStep(step.key);
+                }}
+              >
+                <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
+                  <Box
+                    sx={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: "50%",
+                      bgcolor: done ? PRIMARY : active ? PRIMARY_LIGHT : "#f0f0f0",
+                      border: `2px solid ${done || active ? PRIMARY : BORDER}`,
+                      color: done ? "#fff" : active ? PRIMARY : TEXT_MUTED,
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: "0.68rem",
+                      fontWeight: 800,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    {done ? <CheckCircle sx={{ fontSize: 12 }} /> : step.key}
+                  </Box>
+                  <Typography
+                    sx={{
+                      fontSize: "0.78rem",
+                      fontWeight: active ? 700 : 500,
+                      color: active ? PRIMARY : done ? TEXT_SUB : TEXT_MUTED,
+                      display: { xs: "none", sm: "block" },
+                    }}
+                  >
+                    {step.label}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontSize: "0.78rem",
+                      fontWeight: active ? 700 : 500,
+                      color: active ? PRIMARY : done ? TEXT_SUB : TEXT_MUTED,
+                      display: { xs: "block", sm: "none" },
+                    }}
+                  >
+                    {step.short}
+                  </Typography>
+                </Stack>
+              </Box>
+            );
+          })}
+        </Stack>
+      </Box>
 
-      {/* Fullscreen image */}
-      <Dialog open={fullscreenImage} onClose={() => setFullscreenImage(false)} maxWidth="lg" fullWidth fullScreen={isMobile}
-        PaperProps={{ sx: { bgcolor: 'black', borderRadius: isMobile ? 0 : 2 } }}>
-        <DialogContent sx={{ p: 0, position: 'relative', height: isMobile ? '100vh' : 'auto' }}>
-          <IconButton onClick={() => setFullscreenImage(false)} sx={{ position: 'absolute', top: 16, right: 16, bgcolor: 'rgba(255,255,255,0.2)', color: 'white', zIndex: 1 }}><Close /></IconButton>
-          <Box component="img" src={preview} alt="Full preview" sx={{ width: '100%', height: isMobile ? '100%' : 'auto', objectFit: 'contain' }} />
-        </DialogContent>
-      </Dialog>
+      {/* ── MAIN CONTENT ── */}
+      <Box sx={{ px: { xs: 1.5, sm: 2, md: 3 }, py: 2.5, maxWidth: 900, mx: "auto" }}>
+        {error && (
+          <Alert
+            severity="error"
+            onClose={() => setError("")}
+            sx={{ mb: 2, borderRadius: 2, fontSize: "0.83rem" }}
+          >
+            {error}
+          </Alert>
+        )}
 
-      {/* Bottom nav */}
-      {isMobile && (
-        <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1000, borderRadius: 0 }} elevation={3}>
-          <BottomNavigation showLabels value={bottomNav} onChange={(_, v) => setBottomNav(v)}
-            sx={{ height: 64, '& .MuiBottomNavigationAction-root': { color: 'text.secondary', '&.Mui-selected': { color: PRIMARY } } }}>
-            <BottomNavigationAction label="Dashboard" icon={<Dashboard />} onClick={() => navigate('/dashboard')} />
-            <BottomNavigationAction label="Visits"    icon={<History />}   onClick={() => navigate('/total-visits')} />
-            <BottomNavigationAction label="New Visit" icon={<AddAPhoto />} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} />
-          </BottomNavigation>
-        </Paper>
-      )}
+        {/* ════ STEP 1: General Info ════ */}
+        {currentStep === 1 && (
+          <>
+            {/* Roof Details */}
+            <SectionCard
+              icon={<HomeWorkOutlined sx={{ fontSize: 16 }} />}
+              title="Roof Details"
+            >
+              <Grid container spacing={2.5}>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Roof Type</FieldLabel>
+                  <TextField
+                    select
+                    SelectProps={{ native: true }}
+                    value={surveyData.roofType}
+                    onChange={(e) => updateField("roofType", e.target.value)}
+                    fullWidth
+                    size="small"
+                    error={Boolean(validationErrors.roofType)}
+                    helperText={validationErrors.roofType}
+                  >
+                    <option value="">Select roof type</option>
+                    {ROOF_TYPES.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Roof Material</FieldLabel>
+                  <TextField
+                    select
+                    SelectProps={{ native: true }}
+                    value={surveyData.roofMaterial}
+                    onChange={(e) => updateField("roofMaterial", e.target.value)}
+                    fullWidth
+                    size="small"
+                    error={Boolean(validationErrors.roofMaterial)}
+                    helperText={validationErrors.roofMaterial}
+                  >
+                    <option value="">Select material</option>
+                    {ROOF_MATERIALS.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </TextField>
+                </Grid>
 
-      {/* FAB */}
-      {isMobile && (
-        <Zoom in>
-          <Fab color="primary" onClick={() => getCurrentLocation()} disabled={locationLoading}
-            sx={{ position: 'fixed', bottom: 80, right: 16, zIndex: 1000, bgcolor: PRIMARY, '&:hover': { bgcolor: SECONDARY }, boxShadow: `0 4px 12px ${alpha(PRIMARY, 0.3)}` }}>
-            <Badge variant="dot" color={location ? 'success' : 'error'} overlap="circular"><MyLocation /></Badge>
-          </Fab>
-        </Zoom>
-      )}
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Roof Condition</FieldLabel>
+                  <PillGroup
+                    options={ROOF_CONDITIONS}
+                    value={surveyData.roofCondition}
+                    onChange={(v) => updateField("roofCondition", v)}
+                  />
+                  {validationErrors.roofCondition && (
+                    <FormHelperText error sx={{ mt: 0.5 }}>
+                      {validationErrors.roofCondition}
+                    </FormHelperText>
+                  )}
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel>Shading Issues</FieldLabel>
+                  <CheckPillGroup
+                    options={SHADING_OPTIONS}
+                    value={surveyData.shadingIssues}
+                    onChange={(v) => toggleCheckboxValue("shadingIssues", v)}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Available Roof Area (sq ft)</FieldLabel>
+                  <TextField
+                    type="number"
+                    value={surveyData.availableRoofArea}
+                    onChange={(e) => updateField("availableRoofArea", e.target.value)}
+                    fullWidth
+                    size="small"
+                    error={Boolean(validationErrors.availableRoofArea)}
+                    helperText={validationErrors.availableRoofArea}
+                    placeholder="e.g. 800"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Usable Roof Area (sq ft)</FieldLabel>
+                  <TextField
+                    type="number"
+                    value={surveyData.usableRoofArea}
+                    onChange={(e) => updateField("usableRoofArea", e.target.value)}
+                    fullWidth
+                    size="small"
+                    error={Boolean(validationErrors.usableRoofArea)}
+                    helperText={validationErrors.usableRoofArea}
+                    placeholder="e.g. 600"
+                  />
+                </Grid>
+              </Grid>
+            </SectionCard>
+
+            {/* Electrical Details */}
+            <SectionCard
+              icon={
+                <Box sx={{ fontSize: 16, lineHeight: 1 }}>⚡</Box>
+              }
+              title="Electrical Details"
+            >
+              <Grid container spacing={2.5}>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Site Access</FieldLabel>
+                  <PillGroup
+                    options={SITE_ACCESS_OPTIONS}
+                    value={surveyData.siteAccess}
+                    onChange={(v) => updateField("siteAccess", v)}
+                  />
+                  {validationErrors.siteAccess && (
+                    <FormHelperText error sx={{ mt: 0.5 }}>
+                      {validationErrors.siteAccess}
+                    </FormHelperText>
+                  )}
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Existing Electrical Load (kW)</FieldLabel>
+                  <TextField
+                    type="number"
+                    value={surveyData.existingElectricalLoad}
+                    onChange={(e) => updateField("existingElectricalLoad", e.target.value)}
+                    fullWidth
+                    size="small"
+                    error={Boolean(validationErrors.existingElectricalLoad)}
+                    helperText={validationErrors.existingElectricalLoad}
+                    placeholder="e.g. 5"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Main Distribution Board Location</FieldLabel>
+                  <TextField
+                    value={surveyData.mainDistributionBoardLocation}
+                    onChange={(e) => updateField("mainDistributionBoardLocation", e.target.value)}
+                    fullWidth
+                    size="small"
+                    error={Boolean(validationErrors.mainDistributionBoardLocation)}
+                    helperText={validationErrors.mainDistributionBoardLocation}
+                    placeholder="e.g. Ground floor utility room"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel>Distance from Roof to DB (meters)</FieldLabel>
+                  <TextField
+                    type="number"
+                    value={surveyData.distanceFromRoofToDb}
+                    onChange={(e) => updateField("distanceFromRoofToDb", e.target.value)}
+                    fullWidth
+                    size="small"
+                    placeholder="e.g. 15"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Earthing Available</FieldLabel>
+                  <PillGroup
+                    options={EARTHING_OPTIONS}
+                    value={surveyData.earthingAvailable}
+                    onChange={(v) => updateField("earthingAvailable", v)}
+                  />
+                  {validationErrors.earthingAvailable && (
+                    <FormHelperText error sx={{ mt: 0.5 }}>
+                      {validationErrors.earthingAvailable}
+                    </FormHelperText>
+                  )}
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Phase Type</FieldLabel>
+                  <PillGroup
+                    options={PHASE_OPTIONS}
+                    value={surveyData.phaseType}
+                    onChange={(v) => updateField("phaseType", v)}
+                  />
+                  {validationErrors.phaseType && (
+                    <FormHelperText error sx={{ mt: 0.5 }}>
+                      {validationErrors.phaseType}
+                    </FormHelperText>
+                  )}
+                </Grid>
+              </Grid>
+            </SectionCard>
+
+            {/* Equipment Recommendations */}
+            <SectionCard
+              icon={<Box sx={{ fontSize: 16 }}>🔧</Box>}
+              title="Equipment Recommendations"
+            >
+              <Grid container spacing={2.5}>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Panel Brand</FieldLabel>
+                  <TextField
+                    select
+                    SelectProps={{ native: true }}
+                    value={surveyData.recommendedPanelBrand}
+                    onChange={(e) => updateField("recommendedPanelBrand", e.target.value)}
+                    fullWidth
+                    size="small"
+                    error={Boolean(validationErrors.recommendedPanelBrand)}
+                    helperText={validationErrors.recommendedPanelBrand}
+                  >
+                    <option value="">Select panel brand</option>
+                    {PANEL_BRANDS.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel required>Inverter Brand</FieldLabel>
+                  <TextField
+                    select
+                    SelectProps={{ native: true }}
+                    value={surveyData.recommendedInverterBrand}
+                    onChange={(e) => updateField("recommendedInverterBrand", e.target.value)}
+                    fullWidth
+                    size="small"
+                    error={Boolean(validationErrors.recommendedInverterBrand)}
+                    helperText={validationErrors.recommendedInverterBrand}
+                  >
+                    <option value="">Select inverter brand</option>
+                    {INVERTER_BRANDS.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12}>
+                  <FieldLabel>Inverter Type</FieldLabel>
+                  <PillGroup
+                    options={INVERTER_TYPES}
+                    value={surveyData.inverterType}
+                    onChange={(v) => updateField("inverterType", v)}
+                  />
+                </Grid>
+              </Grid>
+            </SectionCard>
+
+            {/* Notes */}
+            <SectionCard
+              icon={<Box sx={{ fontSize: 16 }}>📋</Box>}
+              title="Notes & Requirements"
+            >
+              <Grid container spacing={2.5}>
+                <Grid item xs={12}>
+                  <FieldLabel>Customer Expectations</FieldLabel>
+                  <TextField
+                    value={surveyData.customerExpectations}
+                    onChange={(e) => updateField("customerExpectations", e.target.value)}
+                    multiline
+                    minRows={3}
+                    fullWidth
+                    size="small"
+                    placeholder="What does the customer expect from this installation?"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel>Special Requirements</FieldLabel>
+                  <TextField
+                    value={surveyData.specialRequirements}
+                    onChange={(e) => updateField("specialRequirements", e.target.value)}
+                    multiline
+                    minRows={3}
+                    fullWidth
+                    size="small"
+                    placeholder="Any special needs or requests..."
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FieldLabel>Challenges / Concerns</FieldLabel>
+                  <TextField
+                    value={surveyData.challengesConcerns}
+                    onChange={(e) => updateField("challengesConcerns", e.target.value)}
+                    multiline
+                    minRows={3}
+                    fullWidth
+                    size="small"
+                    placeholder="Potential issues or concerns..."
+                  />
+                </Grid>
+              </Grid>
+            </SectionCard>
+          </>
+        )}
+
+        {/* ════ STEP 2: GPS Location ════ */}
+        {currentStep === 2 && (
+          <SectionCard
+            icon={<LocationOn sx={{ fontSize: 16 }} />}
+            title="GPS Location"
+          >
+            {/* Search bar */}
+            <Grid container spacing={1.5} alignItems="flex-start" sx={{ mb: 2 }}>
+              <Grid item xs={12} sm>
+                {isGoogleMapLoaded ? (
+                  <Autocomplete
+                    onLoad={handleAutocompleteLoad}
+                    onPlaceChanged={handlePlaceChanged}
+                  >
+                    <TextField
+                      label="Search address or location"
+                      value={locationSearch}
+                      onChange={(e) => setLocationSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          searchLocationOnMap();
+                        }
+                      }}
+                      fullWidth
+                      size="small"
+                      placeholder="Search by house name, street, or area"
+                    />
+                  </Autocomplete>
+                ) : (
+                  <TextField
+                    label="Search address or location"
+                    value={locationSearch}
+                    onChange={(e) => setLocationSearch(e.target.value)}
+                    fullWidth
+                    size="small"
+                  />
+                )}
+              </Grid>
+              <Grid item xs={12} sm="auto">
+                <Button
+                  variant="contained"
+                  disableElevation
+                  startIcon={
+                    searchingAddress ? (
+                      <CircularProgress size={14} color="inherit" />
+                    ) : (
+                      <Search sx={{ fontSize: 16 }} />
+                    )
+                  }
+                  onClick={searchLocationOnMap}
+                  disabled={!locationSearch.trim() || searchingAddress || !isGoogleMapLoaded}
+                  sx={{
+                    height: 40,
+                    minWidth: { xs: "100%", sm: 120 },
+                    borderRadius: 2,
+                    bgcolor: PRIMARY,
+                    fontWeight: 700,
+                    textTransform: "none",
+                    fontSize: "0.82rem",
+                    "&:hover": { bgcolor: PRIMARY_DARK },
+                  }}
+                >
+                  {searchingAddress ? "Searching…" : "Search"}
+                </Button>
+              </Grid>
+            </Grid>
+
+            {/* Map */}
+            <Box
+              sx={{
+                width: "100%",
+                height: 280,
+                borderRadius: 2.5,
+                overflow: "hidden",
+                border: `1.5px solid ${BORDER}`,
+                mb: 1.25,
+              }}
+            >
+              {googleMapLoadError ? (
+                <Box
+                  sx={{
+                    height: "100%",
+                    display: "grid",
+                    placeItems: "center",
+                    bgcolor: "#fff8f7",
+                    color: ERROR_COLOR,
+                    textAlign: "center",
+                    px: 2,
+                  }}
+                >
+                  <Typography sx={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                    Google Map could not be loaded.
+                  </Typography>
+                </Box>
+              ) : !isGoogleMapLoaded ? (
+                <Box
+                  sx={{
+                    height: "100%",
+                    display: "grid",
+                    placeItems: "center",
+                    bgcolor: "#fffaf7",
+                  }}
+                >
+                  <Stack spacing={1.25} alignItems="center">
+                    <CircularProgress size={22} sx={{ color: PRIMARY }} />
+                    <Typography sx={{ fontSize: "0.8rem", color: TEXT_SUB }}>
+                      Loading map…
+                    </Typography>
+                  </Stack>
+                </Box>
+              ) : (
+                <GoogleMap
+                  mapContainerStyle={GOOGLE_MAP_CONTAINER_STYLE}
+                  center={mapCenter}
+                  zoom={surveyData.latitude ? 16 : 5}
+                  onClick={(e) => {
+                    const lat = e.latLng?.lat();
+                    const lng = e.latLng?.lng();
+                    if (typeof lat === "number" && typeof lng === "number") handleMapPick(lat, lng);
+                  }}
+                  options={{
+                    mapTypeControl: true,
+                    streetViewControl: false,
+                    fullscreenControl: true,
+                    gestureHandling: "greedy",
+                  }}
+                >
+                  <MarkerF
+                    position={markerPosition}
+                    animation={surveyMarkerAnimation}
+                    draggable
+                    zIndex={1000}
+                    onDragEnd={(e) => {
+                      const lat = e.latLng?.lat();
+                      const lng = e.latLng?.lng();
+                      if (typeof lat === "number" && typeof lng === "number")
+                        handleMapPick(lat, lng);
+                    }}
+                  />
+                </GoogleMap>
+              )}
+            </Box>
+
+            <Typography sx={{ fontSize: "0.74rem", color: TEXT_MUTED, mb: 2 }}>
+              Tap the map or drag the red pin to point the exact house location.
+            </Typography>
+
+            {/* GPS button */}
+            <Button
+              variant="outlined"
+              startIcon={
+                locationLoading ? (
+                  <CircularProgress size={14} sx={{ color: PRIMARY }} />
+                ) : (
+                  <MyLocation sx={{ fontSize: 16 }} />
+                )
+              }
+              onClick={() => getCurrentLocation()}
+              sx={{
+                borderRadius: 2,
+                px: 2,
+                py: 0.85,
+                borderColor: PRIMARY,
+                color: PRIMARY,
+                fontWeight: 700,
+                textTransform: "none",
+                fontSize: "0.82rem",
+                mb: 2.5,
+                "&:hover": { borderColor: PRIMARY, bgcolor: PRIMARY_LIGHT },
+              }}
+            >
+              {locationLoading
+                ? `Getting GPS${locationAttempts ? ` (${locationAttempts + 1}/3)` : ""}…`
+                : "Use My Current Location"}
+            </Button>
+
+            {/* Coordinate fields */}
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <FieldLabel>Latitude</FieldLabel>
+                <TextField
+                  value={surveyData.latitude}
+                  onChange={(e) => updateField("latitude", e.target.value)}
+                  fullWidth
+                  size="small"
+                  placeholder="e.g. 20.593684"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FieldLabel>Longitude</FieldLabel>
+                <TextField
+                  value={surveyData.longitude}
+                  onChange={(e) => updateField("longitude", e.target.value)}
+                  fullWidth
+                  size="small"
+                  placeholder="e.g. 78.962880"
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <FieldLabel required>Location Name</FieldLabel>
+                <TextField
+                  value={surveyData.locationName}
+                  onChange={(e) => updateField("locationName", e.target.value)}
+                  fullWidth
+                  size="small"
+                  error={Boolean(validationErrors.locationName)}
+                  helperText={validationErrors.locationName}
+                  placeholder="Descriptive name for this site"
+                />
+              </Grid>
+            </Grid>
+            {validationErrors.coordinates && (
+              <FormHelperText error sx={{ mt: 1 }}>
+                {validationErrors.coordinates}
+              </FormHelperText>
+            )}
+          </SectionCard>
+        )}
+
+        {/* ════ STEP 3: Photos ════ */}
+        {currentStep === 3 && (
+          <SectionCard
+            icon={<CameraAlt sx={{ fontSize: 16 }} />}
+            title="Site Photos"
+          >
+            {/* Drop zone */}
+            <Box
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                addFiles(e.dataTransfer.files);
+              }}
+              sx={{
+                border: `2px dashed ${validationErrors.photos ? ERROR_COLOR : "#d4d4d4"}`,
+                borderRadius: 2.5,
+                px: 2,
+                py: 5,
+                textAlign: "center",
+                cursor: "pointer",
+                bgcolor: "#fafafa",
+                transition: "all 0.18s",
+                "&:hover": {
+                  borderColor: PRIMARY,
+                  bgcolor: PRIMARY_LIGHT,
+                },
+              }}
+            >
+              <CloudUploadOutlined
+                sx={{ fontSize: 36, color: alpha(PRIMARY, 0.65), mb: 1 }}
+              />
+              <Typography sx={{ fontSize: "0.88rem", color: TEXT_SUB, fontWeight: 500 }}>
+                Drag & drop photos, or{" "}
+                <Box component="span" sx={{ color: PRIMARY, fontWeight: 700 }}>
+                  browse
+                </Box>
+              </Typography>
+              <Typography sx={{ fontSize: "0.7rem", color: TEXT_MUTED, mt: 0.5 }}>
+                JPG, PNG, WEBP · Max 10 MB each
+              </Typography>
+            </Box>
+
+            {validationErrors.photos && (
+              <FormHelperText error sx={{ mt: 1 }}>
+                {validationErrors.photos}
+              </FormHelperText>
+            )}
+
+            {/* Thumbnails */}
+            {photos.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                  <Typography sx={{ fontSize: "0.78rem", fontWeight: 600, color: TEXT_SUB }}>
+                    {photos.length} photo{photos.length !== 1 ? "s" : ""} selected
+                  </Typography>
+                </Stack>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.25 }}>
+                  {photos.filter((photo) => photo?.id && photo?.preview).map((photo) => (
+                    <UploadPreview key={photo.id} photo={photo} onRemove={removePhoto} />
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {/* Remarks */}
+            <Box sx={{ mt: 3 }}>
+              <FieldLabel>Additional Notes</FieldLabel>
+              <TextField
+                value={surveyData.remarks}
+                onChange={(e) => updateField("remarks", e.target.value)}
+                multiline
+                minRows={4}
+                fullWidth
+                size="small"
+                placeholder="Any extra observations or notes about the site..."
+              />
+            </Box>
+          </SectionCard>
+        )}
+      </Box>
+
+      {/* ── BOTTOM ACTION BAR ── */}
+      <Paper
+        elevation={0}
+        sx={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderTop: `1px solid ${BORDER}`,
+          px: { xs: 2, md: 3 },
+          py: 1.5,
+          zIndex: 30,
+          bgcolor: SURFACE,
+        }}
+      >
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          sx={{ maxWidth: 900, mx: "auto" }}
+        >
+          {/* Left: Back / Cancel */}
+          {currentStep === 1 ? (
+            <Button
+              variant="outlined"
+              onClick={() => (onClose ? onClose() : navigate(-1))}
+              sx={{
+                borderRadius: 2,
+                px: 2,
+                py: 0.85,
+                borderColor: BORDER,
+                color: TEXT_SUB,
+                fontWeight: 600,
+                textTransform: "none",
+                fontSize: "0.83rem",
+                "&:hover": { bgcolor: SURFACE_ALT },
+              }}
+            >
+              Cancel
+            </Button>
+          ) : (
+            <Button
+              variant="outlined"
+              startIcon={<ArrowBack sx={{ fontSize: 14 }} />}
+              onClick={() => goStep(-1)}
+              sx={{
+                borderRadius: 2,
+                px: 2,
+                py: 0.85,
+                borderColor: BORDER,
+                color: TEXT_SUB,
+                fontWeight: 600,
+                textTransform: "none",
+                fontSize: "0.83rem",
+                "&:hover": { bgcolor: SURFACE_ALT },
+              }}
+            >
+              Previous
+            </Button>
+          )}
+
+          {/* Center: step counter */}
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            {steps.map((s) => (
+              <Box
+                key={s.key}
+                sx={{
+                  width: s.key === currentStep ? 20 : 6,
+                  height: 6,
+                  borderRadius: 999,
+                  bgcolor: s.key === currentStep ? PRIMARY : s.key < currentStep ? alpha(PRIMARY, 0.4) : BORDER,
+                  transition: "all 0.25s",
+                }}
+              />
+            ))}
+          </Stack>
+
+          {/* Right: Next / Submit */}
+          {currentStep < 3 ? (
+            <Button
+              variant="contained"
+              disableElevation
+              endIcon={<ArrowForward sx={{ fontSize: 14 }} />}
+              onClick={() => goStep(1)}
+              sx={{
+                borderRadius: 2,
+                px: 2.5,
+                py: 0.85,
+                bgcolor: PRIMARY,
+                fontWeight: 700,
+                textTransform: "none",
+                fontSize: "0.83rem",
+                "&:hover": { bgcolor: PRIMARY_DARK },
+              }}
+            >
+              Next
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              disableElevation
+              startIcon={
+                saving ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <CheckCircle sx={{ fontSize: 16 }} />
+                )
+              }
+              disabled={saving}
+              onClick={handleSubmit}
+              sx={{
+                borderRadius: 2,
+                px: 2.5,
+                py: 0.85,
+                bgcolor: PRIMARY,
+                fontWeight: 700,
+                textTransform: "none",
+                fontSize: "0.83rem",
+                "&:hover": { bgcolor: PRIMARY_DARK },
+                "&.Mui-disabled": { bgcolor: alpha(PRIMARY, 0.5), color: "#fff" },
+              }}
+            >
+              {saving ? "Saving…" : "Save Survey"}
+            </Button>
+          )}
+        </Stack>
+      </Paper>
+
+      <SuccessDialog open={successOpen} onClose={closeSuccess} leadName={leadName} />
     </Box>
   );
 }

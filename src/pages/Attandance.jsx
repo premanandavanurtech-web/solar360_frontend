@@ -9,20 +9,20 @@ import {
   MenuItem, FormControl, InputLabel, Select, Pagination,
   Fade, Zoom, Badge, DialogTitle, DialogContent,
   CircularProgress, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Collapse, Fab,
+  TableContainer, TableHead, TableRow, Fab,
   SwipeableDrawer, BottomNavigation, BottomNavigationAction,
   InputAdornment, DialogActions, Tooltip, alpha,
-  Checkbox, Menu, ListItemIcon, ListItemText, Divider, Avatar,
+  Menu, ListItemIcon, ListItemText, Divider, Avatar,
 } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import {
   CalendarToday, ChevronLeft, ChevronRight, AccessTime,
   Person, CheckCircle, Warning, Error as ErrorIcon,
-  Visibility, Delete, Login, Logout, LocationOn, Close,
+  History, Login, Logout, LocationOn, Close,
   Dashboard, ExpandMore, Search, FilterAlt, Clear,
   Refresh, GpsFixed, GpsNotFixed, Timer, PlayArrow, Home,
   Business, MyLocation, FileDownload, Print, ContentCopy,
-  Deselect, ArrowBack, Phone, Email,
+  ArrowBack, Phone, Email,
 } from "@mui/icons-material";
 import axios from "axios";
 import { useAuth } from "../contexts/AuthContext";
@@ -42,8 +42,8 @@ import {
 import { useSocket } from "../utils/Usesocket.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const API       = "https://vanurtech-solar-backend-1.onrender.com";
-const PRIMARY   = "#4569ea";
+const API       = "http://localhost:9001";
+const PRIMARY   = "#0f1f3d";
 const SECONDARY = "#1a237e";
 const SUCCESS   = "#22c55e";
 const DANGER    = "#ef4444";
@@ -103,6 +103,32 @@ const AutoPunchOutChip = () => (
     />
   </Tooltip>
 )
+
+const OffDayWorkChip = ({ entry }) => {
+  if (!entry?.workedOnNonWorkingDay) return null;
+  const type = entry.scheduledStatus === "leave" ? "Leave" : "Holiday";
+
+  return (
+    <Tooltip
+      title={`Punch, travel, or visit activity was recorded during scheduled ${type.toLowerCase()} time`}
+      arrow
+    >
+      <Chip
+        size="small"
+        icon={<Warning sx={{ fontSize: 12, color: `${DANGER} !important` }} />}
+        label={`Worked on ${type}`}
+        sx={{
+          bgcolor: alpha(DANGER, 0.08),
+          color: DANGER,
+          border: `1px solid ${alpha(DANGER, 0.28)}`,
+          fontWeight: 800,
+          fontSize: "0.64rem",
+          height: 21,
+        }}
+      />
+    </Tooltip>
+  );
+};
 // ─── Helper: decode creation date from MongoDB ObjectId ──────────────────────
 const getJoinDateFromObjectId = (objectId) => {
   try {
@@ -121,13 +147,14 @@ const getJoinDateFromObjectId = (objectId) => {
 // ─── Helper: resolve calendar status for a day ───────────────────────────────
 const resolveCalendarStatus = (dateMs, att, todayMs, joinDateMs) => {
   const d          = new Date(dateMs);
-  const isWeekend  = [0, 6].includes(d.getDay());
+  const isSunday   = d.getDay() === 0;
   const isPast     = dateMs < todayMs;
   const isFuture   = dateMs > todayMs;
   const isBeforeJoin = dateMs < joinDateMs;
 
   if (att) return att.status || "present";
-  if (isWeekend || isFuture || isBeforeJoin) return undefined;
+  if (isSunday) return "holiday";
+  if (isFuture || isBeforeJoin) return undefined;
   if (isPast) return "absent";
   return undefined;
 };
@@ -164,11 +191,12 @@ function useWorkTimer() {
 
 // ─── Styled ───────────────────────────────────────────────────────────────────
 const GlassCard = styled(Card)(() => ({
-  background: "rgba(255,255,255,0.97)",
-  backdropFilter: "blur(12px)",
-  border: `1px solid ${alpha(PRIMARY, 0.08)}`,
-  boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
-  borderRadius: 20,
+  background: "rgba(255,255,255,0.96)",
+  backdropFilter: "blur(18px)",
+  border: `1px solid ${alpha(PRIMARY, 0.1)}`,
+  boxShadow: "0 18px 45px rgba(15,23,42,0.08)",
+  borderRadius: 24,
+  overflow: "hidden",
 }));
 
 const PulsingDot = styled(Box)(({ dotcolor }) => ({
@@ -193,7 +221,14 @@ const StatusBadge = ({ status, size = "small" }) => {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.present;
   return (
     <Chip size={size} label={cfg.label} icon={cfg.icon}
-      sx={{ bgcolor: cfg.bg, color: cfg.color, fontWeight: 700, "& .MuiChip-icon": { color: cfg.color } }}
+      sx={{
+        bgcolor: cfg.bg,
+        color: cfg.color,
+        fontWeight: 800,
+        border: `1px solid ${alpha(cfg.color, 0.22)}`,
+        borderRadius: "999px",
+        "& .MuiChip-icon": { color: cfg.color },
+      }}
     />
   );
 };
@@ -229,7 +264,7 @@ const CalCell = ({ day, isSelected, isToday, isWeekend, status, onClick, isPrev 
   const statusBg = {
     present: "#dcfce7",
     late:    "#fef9c3",
-    absent:  "#fee2e2",
+    absent:  "#fecaca",
     leave:   "#f3e8ff",
     holiday: "#dbeafe",
   };
@@ -252,10 +287,10 @@ const CalCell = ({ day, isSelected, isToday, isWeekend, status, onClick, isPrev 
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        borderRadius: 2,
+        borderRadius: "16px",
         cursor: isPrev ? "default" : "pointer",
         fontSize: { xs: "0.7rem", sm: "0.8rem" },
-        fontWeight: 600,
+        fontWeight: 800,
         transition: "all .18s ease",
         opacity: isPrev ? 0.2 : 1,
         userSelect: "none",
@@ -283,8 +318,15 @@ const CalCell = ({ day, isSelected, isToday, isWeekend, status, onClick, isPrev 
           : status && !isSelected
           ? `1.5px solid ${alpha(statusDot[status] || cfg?.color || PRIMARY, 0.35)}`
           : "2px solid transparent",
+        boxShadow: isSelected
+          ? `0 10px 22px ${alpha(statusDot[status] || PRIMARY, 0.18)}`
+          : "none",
         "&:hover": !isPrev
-          ? { bgcolor: isSelected ? selectedBg : alpha(PRIMARY, 0.1), transform: "scale(1.08)" }
+          ? {
+              bgcolor: isSelected ? selectedBg : alpha(PRIMARY, 0.1),
+              transform: "translateY(-2px)",
+              boxShadow: `0 8px 18px ${alpha(PRIMARY, 0.12)}`,
+            }
           : {},
       }}
     >
@@ -511,12 +553,10 @@ const BulkExportMenu = ({ selectedRecords, allRecords, onSnack, size = "small" }
 };
 
 // ─── MobileLogCard ────────────────────────────────────────────────────────────
-const MobileLogCard = ({ entry, onView, onDelete, canDelete, index }) => {
-  const [exp, setExp] = useState(false);
+const MobileLogCard = ({ entry, index }) => {
   const cfg = STATUS_CONFIG[entry.status] || STATUS_CONFIG.present;
   const d   = new Date(entry.date);
   const ft  = (ts) => ts ? new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }) : "—";
-  const resolveAddr = (addr) => !addr ? null : typeof addr === "string" ? addr : addr.short || addr.full?.split(",")[0] || null;
   return (
     <Fade in timeout={350 + index * 50}>
       <Paper sx={{ mb: 1.5, borderRadius: 3, border: `1px solid ${alpha(cfg.color, 0.2)}`, overflow: "hidden" }}>
@@ -532,7 +572,6 @@ const MobileLogCard = ({ entry, onView, onDelete, canDelete, index }) => {
                 <StatusBadge status={entry.status || "present"} />
               </Box>
             </Stack>
-            <IconButton size="small" onClick={() => setExp(!exp)} sx={{ bgcolor: alpha(cfg.color, 0.08), transform: exp ? "rotate(180deg)" : "none", transition: "transform .25s" }}><ExpandMore fontSize="small" /></IconButton>
           </Stack>
           <Grid container spacing={1} sx={{ mb: 1.5 }}>
            {/* Punch In */}
@@ -564,6 +603,12 @@ const MobileLogCard = ({ entry, onView, onDelete, canDelete, index }) => {
   <Typography variant="body2" fontWeight={700} color={PRIMARY}>{entry.workHoursFormatted || "—"}</Typography>
 </Grid>
 
+{entry.workedOnNonWorkingDay && (
+  <Grid item xs={12}>
+    <OffDayWorkChip entry={entry} />
+  </Grid>
+)}
+
 {/* ✅ Missed punch-out warning — full width below the 3 cols */}
 {entry.missedPunchOut && (
   <Grid item xs={12}>
@@ -577,14 +622,6 @@ const MobileLogCard = ({ entry, onView, onDelete, canDelete, index }) => {
 )}
 
           </Grid>
-          {resolveAddr(entry.punchIn?.address) && <Stack direction="row" spacing={0.5} alignItems="flex-start" sx={{ mb: 0.5 }}><LocationOn sx={{ fontSize: 13, color: "text.disabled", mt: 0.2 }} /><Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.3 }}><strong>In:</strong> {resolveAddr(entry.punchIn.address)}</Typography></Stack>}
-          {resolveAddr(entry.punchOut?.address) && <Stack direction="row" spacing={0.5} alignItems="flex-start" sx={{ mb: 0.5 }}><LocationOn sx={{ fontSize: 13, color: "text.disabled", mt: 0.2 }} /><Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.3 }}><strong>Out:</strong> {resolveAddr(entry.punchOut.address)}</Typography></Stack>}
-          <Collapse in={exp}>
-            <Stack direction="row" spacing={1} sx={{ mt: 2, pt: 2, borderTop: `1px dashed ${alpha(cfg.color, 0.2)}` }}>
-              <Button fullWidth size="small" variant="contained" startIcon={<Visibility />} onClick={() => onView(entry)} sx={{ borderRadius: 2, bgcolor: PRIMARY, "&:hover": { bgcolor: SECONDARY } }}>View</Button>
-              {canDelete && <Button fullWidth size="small" variant="outlined" color="error" startIcon={<Delete />} onClick={() => onDelete(entry)} sx={{ borderRadius: 2 }}>Delete</Button>}
-            </Stack>
-          </Collapse>
         </Box>
       </Paper>
     </Fade>
@@ -724,7 +761,9 @@ export default function Attendance() {
   const hasPunchedIn  = !!todayAtt?.punchIn;
   const hasPunchedOut = !!todayAtt?.punchOut;
 
-  const [period,       setPeriod]       = useState("This Month");
+  const [period,       setPeriod]       = useState(
+    memberInfo.historyView ? "All" : "This Month",
+  );
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [filters,      setFilters]      = useState({ page: 1, limit: 10, status: "", search: "" });
@@ -738,15 +777,6 @@ export default function Attendance() {
   const [punchLoading, setPunchLoading] = useState(false);
   const [punchState,   setPunchState]   = useState({ stage: null, mode: "in" });
   const [locationRequesting, setLocationRequesting] = useState(false);
-
-  const [selectedIds, setSelectedIds] = useState(new Set());
-  const selectedRecords = useMemo(() => (attendances || []).filter((a) => selectedIds.has(a._id || a.id)), [attendances, selectedIds]);
-  const allPageIds      = useMemo(() => (attendances || []).map((a) => a._id || a.id), [attendances]);
-  const allSelected     = allPageIds.length > 0 && allPageIds.every((id) => selectedIds.has(id));
-  const someSelected    = selectedIds.size > 0;
-  const toggleRow       = (id) => setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const toggleAll       = () => setSelectedIds(allSelected ? new Set() : new Set(allPageIds));
-  useEffect(() => { setSelectedIds(new Set()); }, [filters.page, period]);
 
   const containerRef = useRef(null);
   const showSnack    = useCallback((msg, sev = "success") => setSnackbar({ open: true, message: msg, severity: sev }), []);
@@ -1084,6 +1114,24 @@ export default function Attendance() {
   }, [deleteTarget, deleteAttendance, loadData, fetchCalendarMonth, currentMonth]);
 
   const clearFilters = useCallback(() => { setFilters({ page: 1, limit: 10, status: "", search: "" }); setPeriod("This Month"); }, []);
+  const showHistory = useCallback(() => {
+    const historyUserId = paramUserId || memberInfo?.memberId || user?._id;
+    if (!historyUserId) return;
+
+    navigate(`/attendance-history/${historyUserId}`, {
+      state: {
+        memberId: historyUserId,
+        userId: historyUserId,
+        user: { _id: historyUserId, id: historyUserId },
+        memberName: memberInfo.memberName || user?.name || user?.fullName || "Selected User",
+        memberRole: memberInfo.memberRole || userRole,
+        memberPhone: memberInfo.memberPhone || user?.phoneNumber || user?.phone || "",
+        memberEmail: memberInfo.memberEmail || user?.email || "",
+        fromTeam: true,
+        selectedDate: "all",
+      },
+    });
+  }, [memberInfo, navigate, paramUserId, selectedDate, user, userRole]);
   const setFilter    = (key) => (val) => setFilters((prev) => ({ ...prev, [key]: val, page: 1 }));
   const fmtDate      = (ts) => !ts ? "—" : new Date(ts).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
   const fmtTime      = (ts) => !ts ? "—" : new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
@@ -1091,7 +1139,16 @@ export default function Attendance() {
   if (loading && !attendances?.length) return <LoadingSkeleton />;
 
   return (
-    <Box ref={containerRef} sx={{ p: { xs: 1.5, sm: 2, md: 3 }, minHeight: "100vh", pb: { xs: 9, sm: 3 }, bgcolor: "#f4f6fb" }}>
+    <Box
+      ref={containerRef}
+      sx={{
+        p: { xs: 1.5, sm: 2, md: 3 },
+        minHeight: "100vh",
+        pb: { xs: 9, sm: 3 },
+        background:
+          "radial-gradient(circle at top left, rgba(69,105,234,0.12), transparent 32%), linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)",
+      }}
+    >
       {showPunchControls && (
         <>
           <LocationPermissionDialog open={punchState.stage === "permission"} mode={punchState.mode} onAllow={handleAllowLocation} onDeny={handleDenyLocation} requesting={locationRequesting} />
@@ -1100,7 +1157,20 @@ export default function Attendance() {
       )}
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, mb: 3, borderRadius: 3, background: `linear-gradient(135deg, ${PRIMARY} 0%, ${SECONDARY} 100%)`, color: "#fff", position: "relative", overflow: "hidden" }}>
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 2, sm: 3 },
+          mb: 3,
+          borderRadius: "28px",
+          background: `linear-gradient(135deg, ${PRIMARY} 0%, #3150c7 52%, ${SECONDARY} 100%)`,
+          color: "#fff",
+          position: "relative",
+          overflow: "hidden",
+          boxShadow: `0 24px 55px ${alpha(PRIMARY, 0.22)}`,
+          border: "1px solid rgba(255,255,255,0.18)",
+        }}
+      >
         {[{ w: 200, h: 200, t: -70, r: -50 }, { w: 120, h: 120, t: 20, r: 100 }].map((b, i) => (
           <Box key={i} sx={{ position: "absolute", width: b.w, height: b.h, borderRadius: "50%", bgcolor: "#fff", opacity: i === 0 ? 0.05 : 0.04, top: b.t, right: b.r, pointerEvents: "none" }} />
         ))}
@@ -1164,7 +1234,7 @@ export default function Attendance() {
                 {hasPunchedIn && hasPunchedOut && <Tooltip title="Attendance complete for today" arrow><span><Button variant="contained" startIcon={<CheckCircle />} disabled size={isMobile ? "small" : "medium"} sx={{ fontWeight: 700, borderRadius: 2.5, bgcolor: "rgba(255,255,255,.15) !important", color: "rgba(255,255,255,.6) !important" }}>Day Complete</Button></span></Tooltip>}
               </>
             )}
-            {!isMobile && mergedLog.length > 0 && <BulkExportMenu selectedRecords={selectedRecords} allRecords={attendances || []} onSnack={showSnack} />}
+            {!isMobile && mergedLog.length > 0 && <BulkExportMenu selectedRecords={[]} allRecords={attendances || []} onSnack={showSnack} />}
             <Button variant="contained" startIcon={<Refresh />} onClick={loadData} disabled={loading} size={isMobile ? "small" : "medium"} sx={{ bgcolor: "rgba(255,255,255,.15)", color: "#fff", borderRadius: 2.5, "&:hover": { bgcolor: "rgba(255,255,255,.25)" } }}>Refresh</Button>
             {isMobile && <Button variant="contained" startIcon={<FilterAlt />} onClick={() => setDrawerOpen(true)} size="small" sx={{ bgcolor: "rgba(255,255,255,.15)", color: "#fff", borderRadius: 2.5, "&:hover": { bgcolor: "rgba(255,255,255,.25)" }, position: "relative" }}>Filter{activeFilterCount > 0 && <Badge badgeContent={activeFilterCount} color="error" sx={{ position: "absolute", top: -8, right: -8 }} />}</Button>}
           </Stack>
@@ -1379,31 +1449,57 @@ export default function Attendance() {
       )}
 
       {!isMobile && (
-        <Paper elevation={0} sx={{ p: 2.5, mb: 3, borderRadius: 3, border: `1px solid ${alpha(PRIMARY, 0.08)}` }}>
-          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-            <TextField size="small" placeholder="Search records…" value={filters.search} onChange={(e) => setFilter("search")(e.target.value)} sx={{ minWidth: 240 }}
-              InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: "text.secondary", fontSize: 18 }} /></InputAdornment>, endAdornment: filters.search && <InputAdornment position="end"><IconButton size="small" onClick={() => setFilter("search")("")}><Close fontSize="small" /></IconButton></InputAdornment>, sx: { borderRadius: 2 } }}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2,
+            mb: 3,
+            borderRadius: "24px",
+            border: `1px solid ${alpha(PRIMARY, 0.1)}`,
+            background: "rgba(255,255,255,0.9)",
+            backdropFilter: "blur(16px)",
+            boxShadow: "0 16px 38px rgba(15,23,42,0.07)",
+            "& .MuiOutlinedInput-root": {
+              borderRadius: "999px",
+              bgcolor: "#f8fafc",
+              transition: "box-shadow .2s ease, background .2s ease",
+              "& fieldset": { borderColor: alpha(PRIMARY, 0.14) },
+              "&:hover": {
+                bgcolor: "#fff",
+                "& fieldset": { borderColor: alpha(PRIMARY, 0.3) },
+              },
+              "&.Mui-focused": {
+                bgcolor: "#fff",
+                boxShadow: `0 0 0 4px ${alpha(PRIMARY, 0.1)}`,
+                "& fieldset": { borderColor: PRIMARY },
+              },
+            },
+          }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+            <TextField size="small" placeholder="Search records…" value={filters.search} onChange={(e) => setFilter("search")(e.target.value)} sx={{ minWidth: 300 }}
+              InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: PRIMARY, fontSize: 18 }} /></InputAdornment>, endAdornment: filters.search && <InputAdornment position="end"><IconButton size="small" onClick={() => setFilter("search")("")}><Close fontSize="small" /></IconButton></InputAdornment> }}
             />
-            <FormControl size="small" sx={{ minWidth: 140 }}>
+            <FormControl size="small" sx={{ minWidth: 150 }}>
               <InputLabel>Status</InputLabel>
-              <Select value={filters.status} label="Status" sx={{ borderRadius: 2 }} onChange={(e) => setFilter("status")(e.target.value)}>
+              <Select value={filters.status} label="Status" onChange={(e) => setFilter("status")(e.target.value)}>
                 <MenuItem value="">All Statuses</MenuItem>
                 {Object.entries(STATUS_CONFIG).map(([k, v]) => <MenuItem key={k} value={k}>{v.label}</MenuItem>)}
               </Select>
             </FormControl>
-            <FormControl size="small" sx={{ minWidth: 140 }}>
+            <FormControl size="small" sx={{ minWidth: 150 }}>
               <InputLabel>Period</InputLabel>
-              <Select value={period} label="Period" sx={{ borderRadius: 2 }} onChange={(e) => setPeriod(e.target.value)}>
+              <Select value={period} label="Period" onChange={(e) => setPeriod(e.target.value)}>
                 {PERIOD_OPTIONS.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
               </Select>
             </FormControl>
-            {activeFilterCount > 0 && <Button variant="text" startIcon={<Clear />} onClick={clearFilters} sx={{ color: DANGER, fontWeight: 600 }}>Clear All</Button>}
+            {activeFilterCount > 0 && <Button variant="text" startIcon={<Clear />} onClick={clearFilters} sx={{ color: DANGER, fontWeight: 800, borderRadius: "999px", px: 1.5 }}>Clear All</Button>}
           </Stack>
           {activeFilterCount > 0 && (
             <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1.5 }}>
-              {filters.search           && <Chip size="small" label={`Search: "${filters.search}"`} onDelete={() => setFilter("search")("")}  sx={{ bgcolor: alpha(PRIMARY, 0.08), color: PRIMARY }} />}
-              {filters.status           && <Chip size="small" label={`Status: ${filters.status}`}   onDelete={() => setFilter("status")("")}  sx={{ bgcolor: alpha(PRIMARY, 0.08), color: PRIMARY }} />}
-              {period !== "This Month"  && <Chip size="small" label={`Period: ${period}`}            onDelete={() => setPeriod("This Month")} sx={{ bgcolor: alpha(PRIMARY, 0.08), color: PRIMARY }} />}
+              {filters.search           && <Chip size="small" label={`Search: "${filters.search}"`} onDelete={() => setFilter("search")("")}  sx={{ bgcolor: alpha(PRIMARY, 0.08), color: PRIMARY, borderRadius: "999px", fontWeight: 700 }} />}
+              {filters.status           && <Chip size="small" label={`Status: ${filters.status}`}   onDelete={() => setFilter("status")("")}  sx={{ bgcolor: alpha(PRIMARY, 0.08), color: PRIMARY, borderRadius: "999px", fontWeight: 700 }} />}
+              {period !== "This Month"  && <Chip size="small" label={`Period: ${period}`}            onDelete={() => setPeriod("This Month")} sx={{ bgcolor: alpha(PRIMARY, 0.08), color: PRIMARY, borderRadius: "999px", fontWeight: 700 }} />}
             </Stack>
           )}
         </Paper>
@@ -1412,20 +1508,73 @@ export default function Attendance() {
       <Grid container spacing={isMobile ? 2 : 3}>
         {/* ── Calendar ───────────────────────────────────────────────────── */}
         <Grid item xs={12} md={5} lg={4}>
-          <GlassCard>
-            <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.5 }}>
-                <Typography variant="h6" fontWeight={700}>{currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</Typography>
+          <GlassCard sx={{ borderColor: alpha(PRIMARY, 0.12) }}>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.75 }}>
+                <Stack direction="row" spacing={1.25} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: "14px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#fff",
+                      background: `linear-gradient(135deg, ${PRIMARY}, #7c3aed)`,
+                      boxShadow: `0 12px 24px ${alpha(PRIMARY, 0.22)}`,
+                    }}
+                  >
+                    <CalendarToday sx={{ fontSize: 20 }} />
+                  </Box>
+                  <Box>
+                    <Typography variant="h6" fontWeight={900} sx={{ color: "#0f172a", lineHeight: 1.1 }}>
+                      {currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>
+                      Monthly attendance overview
+                    </Typography>
+                  </Box>
+                </Stack>
                 <Stack direction="row" spacing={0.5}>
                   {[{ icon: <ChevronLeft fontSize="small" />, dir: -1 }, { icon: <ChevronRight fontSize="small" />, dir: 1 }].map(({ icon, dir }) => (
-                    <IconButton key={dir} size="small" onClick={() => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() + dir, 1))} sx={{ bgcolor: alpha(PRIMARY, 0.07), "&:hover": { bgcolor: alpha(PRIMARY, 0.14) } }}>{icon}</IconButton>
+                    <IconButton
+                      key={dir}
+                      size="small"
+                      onClick={() => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() + dir, 1))}
+                      sx={{
+                        bgcolor: "#f8fafc",
+                        border: `1px solid ${alpha(PRIMARY, 0.1)}`,
+                        color: "#475569",
+                        boxShadow: "0 6px 16px rgba(15,23,42,0.06)",
+                        "&:hover": { bgcolor: alpha(PRIMARY, 0.1), color: PRIMARY },
+                      }}
+                    >
+                      {icon}
+                    </IconButton>
                   ))}
                 </Stack>
               </Stack>
-              <Grid container columns={7} spacing={0.25} sx={{ mb: 0.5 }}>
-                {DOW.map((d) => <Grid item xs={1} key={d}><Typography align="center" variant="caption" fontWeight={700} color="text.disabled" sx={{ display: "block", fontSize: "0.6rem" }}>{d}</Typography></Grid>)}
+              <Grid container columns={7} spacing={0.5} sx={{ mb: 0.75 }}>
+                {DOW.map((d) => (
+                  <Grid item xs={1} key={d}>
+                    <Typography
+                      align="center"
+                      variant="caption"
+                      fontWeight={900}
+                      sx={{
+                        display: "block",
+                        fontSize: "0.62rem",
+                        color: "#94a3b8",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      {d}
+                    </Typography>
+                  </Grid>
+                ))}
               </Grid>
-              <Grid container columns={7} spacing={0.25}>
+              <Grid container columns={7} spacing={0.55}>
                 {calendarDays.map((c, i) => (
                   <Grid item xs={1} key={i}>
                     <CalCell
@@ -1433,7 +1582,7 @@ export default function Attendance() {
                       isPrev={c.isPrev}
                       isSelected={c.date?.toDateString() === selectedDate.toDateString()}
                       isToday={c.date?.toDateString() === new Date().toDateString()}
-                      isWeekend={c.date && [0, 6].includes(c.date.getDay())}
+                      isWeekend={c.date && c.date.getDay() === 0}
                       status={c.status}
                       onClick={() => !c.isPrev && c.date && handleDateSelect(c.date)}
                     />
@@ -1441,21 +1590,32 @@ export default function Attendance() {
                 ))}
               </Grid>
               {/* ── Legend ── */}
-              <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${alpha(PRIMARY, 0.08)}` }}>
-                <Grid container spacing={1}>
+              <Box sx={{ mt: 2.75, pt: 2.25, borderTop: `1px solid ${alpha(PRIMARY, 0.1)}` }}>
+                <Grid container spacing={1.1}>
                   {[
                     ["Present",  SUCCESS,   "#dcfce7"],
                     ["Late",     WARNING,   "#fef9c3"],
-                    ["Absent",   DANGER,    "#fee2e2"],
+                    ["Absent",   DANGER,    "#fecaca"],
                     ["Leave",    "#a855f7", "#f3e8ff"],
                     ["Holiday",  "#3b82f6", "#dbeafe"],
                   ].map(([l, dotColor, bg]) => (
                     <Grid item xs={6} key={l}>
-                      <Stack direction="row" spacing={0.75} alignItems="center">
-                        <Box sx={{ width: 14, height: 14, borderRadius: 0.5, bgcolor: bg, border: `1.5px solid ${alpha(dotColor, 0.4)}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Stack
+                        direction="row"
+                        spacing={0.75}
+                        alignItems="center"
+                        sx={{
+                          px: 1,
+                          py: 0.75,
+                          borderRadius: "12px",
+                          bgcolor: "#f8fafc",
+                          border: `1px solid ${alpha(dotColor, 0.12)}`,
+                        }}
+                      >
+                        <Box sx={{ width: 14, height: 14, borderRadius: "6px", bgcolor: bg, border: `1.5px solid ${alpha(dotColor, 0.4)}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: dotColor }} />
                         </Box>
-                        <Typography variant="caption" color="text.secondary">{l}</Typography>
+                        <Typography variant="caption" sx={{ color: "#475569", fontWeight: 700 }}>{l}</Typography>
                       </Stack>
                     </Grid>
                   ))}
@@ -1467,18 +1627,56 @@ export default function Attendance() {
 
         {/* ── Log ────────────────────────────────────────────────────────── */}
         <Grid item xs={12} md={7} lg={8}>
-          <GlassCard sx={{ height: "100%" }}>
-            <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.5 }}>
-                <Box>
-                  <Typography variant="h6" fontWeight={700}>Attendance Log</Typography>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography variant="caption" color="text.secondary">{mergedLog.length} total records</Typography>
-                    {someSelected && !isMobile && <Chip size="small" label={`${selectedIds.size} selected`} onDelete={() => setSelectedIds(new Set())} sx={{ bgcolor: alpha(PRIMARY, 0.1), color: PRIMARY, fontWeight: 700, height: 20, fontSize: "0.68rem" }} />}
+          <GlassCard sx={{ height: "100%", borderColor: alpha(PRIMARY, 0.12) }}>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.75 }}>
+                <Stack direction="row" spacing={1.25} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: "14px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: PRIMARY,
+                      bgcolor: alpha(PRIMARY, 0.1),
+                      border: `1px solid ${alpha(PRIMARY, 0.16)}`,
+                    }}
+                  >
+                    <AccessTime sx={{ fontSize: 21 }} />
+                  </Box>
+                  <Box>
+                    <Typography variant="h6" fontWeight={900} sx={{ color: "#0f172a", lineHeight: 1.1 }}>Attendance Log</Typography>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 600 }}>{mergedLog.length} total records</Typography>
                   </Stack>
-                </Box>
+                  </Box>
+                </Stack>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  {isMobile && mergedLog.length > 0 && <BulkExportMenu selectedRecords={selectedRecords} allRecords={attendances || []} onSnack={showSnack} />}
+                  {isMobile && mergedLog.length > 0 && <BulkExportMenu selectedRecords={[]} allRecords={attendances || []} onSnack={showSnack} />}
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={<History sx={{ fontSize: 17 }} />}
+                    onClick={showHistory}
+                    sx={{
+                      borderRadius: "999px",
+                      px: 1.75,
+                      py: 0.8,
+                      color: "#fff",
+                      fontWeight: 800,
+                      textTransform: "none",
+                      background: "linear-gradient(135deg, #f97316, #ea580c)",
+                      boxShadow: "0 8px 18px rgba(249,115,22,0.28)",
+                      "&:hover": {
+                        background: "linear-gradient(135deg, #ea580c, #c2410c)",
+                        boxShadow: "0 10px 22px rgba(234,88,12,0.34)",
+                      },
+                    }}
+                  >
+                    History
+                  </Button>
                   {loading && <CircularProgress size={20} sx={{ color: PRIMARY }} />}
                 </Stack>
               </Stack>
@@ -1488,12 +1686,26 @@ export default function Attendance() {
                   {isMobile ? (
                     <Box>
                       {mergedLog.map((a, i) => (
-                        <MobileLogCard key={a._id || a.id} entry={a} onView={(e) => { if (!e._isAbsentRow) { setSelLog(e); setLogOpen(true); } }} onDelete={handleDeleteOpen} canDelete={canDelete && !a._isAbsentRow} index={i} />
+                        <MobileLogCard key={a._id || a.id} entry={a} index={i} />
                       ))}
                     </Box>
                   ) : (
-                    <TableContainer sx={{ maxHeight: 460, overflowX: "hidden" }}>
-                      <Table stickyHeader size="small" sx={{ tableLayout: "fixed", width: "100%" }}>
+                    <TableContainer
+                      sx={{
+                        maxHeight: 520,
+                        overflowX: "auto",
+                        borderRadius: "20px",
+                        border: `1px solid ${alpha(PRIMARY, 0.1)}`,
+                        bgcolor: alpha(PRIMARY, 0.025),
+                        p: 1,
+                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+                        "&::-webkit-scrollbar": { height: 9, width: 9 },
+                        "&::-webkit-scrollbar-track": { bgcolor: alpha(PRIMARY, 0.06), borderRadius: "999px" },
+                        "&::-webkit-scrollbar-thumb": { bgcolor: alpha(PRIMARY, 0.32), borderRadius: "999px" },
+                        "&::-webkit-scrollbar-thumb:hover": { bgcolor: alpha(PRIMARY, 0.46) },
+                      }}
+                    >
+                      <Table stickyHeader size="small" sx={{ minWidth: 640, borderCollapse: "separate", borderSpacing: "0 8px" }}>
                         <TableHead
                           sx={{
                             position: "sticky",
@@ -1502,40 +1714,33 @@ export default function Attendance() {
                           }}
                         >
                           <TableRow>
-                            <TableCell
-                              padding="checkbox"
-                              sx={{
-                                width: 44,
-                                top: 0,
-                                zIndex: 4,
-                                py: 1.25,
-                                bgcolor: "#f8fafc",
-                                borderBottom: `2px solid ${alpha(PRIMARY, 0.1)}`,
-                                boxShadow: `inset 0 -1px 0 ${alpha(PRIMARY, 0.08)}`,
-                              }}
-                            >
-                              <Tooltip title={allSelected ? "Deselect all" : "Select all on this page"}>
-                                <Checkbox size="small" indeterminate={someSelected && !allSelected} checked={allSelected} onChange={toggleAll} sx={{ color: alpha(PRIMARY, 0.4), "&.Mui-checked": { color: PRIMARY }, "&.MuiCheckbox-indeterminate": { color: PRIMARY } }} />
-                              </Tooltip>
-                            </TableCell>
-                            {["Date", "Punch In", "Punch Out", "Hours", "Status", "Actions"].map((h) => (
+                            {["Date", "Punch In", "Punch Out", "Hours", "Status"].map((h) => (
                               <TableCell
                                 key={h}
                                 sx={{
                                   top: 0,
                                   zIndex: 4,
                                   py: 1.25,
-                                  bgcolor: "#f8fafc",
-                                  fontWeight: 700,
-                                  fontSize: "0.76rem",
-                                  borderBottom: `2px solid ${alpha(PRIMARY, 0.1)}`,
-                                  boxShadow: `inset 0 -1px 0 ${alpha(PRIMARY, 0.08)}`,
+                                  bgcolor: "#eef4ff",
+                                  color: "#475569",
+                                  fontWeight: 900,
+                                  fontSize: "0.7rem",
+                                  letterSpacing: "0.04em",
+                                  textTransform: "uppercase",
+                                  borderBottom: "none",
+                                  ...(h === "Date" && {
+                                    borderTopLeftRadius: "14px",
+                                    borderBottomLeftRadius: "14px",
+                                  }),
+                                  ...(h === "Status" && {
+                                    borderTopRightRadius: "14px",
+                                    borderBottomRightRadius: "14px",
+                                  }),
                                   width:
-                                    h === "Date" ? 78 :
-                                    h === "Punch In" ? 110 :
-                                    h === "Punch Out" ? 130 :
-                                    h === "Hours" ? 118 :
-                                    h === "Status" ? 150 : 86,
+                                    h === "Date" ? 120 :
+                                     h === "Punch In" ? 130 :
+                                     h === "Punch Out" ? 140 :
+                                     h === "Hours" ? 110 : 180,
                                 }}
                               >
                                 {h}
@@ -1546,26 +1751,38 @@ export default function Attendance() {
                         <TableBody>
                           {mergedLog.map((a) => {
                             const id          = a._id || a.id;
-                            const isChecked   = selectedIds.has(id);
                             const isAbsent    = a._isAbsentRow;
                             return (
                               <TableRow
                                 key={id}
                                 hover={!isAbsent}
-                                selected={isChecked}
                                 sx={{
-                                  bgcolor: isAbsent ? alpha(DANGER, 0.03) : undefined,
-                                  "&:hover": { bgcolor: isAbsent ? alpha(DANGER, 0.06) : alpha(PRIMARY, 0.02) },
-                                  "&.Mui-selected": { bgcolor: alpha(PRIMARY, 0.04) },
-                                  "&.Mui-selected:hover": { bgcolor: alpha(PRIMARY, 0.06) },
-                                  borderLeft: isAbsent ? `3px solid ${alpha(DANGER, 0.4)}` : "3px solid transparent",
+                                  "& td": {
+                                    borderBottom: "none",
+                                    bgcolor: isAbsent ? alpha(DANGER, 0.035) : "#fff",
+                                    py: 1.35,
+                                    boxShadow: "0 8px 20px rgba(15,23,42,0.035)",
+                                    transition: "background .18s ease, box-shadow .18s ease",
+                                  },
+                                  "& td:first-of-type": {
+                                    borderTopLeftRadius: "14px",
+                                    borderBottomLeftRadius: "14px",
+                                    borderLeft: isAbsent
+                                      ? `4px solid ${alpha(DANGER, 0.55)}`
+                                      : `4px solid ${alpha(PRIMARY, 0.2)}`,
+                                  },
+                                  "& td:last-of-type": {
+                                    borderTopRightRadius: "14px",
+                                    borderBottomRightRadius: "14px",
+                                  },
+                                  "&:hover td": {
+                                    bgcolor: isAbsent ? alpha(DANGER, 0.06) : alpha(PRIMARY, 0.035),
+                                    boxShadow: "0 12px 26px rgba(15,23,42,0.055)",
+                                  },
+                                  "&.Mui-selected td": { bgcolor: alpha(PRIMARY, 0.06) },
+                                  "&.Mui-selected:hover td": { bgcolor: alpha(PRIMARY, 0.085) },
                                 }}
                               >
-                                <TableCell padding="checkbox">
-                                  {!isAbsent && (
-                                    <Checkbox size="small" checked={isChecked} onChange={() => toggleRow(id)} sx={{ color: alpha(PRIMARY, 0.3), "&.Mui-checked": { color: PRIMARY } }} />
-                                  )}
-                                </TableCell>
                                 <TableCell>
                                   <Typography
                                     variant="body2"
@@ -1625,42 +1842,16 @@ export default function Attendance() {
   <Stack spacing={0.5} alignItems="flex-start" sx={{ maxWidth: "100%" }}>
     <StatusBadge status={a.status || "present"} />
     {a.missedPunchOut && <MissedPunchOutChip />}
+    <OffDayWorkChip entry={a} />
   </Stack>
 </TableCell>
 
-                                <TableCell>
-                                  {isAbsent ? (
-                                    <Typography variant="caption" color={alpha(DANGER, 0.5)} sx={{ fontStyle: "italic" }}>No record</Typography>
-                                  ) : (
-                                    <Stack direction="row" spacing={0.5}>
-                                      <Tooltip title="View Details"><IconButton size="small" onClick={() => { setSelLog(a); setLogOpen(true); }} sx={{ color: PRIMARY, "&:hover": { bgcolor: alpha(PRIMARY, 0.08) } }}><Visibility fontSize="small" /></IconButton></Tooltip>
-                                      {canDelete && <Tooltip title="Delete"><IconButton size="small" onClick={() => handleDeleteOpen(a)} sx={{ color: DANGER, "&:hover": { bgcolor: alpha(DANGER, 0.08) } }}><Delete fontSize="small" /></IconButton></Tooltip>}
-                                    </Stack>
-                                  )}
-                                </TableCell>
                               </TableRow>
                             );
                           })}
                         </TableBody>
                       </Table>
                     </TableContainer>
-                  )}
-
-                  {someSelected && !isMobile && (
-                    <Fade in>
-                      <Paper elevation={0} sx={{ mt: 1.5, p: 1.5, borderRadius: 2, bgcolor: alpha(PRIMARY, 0.04), border: `1px solid ${alpha(PRIMARY, 0.12)}` }}>
-                        <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <Chip size="small" label={`${selectedIds.size} row${selectedIds.size !== 1 ? "s" : ""} selected`} sx={{ bgcolor: PRIMARY, color: "#fff", fontWeight: 700 }} />
-                            <Button size="small" startIcon={<Deselect sx={{ fontSize: 14 }} />} onClick={() => setSelectedIds(new Set())} sx={{ color: "text.secondary", fontSize: "0.75rem" }}>Clear</Button>
-                          </Stack>
-                          <Stack direction="row" spacing={1}>
-                            <Button size="small" variant="outlined" startIcon={<FileDownload sx={{ fontSize: 14 }} />} onClick={() => { try { downloadFile(generateCSV(selectedRecords), `att_${format(new Date(), "yyyyMMdd_HHmmss")}.csv`, "text/csv"); showSnack(`Exported ${selectedIds.size} records as CSV`); } catch { showSnack("Export failed", "error"); } }} sx={{ borderRadius: 2, borderColor: alpha(SUCCESS, 0.5), color: SUCCESS, fontSize: "0.75rem" }}>CSV</Button>
-                            <Button size="small" variant="outlined" startIcon={<FileDownload sx={{ fontSize: 14 }} />} onClick={() => { try { downloadFile(generateJSON(selectedRecords), `att_${format(new Date(), "yyyyMMdd_HHmmss")}.json`, "application/json"); showSnack(`Exported ${selectedIds.size} records as JSON`); } catch { showSnack("Export failed", "error"); } }} sx={{ borderRadius: 2, borderColor: alpha(PRIMARY, 0.5), color: PRIMARY, fontSize: "0.75rem" }}>JSON</Button>
-                          </Stack>
-                        </Stack>
-                      </Paper>
-                    </Fade>
                   )}
 
                   {pagination?.totalPages > 1 && (

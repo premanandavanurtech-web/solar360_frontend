@@ -10,7 +10,8 @@
 //    potentially stale). Now passes socketRef so safeEmit() in Locationtracker
 //    reads socketRef.current on every emit.
 //
-// 3. All other logic (geofence, drawing manager, trail, markers) is unchanged.
+// 3. The deprecated Google DrawingManager was removed so maps continue to load
+//    with Maps JavaScript API 3.65+.
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
@@ -305,7 +306,7 @@ function loadGoogleMaps() {
   if (gmapsPromise) return gmapsPromise;
   gmapsPromise = new Promise((resolve, reject) => {
     const s   = document.createElement("script");
-    s.src     = `https://maps.googleapis.com/maps/api/js?key=${GKEY}&libraries=drawing`;
+    s.src     = `https://maps.googleapis.com/maps/api/js?key=${GKEY}`;
     s.async   = true;
     s.onload  = resolve;
     s.onerror = () => reject(new Error("Google Maps failed to load. Check your API key."));
@@ -369,7 +370,6 @@ const visitMkRef = useRef([]);
   const [geofences,      setGeofences]      = useState([]);
   const [geofenceAlerts, setGeofenceAlerts] = useState([]);
   const fenceLayersRef = useRef({});
-  const drawingMgrRef  = useRef(null);
 
   const syncStartMarker = useCallback((points = allPtsRef.current) => {
     if (!mapLoaded || !gMapRef.current || !window.google?.maps) return;
@@ -519,7 +519,7 @@ useEffect(() => {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
     const isInProgress = v.status === "InProgress";
-    const fillColor    = isInProgress ? "#22c55e" : "#4569ea";
+    const fillColor    = isInProgress ? "#22c55e" : "#0f1f3d";
     const label        = v.locationName || `Stop ${i + 1}`;
 
     // Custom SVG store pin
@@ -630,100 +630,8 @@ useEffect(() => {
   
 
   // ── Drawing Manager ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!mapLoaded || isOwner || !window.google?.maps?.drawing) return;
-
-    const G   = window.google.maps;
-    const map = gMapRef.current;
-
-    const dm = new G.drawing.DrawingManager({
-      drawingMode:    null,
-      drawingControl: true,
-      drawingControlOptions: {
-        position:     G.ControlPosition.TOP_RIGHT,
-        drawingModes: [G.drawing.OverlayType.CIRCLE, G.drawing.OverlayType.POLYGON],
-      },
-      circleOptions: {
-        strokeColor:   "#FF6B35",
-        strokeWeight:  2,
-        fillColor:     "#FF6B35",
-        fillOpacity:   0.12,
-        editable:      true,
-      },
-      polygonOptions: {
-        strokeColor:   "#FF6B35",
-        strokeWeight:  2,
-        fillColor:     "#FF6B35",
-        fillOpacity:   0.12,
-        editable:      true,
-      },
-    });
-
-    dm.setMap(map);
-    drawingMgrRef.current = dm;
-
-    G.event.addListener(dm, "circlecomplete", async (circle) => {
-      dm.setDrawingMode(null);
-      const name = window.prompt("Name this geofence:");
-      if (!name) { circle.setMap(null); return; }
-
-      const payload = {
-        name,
-        type:   "circle",
-        center: { lat: circle.getCenter().lat(), lng: circle.getCenter().lng() },
-        radius: circle.getRadius(),
-      };
-
-      try {
-        const res  = await fetch(`${API}/api/v1/location/geofences`, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
-          body:    JSON.stringify(payload),
-        });
-        const data = await res.json();
-        if (data.success) {
-          fenceLayersRef.current[data.data._id] = circle;
-          setGeofences((prev) => [...prev, data.data]);
-          toast.success(`Geofence "${name}" saved.`);
-        }
-      } catch {
-        circle.setMap(null);
-        toast.error("Failed to save geofence.");
-      }
-    });
-
-    G.event.addListener(dm, "polygoncomplete", async (polygon) => {
-      dm.setDrawingMode(null);
-      const name = window.prompt("Name this geofence:");
-      if (!name) { polygon.setMap(null); return; }
-
-      const coords = polygon.getPath().getArray().map((ll) => ({ lat: ll.lat(), lng: ll.lng() }));
-
-      try {
-        const res  = await fetch(`${API}/api/v1/location/geofences`, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
-          body:    JSON.stringify({ name, type: "polygon", coordinates: coords }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          fenceLayersRef.current[data.data._id] = polygon;
-          setGeofences((prev) => [...prev, data.data]);
-          toast.success(`Geofence "${name}" saved.`);
-        }
-      } catch {
-        polygon.setMap(null);
-        toast.error("Failed to save geofence.");
-      }
-    });
-
-    return () => {
-      if (drawingMgrRef.current) {
-        drawingMgrRef.current.setMap(null);
-        drawingMgrRef.current = null;
-      }
-    };
-  }, [mapLoaded, isOwner]);
+  // Google removed DrawingManager in Maps JavaScript API 3.65, so geofence
+  // creation cannot use the legacy drawing library on this map anymore.
 
   // ── drawTrail ───────────────────────────────────────────────────────────────
   function buildSnapBatchKey(points) {
@@ -1558,7 +1466,7 @@ useEffect(() => {
           <div style={{ textAlign: "center" }}>
             <div style={{
               width: 36, height: 36, border: "3px solid #e2e8f0",
-              borderTopColor: "#4569ea", borderRadius: "50%",
+              borderTopColor: "#0f1f3d", borderRadius: "50%",
               animation: "spin 0.8s linear infinite", margin: "0 auto 12px",
             }} />
             <div style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>Loading Google Maps…</div>

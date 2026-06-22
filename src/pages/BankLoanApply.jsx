@@ -137,8 +137,12 @@ import { useNavigate } from "react-router-dom";
 import AlertTitle from "@mui/material/AlertTitle";
 
 // ========== CONSTANTS & CONFIGURATION ==========
-const PRIMARY = "#4569ea";
+const PRIMARY = "#0f1f3d";
 const SECONDARY = "#1a237e";
+const GRADIENT_MAIN =
+  "linear-gradient(135deg, #0f1f3d 0%, #1a3a6b 60%, #2563eb 100%)";
+const GRADIENT_BLUE = "linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)";
+const GRADIENT_CARD = "linear-gradient(135deg, #f8faff, #eff6ff)";
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 25, 50];
 const DEFAULT_ITEMS_PER_PAGE = 10;
 const ALLOWED_ROLES = ["Admin_panel", "ZSM", "Incharge", "TEAM"];
@@ -150,22 +154,34 @@ const PERIOD_OPTIONS = [
   { value: "This Month", label: "This Month", icon: <DateRange /> },
   { value: "All", label: "All Time", icon: <DateRange /> },
 ];
+const CARD_STRIPES = [
+  "linear-gradient(90deg, #2563eb, #60a5fa)",
+  "linear-gradient(90deg, #d97706, #fbbf24)",
+  "linear-gradient(90deg, #16a34a, #4ade80)",
+  "linear-gradient(90deg, #7c3aed, #a78bfa)",
+];
+const CARD_ICON_BG = [
+  "linear-gradient(135deg, #dbeafe, #93c5fd)",
+  "linear-gradient(135deg, #fef3c7, #fcd34d)",
+  "linear-gradient(135deg, #dcfce7, #86efac)",
+  "linear-gradient(135deg, #ede9fe, #c4b5fd)",
+];
 
 // Loan Status Configuration
 const LOAN_STATUS_OPTIONS = ["pending", "submitted"];
 
 const LOAN_STATUS_CONFIG = {
   pending: {
-    bg: alpha(PRIMARY, 0.08),
-    color: PRIMARY,
+    bg: "linear-gradient(135deg, #fef3c7, #fde68a)",
+    color: "#92400e",
     icon: <HourglassEmpty sx={{ fontSize: 16 }} />,
     label: "Pending",
     description: "Loan application is pending submission",
     order: 1,
   },
   submitted: {
-    bg: alpha(PRIMARY, 0.08),
-    color: PRIMARY,
+    bg: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+    color: "#1e40af",
     icon: <Send sx={{ fontSize: 16 }} />,
     label: "Submitted",
     description: "Loan application submitted to bank",
@@ -182,20 +198,20 @@ const LEAD_STATUS_OPTIONS = [
 
 const LEAD_STATUS_CONFIG = {
   "Bank Loan Apply": {
-    bg: alpha(PRIMARY, 0.08),
-    color: PRIMARY,
+    bg: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+    color: "#1e40af",
     icon: <AccountBalanceWallet sx={{ fontSize: 16 }} />,
     description: "Bank loan application in progress",
   },
   "Bank at Pending": {
-    bg: alpha(PRIMARY, 0.08),
-    color: PRIMARY,
+    bg: "linear-gradient(135deg, #fef3c7, #fde68a)",
+    color: "#92400e",
     icon: <Description sx={{ fontSize: 16 }} />,
     description: "Documents submitted for verification",
   },
   "Missed Leads": {
-    bg: alpha(PRIMARY, 0.08),
-    color: PRIMARY,
+    bg: "linear-gradient(135deg, #fee2e2, #fecaca)",
+    color: "#b91c1c",
     icon: <Cancel sx={{ fontSize: 16 }} />,
     description: "Lead lost or not converted",
   },
@@ -1982,12 +1998,24 @@ const SummaryCard = React.memo(({ card, index }) => (
       sx={{
         p: { xs: 1.5, sm: 2, md: 2.5 },
         borderRadius: 3,
+        position: "relative",
+        overflow: "hidden",
         border: `1px solid ${alpha(card.color, 0.1)}`,
         boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
         transition: "transform 0.2s",
         "&:hover": {
           transform: "translateY(-2px)",
           boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
+        },
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "4px",
+          borderRadius: "16px 16px 0 0",
+          background: CARD_STRIPES[index % CARD_STRIPES.length],
         },
       }}
     >
@@ -2004,7 +2032,7 @@ const SummaryCard = React.memo(({ card, index }) => (
               width: { xs: 32, sm: 40, md: 48 },
               height: { xs: 32, sm: 40, md: 48 },
               borderRadius: { xs: 1.5, sm: 2 },
-              bgcolor: alpha(card.color, 0.1),
+              background: CARD_ICON_BG[index % CARD_ICON_BG.length],
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -2867,26 +2895,53 @@ export default function BankLoanApply() {
                       </InputAdornment>
                     ),
                   }}
-                  sx={{ maxWidth: 400 }}
+                  sx={{
+                    maxWidth: 400,
+                    "& .MuiOutlinedInput-root": {
+                      "&.Mui-focused fieldset": {
+                        borderColor: "#3b82f6",
+                        boxShadow: "0 0 0 3px rgba(37,99,235,.12)",
+                      },
+                    },
+                  }}
                 />
 
-                <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <InputLabel>Period</InputLabel>
-                  <Select
-                    value={period}
-                    label="Period"
-                    onChange={(e) => setPeriod(e.target.value)}
-                  >
-                    {PERIOD_OPTIONS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          {option.icon}
-                          <span>{option.label}</span>
-                        </Stack>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Stack direction="row" spacing={0.75}>
+                  {PERIOD_OPTIONS.map((option) => (
+                    <Button
+                      key={option.value}
+                      size="small"
+                      onClick={() => setPeriod(option.value)}
+                      sx={{
+                        borderRadius: "50px",
+                        px: 2,
+                        py: 0.75,
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        background:
+                          period === option.value ? GRADIENT_BLUE : "transparent",
+                        color: period === option.value ? "#fff" : PRIMARY,
+                        border: `1px solid ${
+                          period === option.value
+                            ? "transparent"
+                            : alpha(PRIMARY, 0.2)
+                        }`,
+                        boxShadow:
+                          period === option.value
+                            ? "0 2px 8px rgba(37,99,235,.3)"
+                            : "none",
+                        "&:hover": {
+                          background:
+                            period === option.value
+                              ? GRADIENT_BLUE
+                              : alpha(PRIMARY, 0.06),
+                        },
+                      }}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </Stack>
 
                 <Button
                   variant="outlined"
@@ -2920,7 +2975,7 @@ export default function BankLoanApply() {
                     p: 3,
                     borderRadius: 2,
                     borderColor: alpha(PRIMARY, 0.2),
-                    bgcolor: alpha(PRIMARY, 0.02),
+                    background: GRADIENT_CARD,
                   }}
                 >
                   <Grid container spacing={3}>
@@ -3238,7 +3293,8 @@ export default function BankLoanApply() {
                   <TableRow>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3259,7 +3315,8 @@ export default function BankLoanApply() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3268,7 +3325,8 @@ export default function BankLoanApply() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3289,7 +3347,8 @@ export default function BankLoanApply() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3310,7 +3369,8 @@ export default function BankLoanApply() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3331,7 +3391,8 @@ export default function BankLoanApply() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3340,7 +3401,8 @@ export default function BankLoanApply() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3372,7 +3434,8 @@ export default function BankLoanApply() {
                                 sx={{
                                   width: 32,
                                   height: 32,
-                                  bgcolor: PRIMARY,
+                                  background: GRADIENT_MAIN,
+                                  color: "#fff",
                                   fontSize: "0.875rem",
                                 }}
                               >
@@ -3413,7 +3476,7 @@ export default function BankLoanApply() {
                                 icon={loanStatusConfig.icon}
                                 size="small"
                                 sx={{
-                                  bgcolor: loanStatusConfig.bg,
+                                  background: loanStatusConfig.bg,
                                   color: loanStatusConfig.color,
                                   fontWeight: 600,
                                   minWidth: 80,
@@ -3428,7 +3491,7 @@ export default function BankLoanApply() {
                                 icon={leadStatusConfig.icon}
                                 size="small"
                                 sx={{
-                                  bgcolor: leadStatusConfig.bg,
+                                  background: leadStatusConfig.bg,
                                   color: leadStatusConfig.color,
                                   fontWeight: 600,
                                   minWidth: 80,
@@ -3462,8 +3525,12 @@ export default function BankLoanApply() {
                                 size="small"
                                 onClick={() => handleViewClick(loan)}
                                 sx={{
-                                  bgcolor: alpha(PRIMARY, 0.1),
-                                  color: PRIMARY,
+                                  background: GRADIENT_MAIN,
+                                  color: "#fff",
+                                  "&:hover": {
+                                    background: GRADIENT_MAIN,
+                                    opacity: 0.92,
+                                  },
                                 }}
                               >
                                 <Visibility fontSize="small" />
@@ -3473,8 +3540,14 @@ export default function BankLoanApply() {
                                   size="small"
                                   onClick={() => handleEditClick(loan)}
                                   sx={{
-                                    bgcolor: alpha(PRIMARY, 0.1),
-                                    color: PRIMARY,
+                                    background:
+                                      "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                                    color: "#1e40af",
+                                    "&:hover": {
+                                      background:
+                                        "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                                      opacity: 0.92,
+                                    },
                                   }}
                                 >
                                   <Edit fontSize="small" />

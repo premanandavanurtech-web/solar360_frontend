@@ -1,33 +1,15 @@
-/* MainLayout.css or App.css */
-/* Force content to start from left edge */
-main {
-    left: 0 !important;
-    margin-left: 0 !important;
-  }
-  
-  /* Target the main content wrapper */
-  .main-content-wrapper {
-    left: 0 !important;
-    margin-left: 0 !important;
-    max-width: 100% !important;
-    padding-left: 0 !important;
-  }
-  
-  /* Ensure all direct children of main content have border radius */
-  .main-content-wrapper > * {
-    border-radius: 12px; /* Adjust this value as needed */
-  }
-  
-  /* If you want to apply border-radius to specific page components */
-  .main-content-wrapper .page-container,
-  .main-content-wrapper .MuiPaper-root,
-  .main-content-wrapper .MuiCard-root {
-    border-radius: 12px !important;
-  }
-  
-  /* Remove container constraints */
-  .MuiContainer-root {
-    max-width: 100% !important;
-    padding-left: 0 !important;
-    margin-left: 0 !important;
-  }
+/* Main layout-only styling. Avoid global margin overrides here; the sidebar
+   offset is calculated in MainLayout.jsx. */
+.main-content-wrapper {
+  box-sizing: border-box;
+}
+
+.main-content-wrapper > * {
+  border-radius: 12px;
+}
+
+.main-content-wrapper .page-container,
+.main-content-wrapper .MuiPaper-root,
+.main-content-wrapper .MuiCard-root {
+  border-radius: 12px !important;
+}

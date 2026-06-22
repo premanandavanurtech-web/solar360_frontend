@@ -153,8 +153,24 @@ import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { useNavigate } from "react-router-dom";
 
 // ========== CONSTANTS & CONFIGURATION ==========
-const PRIMARY_COLOR = "#4569ea";
+const PRIMARY_COLOR = "#0f1f3d";
 const SECONDARY_COLOR = "#1a237e";
+const GRADIENT_MAIN =
+  "linear-gradient(135deg, #0f1f3d 0%, #1a3a6b 60%, #2563eb 100%)";
+const GRADIENT_BLUE = "linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)";
+const GRADIENT_CARD = "linear-gradient(135deg, #f8faff, #eff6ff)";
+const CARD_STRIPES = [
+  "linear-gradient(90deg, #2563eb, #60a5fa)",
+  "linear-gradient(90deg, #d97706, #fbbf24)",
+  "linear-gradient(90deg, #16a34a, #4ade80)",
+  "linear-gradient(90deg, #7c3aed, #a78bfa)",
+];
+const CARD_ICON_BG = [
+  "linear-gradient(135deg, #dbeafe, #93c5fd)",
+  "linear-gradient(135deg, #fef3c7, #fcd34d)",
+  "linear-gradient(135deg, #dcfce7, #86efac)",
+  "linear-gradient(135deg, #ede9fe, #c4b5fd)",
+];
 const ITEMS_PER_PAGE_OPTIONS = [10, 20, 50, 100];
 const DEFAULT_ITEMS_PER_PAGE = 20;
 
@@ -171,7 +187,7 @@ const PRIORITY_CONFIG = {
   High: {
     label: "High",
     color: "#f44336",
-    bgcolor: alpha("#f44336", 0.1),
+    bgcolor: "linear-gradient(135deg,#fee2e2,#fecaca)",
     icon: <PriorityHigh sx={{ fontSize: 16 }} />,
     daysThreshold: 30,
     description: "Inactive for 30+ days - Immediate action required",
@@ -180,7 +196,7 @@ const PRIORITY_CONFIG = {
   Medium: {
     label: "Medium",
     color: "#ff9800",
-    bgcolor: alpha("#ff9800", 0.1),
+    bgcolor: "linear-gradient(135deg,#fef3c7,#fde68a)",
     icon: <Warning sx={{ fontSize: 16 }} />,
     daysThreshold: 15,
     description: "Inactive for 15-29 days - Follow up needed",
@@ -189,7 +205,7 @@ const PRIORITY_CONFIG = {
   Low: {
     label: "Low",
     color: "#4caf50",
-    bgcolor: alpha("#4caf50", 0.1),
+    bgcolor: "linear-gradient(135deg,#dcfce7,#bbf7d0)",
     icon: <CheckCircle sx={{ fontSize: 16 }} />,
     daysThreshold: 0,
     description: "Inactive for less than 15 days - Monitor",
@@ -202,13 +218,13 @@ const STAGE_CONFIG = {
   "Installation Completion": {
     label: "Installation",
     color: PRIMARY_COLOR,
-    bgcolor: alpha(PRIMARY_COLOR, 0.1),
+    bgcolor: "linear-gradient(135deg,#dbeafe,#bfdbfe)",
     icon: <Build sx={{ fontSize: 16 }} />,
   },
   Missed: {
     label: "Missed Lead",
     color: "#f44336",
-    bgcolor: alpha("#f44336", 0.1),
+    bgcolor: "linear-gradient(135deg,#fee2e2,#fecaca)",
     icon: <Warning sx={{ fontSize: 16 }} />,
   },
 };
@@ -249,7 +265,7 @@ const getStageConfig = (status) => {
     STAGE_CONFIG[status] || {
       label: status || "New",
       color: "#757575",
-      bgcolor: alpha("#757575", 0.1),
+      bgcolor: "linear-gradient(135deg,#f1f5f9,#e2e8f0)",
       icon: <Info sx={{ fontSize: 16 }} />,
     }
   );
@@ -1261,12 +1277,24 @@ const SummaryCard = ({ card, index }) => (
       sx={{
         p: { xs: 1.5, sm: 2, md: 2.5 },
         borderRadius: 3,
+        position: "relative",
+        overflow: "hidden",
         border: `1px solid ${alpha(card.color, 0.1)}`,
         boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
         transition: "transform 0.2s",
         "&:hover": {
           transform: "translateY(-2px)",
           boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
+        },
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "4px",
+          borderRadius: "16px 16px 0 0",
+          background: CARD_STRIPES[index % CARD_STRIPES.length],
         },
       }}
     >
@@ -1283,7 +1311,7 @@ const SummaryCard = ({ card, index }) => (
               width: { xs: 32, sm: 40, md: 48 },
               height: { xs: 32, sm: 40, md: 48 },
               borderRadius: { xs: 1.5, sm: 2 },
-              bgcolor: alpha(card.color, 0.1),
+              background: CARD_ICON_BG[index % CARD_ICON_BG.length],
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -1752,28 +1780,28 @@ export default function MissedLeadsPage() {
         label: "Total Missed",
         value: summaryStats.total,
         icon: <TrendingDown />,
-        color: "#4569ea",
+        color: "#0f1f3d",
         subText: "Leads lost",
       },
       {
         label: "High Priority",
         value: summaryStats.highPriority,
         icon: <PriorityHigh />,
-        color: "#4569ea",
+        color: "#0f1f3d",
         subText: "30+ days inactive",
       },
       {
         label: "Avg Inactive Days",
         value: summaryStats.avgInactiveDays,
         icon: <AccessTime />,
-        color: "#4569ea",
+        color: "#0f1f3d",
         subText: "Days without contact",
       },
       {
         label: "Can Reopen",
         value: summaryStats.reopenable,
         icon: <Restore />,
-        color: "#4569ea",
+        color: "#0f1f3d",
         subText: "Ready for recovery",
       },
     ],
@@ -2486,26 +2514,54 @@ export default function MissedLeadsPage() {
                       </InputAdornment>
                     ),
                   }}
-                  sx={{ maxWidth: 400 }}
+                  sx={{
+                    maxWidth: 400,
+                    "& .MuiOutlinedInput-root": {
+                      "&.Mui-focused fieldset": {
+                        borderColor: "#3b82f6",
+                        boxShadow: "0 0 0 3px rgba(37,99,235,.12)",
+                      },
+                    },
+                  }}
                 />
 
-                <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <InputLabel>Period</InputLabel>
-                  <Select
-                    value={period}
-                    label="Period"
-                    onChange={(e) => setPeriod(e.target.value)}
-                  >
-                    {PERIOD_OPTIONS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          {option.icon}
-                          <span>{option.label}</span>
-                        </Stack>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Stack direction="row" spacing={0.75}>
+                  {PERIOD_OPTIONS.map((option) => (
+                    <Button
+                      key={option.value}
+                      size="small"
+                      onClick={() => setPeriod(option.value)}
+                      sx={{
+                        borderRadius: "50px",
+                        px: 2,
+                        py: 0.75,
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        background:
+                          period === option.value ? GRADIENT_BLUE : "transparent",
+                        color:
+                          period === option.value ? "#fff" : PRIMARY_COLOR,
+                        border: `1px solid ${
+                          period === option.value
+                            ? "transparent"
+                            : alpha(PRIMARY_COLOR, 0.2)
+                        }`,
+                        boxShadow:
+                          period === option.value
+                            ? "0 2px 8px rgba(37,99,235,.3)"
+                            : "none",
+                        "&:hover": {
+                          background:
+                            period === option.value
+                              ? GRADIENT_BLUE
+                              : alpha(PRIMARY_COLOR, 0.06),
+                        },
+                      }}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </Stack>
 
                 <FormControl size="small" sx={{ minWidth: 150 }}>
                   <InputLabel>Priority</InputLabel>
@@ -2558,7 +2614,7 @@ export default function MissedLeadsPage() {
                     p: 3,
                     borderRadius: 2,
                     borderColor: alpha(PRIMARY_COLOR, 0.2),
-                    bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                    background: GRADIENT_CARD,
                   }}
                 >
                   <Grid container spacing={3}>
@@ -2870,7 +2926,8 @@ export default function MissedLeadsPage() {
                   <TableRow>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -2901,7 +2958,8 @@ export default function MissedLeadsPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -2932,7 +2990,8 @@ export default function MissedLeadsPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -2963,7 +3022,8 @@ export default function MissedLeadsPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -2994,7 +3054,8 @@ export default function MissedLeadsPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3003,7 +3064,8 @@ export default function MissedLeadsPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3041,7 +3103,8 @@ export default function MissedLeadsPage() {
                                 sx={{
                                   width: 32,
                                   height: 32,
-                                  bgcolor: PRIMARY_COLOR,
+                                  background: GRADIENT_MAIN,
+                                  color: "#fff",
                                   fontSize: "0.875rem",
                                 }}
                               >
@@ -3089,7 +3152,7 @@ export default function MissedLeadsPage() {
                                 icon={priorityConfig.icon}
                                 size="small"
                                 sx={{
-                                  bgcolor: priorityConfig.bgcolor,
+                                  background: priorityConfig.bgcolor,
                                   color: priorityConfig.color,
                                   fontWeight: 600,
                                   minWidth: 80,
@@ -3103,7 +3166,7 @@ export default function MissedLeadsPage() {
                               icon={stageConfig.icon}
                               size="small"
                               sx={{
-                                bgcolor: stageConfig.bgcolor,
+                                 background: stageConfig.bgcolor,
                                 color: stageConfig.color,
                                 fontWeight: 600,
                                 minWidth: 100,
@@ -3117,10 +3180,11 @@ export default function MissedLeadsPage() {
                                   size="small"
                                   onClick={() => handleViewClick(lead)}
                                   sx={{
-                                    bgcolor: alpha(PRIMARY_COLOR, 0.1),
-                                    color: PRIMARY_COLOR,
+                                    background: GRADIENT_MAIN,
+                                    color: "#fff",
                                     "&:hover": {
-                                      bgcolor: alpha(PRIMARY_COLOR, 0.2),
+                                      background: GRADIENT_MAIN,
+                                      opacity: 0.92,
                                     },
                                   }}
                                 >
@@ -3134,10 +3198,13 @@ export default function MissedLeadsPage() {
                                     size="small"
                                     onClick={() => handleReopenClick(lead)}
                                     sx={{
-                                      bgcolor: alpha("#4caf50", 0.1),
-                                      color: "#4caf50",
+                                      background:
+                                        "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+                                      color: "#14532d",
                                       "&:hover": {
-                                        bgcolor: alpha("#4caf50", 0.2),
+                                        background:
+                                          "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+                                        opacity: 0.92,
                                       },
                                     }}
                                   >

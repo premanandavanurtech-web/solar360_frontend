@@ -112,7 +112,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { format, parseISO, isValid, subDays, subMonths } from "date-fns";
 import { useNavigate } from "react-router-dom";
 
-const PRIMARY_COLOR = "#4569ea";
+const PRIMARY_COLOR = "#0f1f3d";
 const SECONDARY_COLOR = "#1a237e";
 const SUCCESS = "#22c55e";
 const WARNING = "#f59e0b";

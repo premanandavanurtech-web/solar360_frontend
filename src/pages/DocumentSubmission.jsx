@@ -137,8 +137,12 @@ import { useNavigate } from "react-router-dom";
 import AlertTitle from "@mui/material/AlertTitle";
 
 // ========== CONSTANTS & CONFIGURATION ==========
-const PRIMARY_COLOR = "#4569ea";
+const PRIMARY_COLOR = "#0f1f3d";
 const SECONDARY_COLOR = "#1a237e";
+const GRADIENT_MAIN =
+  "linear-gradient(135deg, #0f1f3d 0%, #1a3a6b 60%, #2563eb 100%)";
+const GRADIENT_BLUE = "linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)";
+const GRADIENT_CARD = "linear-gradient(135deg, #f8faff, #eff6ff)";
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 25, 50];
 const DEFAULT_ITEMS_PER_PAGE = 10;
 const ALLOWED_ROLES = ["Admin_panel", "ZSM", "Incharge", "TEAM"];
@@ -167,6 +171,20 @@ const PERIOD_OPTIONS = [
   { value: "All", label: "All Time", icon: <DateRange /> },
 ];
 
+const CARD_STRIPES = [
+  "linear-gradient(90deg, #2563eb, #60a5fa)",
+  "linear-gradient(90deg, #d97706, #fbbf24)",
+  "linear-gradient(90deg, #16a34a, #4ade80)",
+  "linear-gradient(90deg, #7c3aed, #a78bfa)",
+];
+
+const CARD_ICON_BG = [
+  "linear-gradient(135deg, #dbeafe, #93c5fd)",
+  "linear-gradient(135deg, #fef3c7, #fcd34d)",
+  "linear-gradient(135deg, #dcfce7, #86efac)",
+  "linear-gradient(135deg, #ede9fe, #c4b5fd)",
+];
+
 // Lead Status Configuration for Document Submission Page
 const LEAD_STATUS_OPTIONS = [
   "Document Submission",
@@ -176,20 +194,20 @@ const LEAD_STATUS_OPTIONS = [
 
 const LEAD_STATUS_CONFIG = {
   "Document Submission": {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+    color: "#1e40af",
     icon: <Description sx={{ fontSize: 16 }} />,
     description: "Documents submitted for verification",
   },
   "Bank Loan Apply": {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #fef3c7, #fde68a)",
+    color: "#92400e",
     icon: <PendingActions sx={{ fontSize: 16 }} />,
     description: "Waiting for bank approval",
   },
   "Missed Leads": {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #fee2e2, #fecaca)",
+    color: "#b91c1c",
     icon: <Cancel sx={{ fontSize: 16 }} />,
     description: "Lead lost or not converted",
   },
@@ -198,22 +216,22 @@ const LEAD_STATUS_CONFIG = {
 // Document Status Configuration
 const DOCUMENT_STATUS_CONFIG = {
   submitted: {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+    color: "#14532d",
     label: "Submitted",
     icon: <CheckCircle sx={{ fontSize: 16 }} />,
     order: 1,
   },
   pending: {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #fef3c7, #fde68a)",
+    color: "#92400e",
     label: "Pending",
     icon: <PendingActions sx={{ fontSize: 16 }} />,
     order: 2,
   },
   rejected: {
-    bg: alpha(PRIMARY_COLOR, 0.08),
-    color: PRIMARY_COLOR,
+    bg: "linear-gradient(135deg, #fee2e2, #fecaca)",
+    color: "#b91c1c",
     label: "Rejected",
     icon: <Cancel sx={{ fontSize: 16 }} />,
     order: 3,
@@ -872,7 +890,7 @@ const MobileDocumentCard = ({ document, onView, onEdit, onStatusUpdate, permissi
           <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
             <Avatar
               sx={{
-                bgcolor: PRIMARY_COLOR,
+                background: GRADIENT_MAIN,
                 color: "#fff",
                 width: 48,
                 height: 48,
@@ -897,11 +915,11 @@ const MobileDocumentCard = ({ document, onView, onEdit, onStatusUpdate, permissi
           <IconButton
             size="small"
             onClick={() => setExpanded(!expanded)}
-            sx={{
-              transform: expanded ? "rotate(180deg)" : "none",
-              transition: "transform 0.3s",
-              bgcolor: alpha(PRIMARY_COLOR, 0.1),
-            }}
+              sx={{
+                transform: expanded ? "rotate(180deg)" : "none",
+                transition: "transform 0.3s",
+                background: GRADIENT_CARD,
+              }}
           >
             {expanded ? <ExpandLess /> : <ExpandMore />}
           </IconButton>
@@ -947,7 +965,7 @@ const MobileDocumentCard = ({ document, onView, onEdit, onStatusUpdate, permissi
               icon={docStatusConfig.icon}
               size="small"
               sx={{
-                bgcolor: docStatusConfig.bg,
+                background: docStatusConfig.bg,
                 color: docStatusConfig.color,
                 fontWeight: 600,
                 height: 24,
@@ -962,7 +980,7 @@ const MobileDocumentCard = ({ document, onView, onEdit, onStatusUpdate, permissi
               icon={leadStatusConfig.icon}
               size="small"
               sx={{
-                bgcolor: leadStatusConfig.bg,
+                background: leadStatusConfig.bg,
                 color: leadStatusConfig.color,
                 fontWeight: 600,
                 height: 24,
@@ -1074,8 +1092,9 @@ const MobileDocumentCard = ({ document, onView, onEdit, onStatusUpdate, permissi
                 startIcon={<Visibility />}
                 onClick={() => onView(document)}
                 sx={{
-                  bgcolor: PRIMARY_COLOR,
-                  "&:hover": { bgcolor: SECONDARY_COLOR },
+                  background: GRADIENT_MAIN,
+                  color: "#fff",
+                  "&:hover": { background: GRADIENT_MAIN, opacity: 0.92 },
                 }}
               >
                 View
@@ -1088,9 +1107,14 @@ const MobileDocumentCard = ({ document, onView, onEdit, onStatusUpdate, permissi
                   startIcon={<CloudUpload />}
                   onClick={() => onEdit(document)}
                   sx={{
-                    borderColor: PRIMARY_COLOR,
-                    color: PRIMARY_COLOR,
-                    "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.1) },
+                    borderColor: "transparent",
+                    background: "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+                    color: "#14532d",
+                    "&:hover": {
+                      borderColor: "transparent",
+                      background: "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+                      opacity: 0.92,
+                    },
                   }}
                 >
                   Upload
@@ -1104,9 +1128,14 @@ const MobileDocumentCard = ({ document, onView, onEdit, onStatusUpdate, permissi
                   startIcon={<TrendingUp />}
                   onClick={() => onStatusUpdate(document)}
                   sx={{
-                    borderColor: PRIMARY_COLOR,
-                    color: PRIMARY_COLOR,
-                    "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.1) },
+                    borderColor: "transparent",
+                    background: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                    color: "#1e40af",
+                    "&:hover": {
+                      borderColor: "transparent",
+                      background: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                      opacity: 0.92,
+                    },
                   }}
                 >
                   Status
@@ -1714,7 +1743,7 @@ const LeadStatusUpdateModal = ({
               label={lead?.status || "Unknown"}
               icon={leadStatusConfig.icon}
               sx={{
-                bgcolor: leadStatusConfig.bg,
+                background: leadStatusConfig.bg,
                 color: leadStatusConfig.color,
                 fontWeight: 600,
                 fontSize: "0.875rem",
@@ -2011,7 +2040,7 @@ const ViewLeadModal = ({
                       }
                       size="small"
                       sx={{
-                        bgcolor: getDocumentStatusConfig(
+                        background: getDocumentStatusConfig(
                           displayData.documentStatus,
                         ).bg,
                         color: getDocumentStatusConfig(
@@ -2037,7 +2066,7 @@ const ViewLeadModal = ({
                       icon={getLeadStatusConfig(displayData.status).icon}
                       size="small"
                       sx={{
-                        bgcolor: getLeadStatusConfig(displayData.status).bg,
+                        background: getLeadStatusConfig(displayData.status).bg,
                         color: getLeadStatusConfig(displayData.status).color,
                         fontWeight: 600,
                       }}
@@ -2943,10 +2972,12 @@ const EditLeadModal = ({
             loading ? <CircularProgress size={20} sx={{ color: "#fff" }} /> : <CloudUpload />
           }
           sx={{
-            bgcolor: PRIMARY_COLOR,
+            background: GRADIENT_BLUE,
             px: 4,
+            boxShadow: "0 4px 12px rgba(37,99,235,.3)",
             "&:hover": {
-              bgcolor: SECONDARY_COLOR,
+              background: GRADIENT_BLUE,
+              opacity: 0.9,
             },
             "&.Mui-disabled": {
               bgcolor: "#ccc",
@@ -3046,12 +3077,24 @@ const SummaryCard = ({ card, index }) => (
       sx={{
         p: { xs: 1.5, sm: 2, md: 2.5 },
         borderRadius: 3,
+        position: "relative",
+        overflow: "hidden",
         border: `1px solid ${alpha(card.color, 0.1)}`,
         boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
         transition: "transform 0.2s",
         "&:hover": {
           transform: "translateY(-2px)",
           boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
+        },
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "4px",
+          borderRadius: "16px 16px 0 0",
+          background: CARD_STRIPES[index % CARD_STRIPES.length],
         },
       }}
     >
@@ -3068,7 +3111,7 @@ const SummaryCard = ({ card, index }) => (
               width: { xs: 32, sm: 40, md: 48 },
               height: { xs: 32, sm: 40, md: 48 },
               borderRadius: { xs: 1.5, sm: 2 },
-              bgcolor: alpha(card.color, 0.1),
+              background: CARD_ICON_BG[index % CARD_ICON_BG.length],
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -3969,26 +4012,54 @@ export default function DocumentSubmissionPage() {
                       </InputAdornment>
                     ),
                   }}
-                  sx={{ maxWidth: 400 }}
+                  sx={{
+                    maxWidth: 400,
+                    "& .MuiOutlinedInput-root": {
+                      "&.Mui-focused fieldset": {
+                        borderColor: "#3b82f6",
+                        boxShadow: "0 0 0 3px rgba(37,99,235,.12)",
+                      },
+                    },
+                  }}
                 />
 
-                <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <InputLabel>Period</InputLabel>
-                  <Select
-                    value={period}
-                    label="Period"
-                    onChange={(e) => setPeriod(e.target.value)}
-                  >
-                    {PERIOD_OPTIONS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          {option.icon}
-                          <span>{option.label}</span>
-                        </Stack>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Stack direction="row" spacing={0.75}>
+                  {PERIOD_OPTIONS.map((option) => (
+                    <Button
+                      key={option.value}
+                      size="small"
+                      onClick={() => setPeriod(option.value)}
+                      sx={{
+                        borderRadius: "50px",
+                        px: 2,
+                        py: 0.75,
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        background:
+                          period === option.value ? GRADIENT_BLUE : "transparent",
+                        color:
+                          period === option.value ? "#fff" : PRIMARY_COLOR,
+                        border: `1px solid ${
+                          period === option.value
+                            ? "transparent"
+                            : alpha(PRIMARY_COLOR, 0.2)
+                        }`,
+                        boxShadow:
+                          period === option.value
+                            ? "0 2px 8px rgba(37,99,235,.3)"
+                            : "none",
+                        "&:hover": {
+                          background:
+                            period === option.value
+                              ? GRADIENT_BLUE
+                              : alpha(PRIMARY_COLOR, 0.06),
+                        },
+                      }}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </Stack>
 
                 <FormControl size="small" sx={{ minWidth: 150 }}>
                   <InputLabel>Document Status</InputLabel>
@@ -4036,7 +4107,7 @@ export default function DocumentSubmissionPage() {
                     p: 3,
                     borderRadius: 2,
                     borderColor: alpha(PRIMARY_COLOR, 0.2),
-                    bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                    background: GRADIENT_CARD,
                   }}
                 >
                   <Grid container spacing={3}>
@@ -4296,7 +4367,8 @@ export default function DocumentSubmissionPage() {
                   <TableRow>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4305,7 +4377,8 @@ export default function DocumentSubmissionPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4336,7 +4409,8 @@ export default function DocumentSubmissionPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4345,7 +4419,8 @@ export default function DocumentSubmissionPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4354,7 +4429,8 @@ export default function DocumentSubmissionPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4363,7 +4439,8 @@ export default function DocumentSubmissionPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4394,35 +4471,48 @@ export default function DocumentSubmissionPage() {
                           }}
                         >
                           <TableCell>
-                            <Stack spacing={1}>
-                              <Typography variant="subtitle2" fontWeight={600}>
-                                {document.firstName} {document.lastName}
-                              </Typography>
-                              <Stack spacing={0.5}>
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 0.5,
-                                    color: "text.secondary",
-                                  }}
-                                >
-                                  <Email fontSize="inherit" />
-                                  {document.email || "No email"}
+                            <Stack direction="row" spacing={1.25} alignItems="flex-start">
+                              <Avatar
+                                sx={{
+                                  width: 32,
+                                  height: 32,
+                                  background: GRADIENT_MAIN,
+                                  color: "#fff",
+                                  fontSize: "0.875rem",
+                                }}
+                              >
+                                {getInitials(document.firstName, document.lastName)}
+                              </Avatar>
+                              <Stack spacing={1}>
+                                <Typography variant="subtitle2" fontWeight={600}>
+                                  {document.firstName} {document.lastName}
                                 </Typography>
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 0.5,
-                                    color: "text.secondary",
-                                  }}
-                                >
-                                  <Phone fontSize="inherit" />
-                                  {document.phone || "No phone"}
-                                </Typography>
+                                <Stack spacing={0.5}>
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 0.5,
+                                      color: "text.secondary",
+                                    }}
+                                  >
+                                    <Email fontSize="inherit" />
+                                    {document.email || "No email"}
+                                  </Typography>
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 0.5,
+                                      color: "text.secondary",
+                                    }}
+                                  >
+                                    <Phone fontSize="inherit" />
+                                    {document.phone || "No phone"}
+                                  </Typography>
+                                </Stack>
                               </Stack>
                             </Stack>
                           </TableCell>
@@ -4447,7 +4537,7 @@ export default function DocumentSubmissionPage() {
                               icon={docStatusConfig.icon}
                               size="small"
                               sx={{
-                                bgcolor: docStatusConfig.bg,
+                                background: docStatusConfig.bg,
                                 color: docStatusConfig.color,
                                 fontWeight: 600,
                                 minWidth: 100,
@@ -4466,7 +4556,7 @@ export default function DocumentSubmissionPage() {
                                 icon={leadStatusConfig.icon}
                                 size="small"
                                 sx={{
-                                  bgcolor: leadStatusConfig.bg,
+                                  background: leadStatusConfig.bg,
                                   color: leadStatusConfig.color,
                                   fontWeight: 600,
                                   minWidth: 120,
@@ -4503,10 +4593,11 @@ export default function DocumentSubmissionPage() {
                                   size="small"
                                   onClick={() => handleViewClick(document)}
                                   sx={{
-                                    bgcolor: alpha(PRIMARY_COLOR, 0.1),
-                                    color: PRIMARY_COLOR,
+                                    background: GRADIENT_MAIN,
+                                    color: "#fff",
                                     "&:hover": {
-                                      bgcolor: alpha(PRIMARY_COLOR, 0.2),
+                                      background: GRADIENT_MAIN,
+                                      opacity: 0.92,
                                     },
                                   }}
                                 >
@@ -4520,10 +4611,13 @@ export default function DocumentSubmissionPage() {
                                     size="small"
                                     onClick={() => handleEditClick(document)}
                                     sx={{
-                                      bgcolor: alpha(PRIMARY_COLOR, 0.1),
-                                      color: PRIMARY_COLOR,
+                                      background:
+                                        "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+                                      color: "#14532d",
                                       "&:hover": {
-                                        bgcolor: alpha(PRIMARY_COLOR, 0.2),
+                                        background:
+                                          "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+                                        opacity: 0.92,
                                       },
                                     }}
                                   >
@@ -4540,10 +4634,13 @@ export default function DocumentSubmissionPage() {
                                       handleStatusUpdateClick(document)
                                     }
                                     sx={{
-                                      bgcolor: alpha(PRIMARY_COLOR, 0.1),
-                                      color: PRIMARY_COLOR,
+                                      background:
+                                        "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                                      color: "#1e40af",
                                       "&:hover": {
-                                        bgcolor: alpha(PRIMARY_COLOR, 0.2),
+                                        background:
+                                          "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                                        opacity: 0.92,
                                       },
                                     }}
                                   >

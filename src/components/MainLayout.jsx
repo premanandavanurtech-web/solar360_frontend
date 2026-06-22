@@ -10,13 +10,11 @@ const MainLayout = ({ children }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
-  const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
-  
   const [drawerOpen, setDrawerOpen] = useState(!isMobile);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const sidebarWidth = 280;
-  const collapsedWidth = 70;
+  const sidebarWidth = 268;
+  const collapsedWidth = 68;
 
   // Handle responsive behavior
   useEffect(() => {
@@ -41,15 +39,6 @@ const MainLayout = ({ children }) => {
     if (isMobile) {
       setMobileOpen(false);
     }
-  };
-
-  // Calculate margin based on device and drawer state
-  const getContentMargin = () => {
-    if (isMobile) return 0;
-    if (isTablet) {
-      return drawerOpen ? `${sidebarWidth}px` : `${collapsedWidth}px`;
-    }
-    return drawerOpen ? `${sidebarWidth}px` : `${collapsedWidth}px`;
   };
 
   // Calculate width based on device and drawer state
@@ -95,13 +84,12 @@ const MainLayout = ({ children }) => {
         component="main"
         sx={{
           flexGrow: 1,
-          width: "100%",
           minHeight: "100vh",
-          transition: theme.transitions.create(["margin", "width"], {
+          transition: theme.transitions.create(["width"], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.leavingScreen,
           }),
-          marginLeft: getContentMargin(),
+          marginLeft: 0,
           width: getContentWidth(),
           pt: {
             xs: "56px", // Mobile topbar height
@@ -113,10 +101,10 @@ const MainLayout = ({ children }) => {
           height: "100vh",
           bgcolor: "#f8f9fa",
           display: "flex",
-          justifyContent: "center",
+          justifyContent: "flex-start",
         }}
       >
-        {/* Content Wrapper - Centered */}
+        {/* Content Wrapper */}
         <Box
           className="main-content-wrapper"
           sx={{
@@ -128,7 +116,7 @@ const MainLayout = ({ children }) => {
               lg: "1400px",
               xl: "1600px",
             },
-            margin: "0 auto",
+            margin: 0,
             px: {
               xs: 1,
               sm: 2,
@@ -160,7 +148,7 @@ const MainLayout = ({ children }) => {
               right: 16,
               zIndex: 1100,
               display: { xs: "flex", sm: "none" },
-              bgcolor: "#4569ea",
+              bgcolor: "#0f1f3d",
               "&:hover": {
                 bgcolor: "#3a5ac8",
               },

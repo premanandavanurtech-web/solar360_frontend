@@ -82,11 +82,15 @@ import { useDashboard } from "../contexts/DashboardContext";
 import { useAuth } from "../contexts/AuthContext";
 
 // Single color for entire dashboard
-const PRIMARY_COLOR = "#4569ea";
+const PRIMARY_COLOR = "#111f4d";
 const SECONDARY_COLOR = "#f5f7ff";
 const SUCCESS_COLOR = "#4caf50";
 const WARNING_COLOR = "#ff9800";
 const ERROR_COLOR = "#f44336";
+const HEADER_DARK = "#1f2d57";
+const HEADER_LIGHT = "#4569ea";
+const ACTION_ORANGE = "#ff9b2f";
+const SURFACE_BG = "#f7f9fe";
 
 const getInitials = (name) => {
   if (!name || typeof name !== "string") return "??";
@@ -169,17 +173,28 @@ const StatCard = ({ stat, onClick, isMobile }) => (
   <Card
     sx={{
       borderRadius: { xs: 2, sm: 2.5, md: 3 },
-      boxShadow: "0 4px 20px rgba(0,0,0,0.02)",
+      boxShadow: "0 14px 34px rgba(39,76,167,0.10)",
       height: "100%",
       width: "100%",
       transition: "all 0.3s ease",
       cursor: "pointer",
       bgcolor: "white",
       border: "1px solid #edf2f7",
+      position: "relative",
+      overflow: "hidden",
+      "&::before": {
+        content: '""',
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 4,
+        bgcolor: stat.accent || PRIMARY_COLOR,
+      },
       "&:hover": {
         transform: { xs: "none", sm: "translateY(-4px)" },
-        boxShadow: `0 8px 30px ${alpha(PRIMARY_COLOR, 0.15)}`,
-        borderColor: alpha(PRIMARY_COLOR, 0.3),
+        boxShadow: `0 18px 40px ${alpha(stat.accent || PRIMARY_COLOR, 0.18)}`,
+        borderColor: alpha(stat.accent || PRIMARY_COLOR, 0.22),
       },
       "&:active": {
         transform: "scale(0.98)",
@@ -221,12 +236,13 @@ const StatCard = ({ stat, onClick, isMobile }) => (
         <Box
           sx={{
             p: { xs: 0.75, sm: 1, md: 1.25, lg: 1.5 },
-            borderRadius: { xs: 1.5, sm: 1.5, md: 2 },
-            bgcolor: alpha(PRIMARY_COLOR, 0.1),
-            color: PRIMARY_COLOR,
+            borderRadius: 999,
+            bgcolor: alpha(stat.accent || PRIMARY_COLOR, 0.14),
+            color: stat.accent || PRIMARY_COLOR,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            boxShadow: `inset 0 0 0 1px ${alpha(stat.accent || PRIMARY_COLOR, 0.08)}`,
           }}
         >
           {React.cloneElement(stat.icon, { 
@@ -276,7 +292,7 @@ const MobileStatCard = ({ stat, onClick }) => (
     elevation={0}
     sx={{
       p: 1.5,
-      borderRadius: 2,
+      borderRadius: 2.5,
       bgcolor: "white",
       border: "1px solid #edf2f7",
       display: "flex",
@@ -285,6 +301,7 @@ const MobileStatCard = ({ stat, onClick }) => (
       cursor: "pointer",
       width: 160,
       flexShrink: 0,
+      boxShadow: "0 10px 24px rgba(39,76,167,0.08)",
       "&:active": {
         bgcolor: alpha(PRIMARY_COLOR, 0.05),
       },
@@ -295,9 +312,9 @@ const MobileStatCard = ({ stat, onClick }) => (
       <Box
         sx={{
           p: 1,
-          borderRadius: 1.5,
-          bgcolor: alpha(PRIMARY_COLOR, 0.1),
-          color: PRIMARY_COLOR,
+          borderRadius: 999,
+          bgcolor: alpha(stat.accent || PRIMARY_COLOR, 0.14),
+          color: stat.accent || PRIMARY_COLOR,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -431,13 +448,15 @@ const TeamMemberCard = ({ member, isMobile }) => (
       p: { xs: 1.5, sm: 1.5, md: 2 },
       borderRadius: { xs: 1.5, sm: 1.5, md: 2 },
       border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-      bgcolor: "white",
+      bgcolor: alpha(PRIMARY_COLOR, 0.02),
       transition: "all 0.2s ease",
       height: '100%',
+      boxShadow: "0 10px 24px rgba(39,76,167,0.06)",
       "&:hover": {
         transform: { xs: "none", sm: "translateY(-2px)" },
-        boxShadow: `0 4px 20px ${alpha(PRIMARY_COLOR, 0.1)}`,
+        boxShadow: `0 14px 28px ${alpha(PRIMARY_COLOR, 0.12)}`,
         borderColor: alpha(PRIMARY_COLOR, 0.3),
+        bgcolor: "white",
       },
       "&:active": {
         transform: "scale(0.98)",
@@ -557,6 +576,7 @@ const QuickActionsDrawer = ({ open, onClose, navigate }) => (
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
         maxHeight: '70vh',
+        bgcolor: SURFACE_BG,
       }
     }}
   >
@@ -576,9 +596,10 @@ const QuickActionsDrawer = ({ open, onClose, navigate }) => (
               elevation={0}
               sx={{
                 p: 2,
-                borderRadius: 2,
-                bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                borderRadius: 2.5,
+                bgcolor: "white",
                 border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                boxShadow: "0 12px 28px rgba(39,76,167,0.08)",
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
@@ -618,6 +639,7 @@ const FilterDrawer = ({ open, onClose, timeFilter, onFilterChange }) => (
       sx: {
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
+        bgcolor: SURFACE_BG,
       }
     }}
   >
@@ -637,9 +659,10 @@ const FilterDrawer = ({ open, onClose, timeFilter, onFilterChange }) => (
             elevation={0}
             sx={{
               p: 2,
-              borderRadius: 2,
-              bgcolor: timeFilter === option.value ? alpha(PRIMARY_COLOR, 0.1) : 'transparent',
+              borderRadius: 2.5,
+              bgcolor: timeFilter === option.value ? alpha(PRIMARY_COLOR, 0.1) : 'white',
               border: `1px solid ${timeFilter === option.value ? PRIMARY_COLOR : alpha(PRIMARY_COLOR, 0.1)}`,
+              boxShadow: timeFilter === option.value ? `0 12px 28px ${alpha(PRIMARY_COLOR, 0.12)}` : "0 8px 20px rgba(39,76,167,0.06)",
               display: 'flex',
               alignItems: 'center',
               gap: 2,
@@ -681,6 +704,9 @@ const MobileBottomNav = ({ value, onChange }) => (
       zIndex: 1000,
       borderTop: '1px solid #edf2f7',
       display: { xs: 'block', sm: 'none' },
+      bgcolor: "rgba(255,255,255,0.96)",
+      backdropFilter: "blur(14px)",
+      boxShadow: "0 -10px 26px rgba(31,45,87,0.08)",
     }}
     elevation={3}
   >
@@ -798,6 +824,7 @@ export default function UnifiedDashboard() {
           change: overview.totalVisits > 0 ? "+8.2%" : "0%",
           trend: overview.totalVisits > 0 ? "up" : "flat",
           icon: <Visibility />,
+          accent: PRIMARY_COLOR,
           subtitle: getTimeSubtitle(),
           navigateTo: "/total-visits",
         },
@@ -807,6 +834,7 @@ export default function UnifiedDashboard() {
           change: overview.totalRegistrations > 0 ? "+15.5%" : "0%",
           trend: overview.totalRegistrations > 0 ? "up" : "flat",
           icon: <PersonAdd />,
+          accent: "#5b83f6",
           subtitle: getTimeSubtitle(),
           navigateTo: "/registration",
         },
@@ -816,6 +844,7 @@ export default function UnifiedDashboard() {
           change: overview.totalMissedLeads > 0 ? "+5.3%" : "0%",
           trend: overview.totalMissedLeads > 0 ? "up" : "down",
           icon: <Cancel />,
+          accent: WARNING_COLOR,
           subtitle: getTimeSubtitle(),
           navigateTo: "/missed-leads",
         },
@@ -831,6 +860,7 @@ export default function UnifiedDashboard() {
             change: overview.totalBankLoanApply > 0 ? "+5.2%" : "0%",
             trend: overview.totalBankLoanApply > 0 ? "up" : "flat",
             icon: <AccountBalance />,
+            accent: "#7d8cf5",
             subtitle: getTimeSubtitle(),
             navigateTo: "/bank-loan-apply",
           },
@@ -840,15 +870,17 @@ export default function UnifiedDashboard() {
             change: overview.totalDocumentSubmission > 0 ? "+12.1%" : "0%",
             trend: overview.totalDocumentSubmission > 0 ? "up" : "flat",
             icon: <Description />,
+            accent: "#5dc091",
             subtitle: getTimeSubtitle(),
             navigateTo: "/document-submission",
           },
           {
             title: "Disbursement",
-            value: `₹${(overview.totalDisbursement || 0).toLocaleString("en-IN")}`,
+            value: `\u20B9${(overview.totalDisbursement || 0).toLocaleString("en-IN")}`,
             change: overview.totalDisbursement > 0 ? "+18.3%" : "0%",
             trend: overview.totalDisbursement > 0 ? "up" : "flat",
             icon: <Payments />,
+            accent: ACTION_ORANGE,
             subtitle: getTimeSubtitle(),
             navigateTo: "/disbursement",
           },
@@ -858,6 +890,7 @@ export default function UnifiedDashboard() {
             change: overview.totalInstallations > 0 ? "+8.7%" : "0%",
             trend: overview.totalInstallations > 0 ? "up" : "flat",
             icon: <CheckCircle />,
+            accent: SUCCESS_COLOR,
             subtitle: getTimeSubtitle(),
             navigateTo: "/installation-completion",
           },
@@ -867,6 +900,7 @@ export default function UnifiedDashboard() {
             change: overview.totalTeamMembers > 0 ? "+3.1%" : "0%",
             trend: overview.totalTeamMembers > 0 ? "up" : "flat",
             icon: <Group />,
+            accent: PRIMARY_COLOR,
             subtitle: "Active members",
             navigateTo: "/team-members",
           },
@@ -879,6 +913,7 @@ export default function UnifiedDashboard() {
             change: overview.totalTeamMembers > 0 ? "+2.4%" : "0%",
             trend: overview.totalTeamMembers > 0 ? "up" : "flat",
             icon: <Group />,
+            accent: PRIMARY_COLOR,
             subtitle: "Under management",
             navigateTo: "/my-team",
           },
@@ -888,6 +923,7 @@ export default function UnifiedDashboard() {
             change: overview.totalLeads > 0 ? "+10.2%" : "0%",
             trend: overview.totalLeads > 0 ? "up" : "flat",
             icon: <AssignmentTurnedIn />,
+            accent: "#5b83f6",
             subtitle: getTimeSubtitle(),
             navigateTo: "/all-leads",
           },
@@ -897,6 +933,7 @@ export default function UnifiedDashboard() {
             change: "+5.3%",
             trend: "up",
             icon: <TrendingUp />,
+            accent: SUCCESS_COLOR,
             subtitle: "Visit to Registration",
             navigateTo: "/performance",
           },
@@ -909,6 +946,7 @@ export default function UnifiedDashboard() {
             change: overview.totalLeads > 0 ? "+10.2%" : "0%",
             trend: overview.totalLeads > 0 ? "up" : "flat",
             icon: <AssignmentTurnedIn />,
+            accent: "#5b83f6",
             subtitle: getTimeSubtitle(),
             navigateTo: "/all-leads",
           },
@@ -918,6 +956,7 @@ export default function UnifiedDashboard() {
             change: "+20%",
             trend: "up",
             icon: <TaskAlt />,
+            accent: ACTION_ORANGE,
             subtitle: "Visits completed",
             navigateTo: "/my-targets",
           },
@@ -927,6 +966,7 @@ export default function UnifiedDashboard() {
             change: "+3.2%",
             trend: "up",
             icon: <Assessment />,
+            accent: SUCCESS_COLOR,
             subtitle: "This month",
             navigateTo: "/my-performance",
           },
@@ -1149,40 +1189,64 @@ export default function UnifiedDashboard() {
   if (isMobile) {
     return (
       <>
-        <Box sx={{ width: '100%', pb: 8 }}>
+        <Box sx={{ width: '100%', pb: 8, bgcolor: SURFACE_BG, borderRadius: 3 }}>
           {/* Mobile Header */}
-          <Box sx={{ mb: 2 }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
-              <Box>
-                <Typography variant="h6" fontWeight="700" color={PRIMARY_COLOR} sx={{ fontSize: '1.1rem' }}>
-                  {getRoleDisplayName()} Dashboard
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                  Hi, {user?.firstName || "User"}! 👋
-                </Typography>
+          <Card
+            sx={{
+              mb: 2,
+              borderRadius: 3,
+              background: `linear-gradient(135deg, ${HEADER_DARK} 0%, ${HEADER_LIGHT} 100%)`,
+              color: "white",
+              boxShadow: "0 18px 38px rgba(42,83,189,0.24)",
+            }}
+          >
+            <CardContent sx={{ p: 1.75 }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1.5, mb: 1.5 }}>
+                <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", minWidth: 0 }}>
+                  <Avatar
+                    sx={{
+                      width: 42,
+                      height: 42,
+                      bgcolor: "rgba(255,255,255,0.12)",
+                      border: "1px solid rgba(255,255,255,0.16)",
+                    }}
+                  >
+                    <DashboardIcon sx={{ fontSize: 20 }} />
+                  </Avatar>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="h6" fontWeight="800" sx={{ fontSize: "1.04rem", lineHeight: 1.2 }}>
+                      {getRoleDisplayName()} Dashboard
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.84)" }}>
+                      {getTimeSubtitle()} overview
+                    </Typography>
+                  </Box>
+                </Box>
+
+                <Box sx={{ display: "flex", gap: 0.5 }}>
+                  <IconButton 
+                    size="small" 
+                    onClick={() => setFilterDrawerOpen(true)}
+                    sx={{ bgcolor: "rgba(255,255,255,0.12)", color: "white", width: 32, height: 32 }}
+                  >
+                    <FilterList sx={{ fontSize: 18 }} />
+                  </IconButton>
+                  <IconButton 
+                    size="small" 
+                    onClick={handleRefresh} 
+                    disabled={refreshing}
+                    sx={{ bgcolor: alpha(ACTION_ORANGE, 0.95), color: "white", width: 32, height: 32, "&:hover": { bgcolor: ACTION_ORANGE } }}
+                  >
+                    <Refresh sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Box>
               </Box>
-              <Box sx={{ display: "flex", gap: 0.5 }}>
-                <IconButton 
-                  size="small" 
-                  onClick={() => setFilterDrawerOpen(true)}
-                  sx={{ bgcolor: SECONDARY_COLOR, width: 32, height: 32 }}
-                >
-                  <FilterList sx={{ fontSize: 18 }} />
-                </IconButton>
-                <IconButton 
-                  size="small" 
-                  onClick={handleRefresh} 
-                  disabled={refreshing}
-                  sx={{ bgcolor: SECONDARY_COLOR, width: 32, height: 32 }}
-                >
-                  <Refresh sx={{ fontSize: 18 }} />
-                </IconButton>
-              </Box>
-            </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-              {getTimeSubtitle()} overview
-            </Typography>
-          </Box>
+
+              <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.82)" }}>
+                Welcome back, {user?.firstName || "User"}.
+              </Typography>
+            </CardContent>
+          </Card>
 
           {/* Stats Cards - Horizontal Scroll for Mobile */}
           <Box sx={{ mb: 2.5, overflowX: 'auto', pb: 1, WebkitOverflowScrolling: 'touch' }}>
@@ -1197,7 +1261,7 @@ export default function UnifiedDashboard() {
           {(activeSection === 'home' || activeSection === 'stats') && (
             <Stack spacing={2}>
               {/* Recent Visits */}
-              <Card sx={{ borderRadius: 2 }}>
+              <Card sx={{ borderRadius: 2.5, boxShadow: "0 12px 28px rgba(39,76,167,0.08)", border: "1px solid #edf2f7" }}>
                 <CardContent sx={{ p: 1.5 }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
                     <Typography variant="subtitle2" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: '0.9rem' }}>
@@ -1268,7 +1332,7 @@ export default function UnifiedDashboard() {
               </Card>
 
               {/* Recent Registrations */}
-              <Card sx={{ borderRadius: 2 }}>
+              <Card sx={{ borderRadius: 2.5, boxShadow: "0 12px 28px rgba(39,76,167,0.08)", border: "1px solid #edf2f7" }}>
                 <CardContent sx={{ p: 1.5 }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
                     <Typography variant="subtitle2" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: '0.9rem' }}>
@@ -1339,7 +1403,7 @@ export default function UnifiedDashboard() {
               </Card>
 
               {/* Recent Activities or Missed Leads */}
-              <Card sx={{ borderRadius: 2 }}>
+              <Card sx={{ borderRadius: 2.5, boxShadow: "0 12px 28px rgba(39,76,167,0.08)", border: "1px solid #edf2f7" }}>
                 <CardContent sx={{ p: 1.5 }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
                     <Typography variant="subtitle2" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: '0.9rem' }}>
@@ -1433,7 +1497,7 @@ export default function UnifiedDashboard() {
             <Stack spacing={2}>
               {/* Team Members */}
               {getTeamMembers.length > 0 && (
-                <Card sx={{ borderRadius: 2 }}>
+                <Card sx={{ borderRadius: 2.5, boxShadow: "0 12px 28px rgba(39,76,167,0.08)", border: "1px solid #edf2f7" }}>
                   <CardContent sx={{ p: 1.5 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
                       <Typography variant="subtitle2" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: '0.9rem' }}>
@@ -1463,7 +1527,7 @@ export default function UnifiedDashboard() {
 
               {/* Team Performance */}
               {getTeamPerformance.length > 0 && (
-                <Card sx={{ borderRadius: 2 }}>
+                <Card sx={{ borderRadius: 2.5, boxShadow: "0 12px 28px rgba(39,76,167,0.08)", border: "1px solid #edf2f7" }}>
                   <CardContent sx={{ p: 1.5 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
                       <Typography variant="subtitle2" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: '0.9rem' }}>
@@ -1540,99 +1604,128 @@ export default function UnifiedDashboard() {
       width: '100%', 
       maxWidth: '1600px', 
       mx: 'auto', 
-      px: { xs: 2, sm: 3, md: 4, lg: 5 } 
+      px: { xs: 2, sm: 3, md: 4, lg: 5 },
+      py: { xs: 1, md: 1.5 },
+      bgcolor: SURFACE_BG,
+      borderRadius: 4,
     }}>
       {/* Header Section */}
       <Box sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
-        <Box
+        <Card
           sx={{
-            display: "flex",
-            flexDirection: { xs: "column", sm: "row" },
-            justifyContent: "space-between",
-            alignItems: { xs: "flex-start", sm: "center" },
-            gap: 2,
-            mb: 3
+            mb: 3,
+            borderRadius: 3.5,
+            background: `linear-gradient(135deg, ${HEADER_DARK} 0%, ${HEADER_LIGHT} 100%)`,
+            color: "white",
+            boxShadow: "0 24px 48px rgba(42,83,189,0.18)",
           }}
         >
-          <Box>
-            <Typography
-              variant={isTablet ? "h5" : "h4"}
-              fontWeight="700"
-              color={PRIMARY_COLOR}
-              gutterBottom
-              sx={{ fontSize: { xs: '1.5rem', sm: '1.8rem', md: '2rem' } }}
-            >
-              {getRoleDisplayName()} Dashboard
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>
-              Welcome back, {user?.firstName || "User"}! Here's your performance summary
-            </Typography>
-            {dashboardData && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, fontSize: '0.7rem' }}>
-                Last updated: {formatDateTime(new Date())}
-              </Typography>
-            )}
-          </Box>
-
-          <Box
-            sx={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 1,
-            }}
-          >
-            <ToggleButtonGroup
-              value={timeFilter}
-              exclusive
-              onChange={handleTimeFilterChange}
-              size="small"
+          <CardContent sx={{ p: { xs: 2.5, sm: 3, md: 3.5 } }}>
+            <Box
               sx={{
-                bgcolor: SECONDARY_COLOR,
-                borderRadius: 2,
-                p: 0.5,
-                "& .MuiToggleButton-root": {
-                  border: "none",
-                  borderRadius: 1.5,
-                  px: { xs: 1.5, sm: 2 },
-                  py: 0.75,
-                  color: "text.secondary",
-                  fontSize: { xs: '0.7rem', sm: '0.8rem' },
-                  "&.Mui-selected": {
-                    bgcolor: "white",
-                    color: PRIMARY_COLOR,
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-                  },
-                },
+                display: "flex",
+                flexDirection: { xs: "column", md: "row" },
+                justifyContent: "space-between",
+                alignItems: { xs: "flex-start", md: "center" },
+                gap: 2.5,
               }}
             >
-              {PERIOD_OPTIONS.map((option) => (
-                <ToggleButton key={option.value} value={option.value}>
-                  {option.icon}
-                  <Box component="span" sx={{ ml: 0.5, display: { xs: "none", sm: "inline" } }}>
-                    {option.label}
-                  </Box>
-                </ToggleButton>
-              ))}
-            </ToggleButtonGroup>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                <Avatar
+                  sx={{
+                    width: { xs: 52, md: 56 },
+                    height: { xs: 52, md: 56 },
+                    bgcolor: "rgba(255,255,255,0.12)",
+                    border: "1px solid rgba(255,255,255,0.16)",
+                  }}
+                >
+                  <DashboardIcon sx={{ fontSize: { xs: 24, md: 28 } }} />
+                </Avatar>
+                <Box>
+                  <Typography
+                    variant={isTablet ? "h5" : "h4"}
+                    fontWeight="800"
+                    gutterBottom
+                    sx={{ fontSize: { xs: "1.45rem", sm: "1.8rem", md: "2rem" }, mb: 0.5 }}
+                  >
+                    {getRoleDisplayName()} Dashboard
+                  </Typography>
+                  <Typography sx={{ color: "rgba(255,255,255,0.84)", fontSize: { xs: "0.82rem", sm: "0.92rem" } }}>
+                    Welcome back, {user?.firstName || "User"}! Here's your performance summary
+                  </Typography>
+                  {dashboardData && (
+                    <Typography variant="caption" sx={{ display: "block", mt: 0.75, color: "rgba(255,255,255,0.72)" }}>
+                      Last updated: {formatDateTime(new Date())}
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
 
-            <Tooltip title="Refresh Dashboard">
-              <IconButton
-                onClick={handleRefresh}
-                disabled={refreshing}
+              <Box
                 sx={{
-                  bgcolor: SECONDARY_COLOR,
-                  color: PRIMARY_COLOR,
-                  "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.1) },
-                  width: { xs: 36, sm: 40 },
-                  height: { xs: 36, sm: 40 },
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  alignItems: { xs: "stretch", sm: "center" },
+                  gap: 1,
+                  width: { xs: "100%", md: "auto" },
                 }}
               >
-                <Refresh sx={{ fontSize: { xs: 18, sm: 20 } }} />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
+                <ToggleButtonGroup
+                  value={timeFilter}
+                  exclusive
+                  onChange={handleTimeFilterChange}
+                  size="small"
+                  sx={{
+                    bgcolor: "rgba(255,255,255,0.12)",
+                    borderRadius: 2.5,
+                    p: 0.5,
+                    "& .MuiToggleButton-root": {
+                      border: "none",
+                      borderRadius: 2,
+                      px: { xs: 1.5, sm: 2 },
+                      py: 0.75,
+                      color: "rgba(255,255,255,0.78)",
+                      fontSize: { xs: "0.7rem", sm: "0.8rem" },
+                      "&.Mui-selected": {
+                        bgcolor: "white",
+                        color: PRIMARY_COLOR,
+                        boxShadow: "0 8px 18px rgba(0,0,0,0.08)",
+                      },
+                    },
+                  }}
+                >
+                  {PERIOD_OPTIONS.map((option) => (
+                    <ToggleButton key={option.value} value={option.value}>
+                      {option.icon}
+                      <Box component="span" sx={{ ml: 0.5, display: { xs: "none", sm: "inline" } }}>
+                        {option.label}
+                      </Box>
+                    </ToggleButton>
+                  ))}
+                </ToggleButtonGroup>
+
+                <Button
+                  variant="contained"
+                  startIcon={<Refresh />}
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  sx={{
+                    bgcolor: ACTION_ORANGE,
+                    color: "white",
+                    borderRadius: 2.5,
+                    px: 2.25,
+                    py: 1,
+                    fontWeight: 700,
+                    boxShadow: "none",
+                    "&:hover": { bgcolor: "#f08b17", boxShadow: "none" },
+                  }}
+                >
+                  Refresh
+                </Button>
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
 
         {/* Stats Overview */}
         <Grid container spacing={getGridSpacing()}>
@@ -1642,13 +1735,14 @@ export default function UnifiedDashboard() {
             </Grid>
           ))}
         </Grid>
+
       </Box>
 
       {/* Main Content Grid */}
       <Grid container spacing={getGridSpacing()}>
         {/* Recent Visits */}
         <Grid item xs={12} md={6} lg={4}>
-          <Card sx={{ borderRadius: { xs: 2, sm: 2.5, md: 3 }, boxShadow: "0 4px 20px rgba(0,0,0,0.02)", border: "1px solid #edf2f7", height: "100%" }}>
+          <Card sx={{ borderRadius: { xs: 2.5, sm: 3, md: 3 }, boxShadow: "0 14px 30px rgba(39,76,167,0.08)", border: "1px solid #edf2f7", height: "100%" }}>
             <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
                 <Typography variant="h6" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
@@ -1722,7 +1816,7 @@ export default function UnifiedDashboard() {
 
         {/* Recent Registrations */}
         <Grid item xs={12} md={6} lg={4}>
-          <Card sx={{ borderRadius: { xs: 2, sm: 2.5, md: 3 }, boxShadow: "0 4px 20px rgba(0,0,0,0.02)", border: "1px solid #edf2f7", height: "100%" }}>
+          <Card sx={{ borderRadius: { xs: 2.5, sm: 3, md: 3 }, boxShadow: "0 14px 30px rgba(39,76,167,0.08)", border: "1px solid #edf2f7", height: "100%" }}>
             <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
                 <Typography variant="h6" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
@@ -1796,7 +1890,7 @@ export default function UnifiedDashboard() {
 
         {/* Recent Missed Leads or Activities */}
         <Grid item xs={12} md={6} lg={4}>
-          <Card sx={{ borderRadius: { xs: 2, sm: 2.5, md: 3 }, boxShadow: "0 4px 20px rgba(0,0,0,0.02)", border: "1px solid #edf2f7", height: "100%" }}>
+          <Card sx={{ borderRadius: { xs: 2.5, sm: 3, md: 3 }, boxShadow: "0 14px 30px rgba(39,76,167,0.08)", border: "1px solid #edf2f7", height: "100%" }}>
             <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
                 <Typography variant="h6" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
@@ -1887,7 +1981,7 @@ export default function UnifiedDashboard() {
         {/* Team Overview - For Admin_panel, ZSM, Incharge */}
         {(user?.role === "Admin_panel" || user?.role === "ZSM" || user?.role === "Incharge") && getTeamMembers.length > 0 && (
           <Grid item xs={12}>
-            <Card sx={{ borderRadius: { xs: 2, sm: 2.5, md: 3 }, boxShadow: "0 4px 20px rgba(0,0,0,0.02)", border: "1px solid #edf2f7" }}>
+            <Card sx={{ borderRadius: { xs: 2.5, sm: 3, md: 3 }, boxShadow: "0 14px 30px rgba(39,76,167,0.08)", border: "1px solid #edf2f7" }}>
               <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
                   <Typography variant="h6" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
@@ -1919,7 +2013,7 @@ export default function UnifiedDashboard() {
         {/* Performance Chart Section */}
         {getTeamPerformance.length > 0 && (
           <Grid item xs={12}>
-            <Card sx={{ borderRadius: { xs: 2, sm: 2.5, md: 3 }, boxShadow: "0 4px 20px rgba(0,0,0,0.02)", border: "1px solid #edf2f7" }}>
+            <Card sx={{ borderRadius: { xs: 2.5, sm: 3, md: 3 }, boxShadow: "0 14px 30px rgba(39,76,167,0.08)", border: "1px solid #edf2f7" }}>
               <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
                   <Typography variant="h6" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
@@ -1942,9 +2036,10 @@ export default function UnifiedDashboard() {
                       <Paper
                         sx={{
                           p: 2,
-                          borderRadius: 2,
+                          borderRadius: 2.5,
                           border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-                          bgcolor: "white",
+                          bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                          boxShadow: "0 10px 24px rgba(39,76,167,0.06)",
                         }}
                       >
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 }}>

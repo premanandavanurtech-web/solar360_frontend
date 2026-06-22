@@ -108,8 +108,14 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
-const PRIMARY_COLOR = "#4569ea";
-const SECONDARY_COLOR = "#1a237e";
+const PRIMARY_COLOR = "#111f4d";
+const HEADER_DARK = "#1f2d57";
+const HEADER_LIGHT = "#4569ea";
+const ACTION_ORANGE = "#ff9b2f";
+const SUCCESS_COLOR = "#5dc091";
+const ERROR_COLOR = "#ef5350";
+const SURFACE_BG = "#f7f9fe";
+const CARD_BORDER = "#e8eefc";
 
 // Period Options
 const PERIOD_OPTIONS = [
@@ -121,49 +127,49 @@ const PERIOD_OPTIONS = [
 
 const STAGE_CONFIG = {
   Visit: {
-    color: PRIMARY_COLOR,
+    color: HEADER_LIGHT,
     icon: <Person />,
     description: "Initial contact and site visit scheduled",
     bgColor: alpha(PRIMARY_COLOR, 0.08),
     order: 1,
   },
   Registration: {
-    color: PRIMARY_COLOR,
+    color: "#5b83f6",
     icon: <AssignmentInd />,
     description: "Customer registration completed",
     bgColor: alpha(PRIMARY_COLOR, 0.08),
     order: 2,
   },
   "Bank Loan Apply": {
-    color: PRIMARY_COLOR,
+    color: "#7d8cf5",
     icon: <MonetizationOn />,
     description: "Bank loan application submitted",
     bgColor: alpha(PRIMARY_COLOR, 0.08),
     order: 3,
   },
   "Document Submission": {
-    color: PRIMARY_COLOR,
+    color: SUCCESS_COLOR,
     icon: <Description />,
     description: "Required documents submitted",
     bgColor: alpha(PRIMARY_COLOR, 0.08),
     order: 4,
   },
   Disbursement: {
-    color: PRIMARY_COLOR,
+    color: ACTION_ORANGE,
     icon: <TrendingUp />,
     description: "Loan disbursed to customer",
     bgColor: alpha(PRIMARY_COLOR, 0.08),
     order: 5,
   },
   "Installation Completion": {
-    color: PRIMARY_COLOR,
+    color: SUCCESS_COLOR,
     icon: <CheckCircle />,
     description: "Solar installation completed",
     bgColor: alpha(PRIMARY_COLOR, 0.08),
     order: 6,
   },
   "Missed Leads": {
-    color: PRIMARY_COLOR,
+    color: ERROR_COLOR,
     icon: <Warning />,
     description: "Lost or inactive leads",
     bgColor: alpha(PRIMARY_COLOR, 0.08),
@@ -207,6 +213,7 @@ const MobileFilterDrawer = ({
           borderTopRightRadius: 24,
           maxHeight: "90vh",
           overflow: "hidden",
+          bgcolor: SURFACE_BG,
         },
       }}
     >
@@ -259,7 +266,9 @@ const MobileFilterDrawer = ({
               elevation={0}
               sx={{
                 border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-                borderRadius: 2,
+                borderRadius: 2.5,
+                bgcolor: "white",
+                boxShadow: "0 12px 28px rgba(39,76,167,0.08)",
                 overflow: "hidden",
               }}
             >
@@ -321,7 +330,9 @@ const MobileFilterDrawer = ({
               elevation={0}
               sx={{
                 border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-                borderRadius: 2,
+                borderRadius: 2.5,
+                bgcolor: "white",
+                boxShadow: "0 12px 28px rgba(39,76,167,0.08)",
                 overflow: "hidden",
               }}
             >
@@ -365,12 +376,12 @@ const MobileFilterDrawer = ({
                             color:
                               period === option.value ? "#fff" : PRIMARY_COLOR,
                             borderColor: PRIMARY_COLOR,
-                            "&:hover": {
-                              bgcolor:
-                                period === option.value
-                                  ? SECONDARY_COLOR
+                             "&:hover": {
+                               bgcolor:
+                                 period === option.value
+                                  ? HEADER_DARK
                                   : alpha(PRIMARY_COLOR, 0.1),
-                            },
+                             },
                           }}
                         >
                           {option.label}
@@ -387,7 +398,9 @@ const MobileFilterDrawer = ({
               elevation={0}
               sx={{
                 border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-                borderRadius: 2,
+                borderRadius: 2.5,
+                bgcolor: "white",
+                boxShadow: "0 12px 28px rgba(39,76,167,0.08)",
                 overflow: "hidden",
               }}
             >
@@ -438,7 +451,9 @@ const MobileFilterDrawer = ({
               elevation={0}
               sx={{
                 border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-                borderRadius: 2,
+                borderRadius: 2.5,
+                bgcolor: "white",
+                boxShadow: "0 12px 28px rgba(39,76,167,0.08)",
                 overflow: "hidden",
               }}
             >
@@ -486,7 +501,7 @@ const MobileFilterDrawer = ({
           sx={{
             p: 3,
             borderTop: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-            bgcolor: "#fff",
+            bgcolor: SURFACE_BG,
           }}
         >
           <Stack direction="row" spacing={2}>
@@ -515,7 +530,7 @@ const MobileFilterDrawer = ({
               sx={{
                 bgcolor: PRIMARY_COLOR,
                 "&:hover": {
-                  bgcolor: SECONDARY_COLOR,
+                  bgcolor: ACTION_ORANGE,
                 },
               }}
             >
@@ -536,12 +551,24 @@ const SummaryCard = ({ title, value, icon, color, trend, trendDirection, index }
       sx={{
         p: { xs: 1.5, sm: 2, md: 2.5 },
         borderRadius: 3,
-        border: `1px solid ${alpha(color, 0.1)}`,
-        boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+        border: `1px solid ${alpha(color, 0.12)}`,
+        bgcolor: "white",
+        boxShadow: "0 16px 36px rgba(39,76,167,0.10)",
+        position: "relative",
+        overflow: "hidden",
         transition: "transform 0.2s",
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 4,
+          bgcolor: color,
+        },
         "&:hover": {
           transform: "translateY(-2px)",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
+          boxShadow: `0 20px 40px ${alpha(color, 0.16)}`,
         },
       }}
     >
@@ -557,7 +584,7 @@ const SummaryCard = ({ title, value, icon, color, trend, trendDirection, index }
             sx={{
               width: { xs: 32, sm: 40, md: 48 },
               height: { xs: 32, sm: 40, md: 48 },
-              borderRadius: { xs: 1.5, sm: 2 },
+              borderRadius: 999,
               bgcolor: alpha(color, 0.1),
               display: "flex",
               alignItems: "center",
@@ -616,14 +643,15 @@ const MobileStageCard = ({ stage, config, isSelected, onClick, count, percentage
     onClick={onClick}
     sx={{
       p: 2,
-      borderRadius: 2,
+      borderRadius: 2.5,
       cursor: "pointer",
       display: "flex",
       alignItems: "center",
       gap: 2,
       transition: "all 0.2s",
-      border: `2px solid ${isSelected ? config.color : "transparent"}`,
+      border: `1px solid ${isSelected ? alpha(config.color, 0.28) : CARD_BORDER}`,
       bgcolor: isSelected ? alpha(config.color, 0.05) : "#fff",
+      boxShadow: "0 10px 24px rgba(39,76,167,0.08)",
       "&:hover": {
         bgcolor: alpha(config.color, 0.05),
         transform: "translateX(4px)",
@@ -645,7 +673,7 @@ const MobileStageCard = ({ stage, config, isSelected, onClick, count, percentage
         {stage}
       </Typography>
       <Typography variant="caption" color="text.secondary">
-        {count} leads • {percentage}%
+        {count} leads | {percentage}%
       </Typography>
     </Box>
     <NavigateNext sx={{ color: "text.secondary" }} />
@@ -819,7 +847,7 @@ const MobileLeadCard = ({ lead, stageColor, onView, index }) => {
                   onClick={() => onView(lead)}
                   sx={{
                     bgcolor: stageColor,
-                    "&:hover": { bgcolor: SECONDARY_COLOR },
+                    "&:hover": { bgcolor: alpha(stageColor, 0.9) },
                   }}
                 >
                   View
@@ -903,7 +931,7 @@ const EmptyState = ({ stage, hasFilters, onClearFilters }) => (
         variant="contained"
         onClick={onClearFilters}
         startIcon={<Clear />}
-        sx={{ bgcolor: PRIMARY_COLOR, "&:hover": { bgcolor: SECONDARY_COLOR } }}
+        sx={{ bgcolor: PRIMARY_COLOR, "&:hover": { bgcolor: ACTION_ORANGE } }}
       >
         Clear Filters
       </Button>
@@ -1214,7 +1242,7 @@ export default function LeadFunnelDashboard() {
         p: { xs: 1.5, sm: 2, md: 3 },
         minHeight: "100vh",
         pb: { xs: 8, sm: 3 },
-        bgcolor: "#f8fafc",
+        bgcolor: SURFACE_BG,
       }}
     >
       {/* Mobile Filter Drawer */}
@@ -1240,8 +1268,9 @@ export default function LeadFunnelDashboard() {
           p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
-          background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, ${SECONDARY_COLOR} 100%)`,
+          background: `linear-gradient(135deg, ${HEADER_DARK} 0%, ${HEADER_LIGHT} 100%)`,
           color: "#fff",
+          boxShadow: "0 24px 48px rgba(42,83,189,0.18)",
         }}
       >
         <Stack
@@ -1277,9 +1306,9 @@ export default function LeadFunnelDashboard() {
                 onClick={() => setMobileFilterOpen(true)}
                 size="small"
                 sx={{
-                  bgcolor: "rgba(255,255,255,0.2)",
+                  bgcolor: "rgba(255,255,255,0.16)",
                   color: "#fff",
-                  "&:hover": { bgcolor: "rgba(255,255,255,0.3)" },
+                  "&:hover": { bgcolor: "rgba(255,255,255,0.26)" },
                   position: "relative",
                 }}
               >
@@ -1309,9 +1338,10 @@ export default function LeadFunnelDashboard() {
               disabled={loading}
               size={isMobile ? "small" : "medium"}
               sx={{
-                bgcolor: "rgba(255,255,255,0.2)",
+                bgcolor: ACTION_ORANGE,
                 color: "#fff",
-                "&:hover": { bgcolor: "rgba(255,255,255,0.3)" },
+                boxShadow: "none",
+                "&:hover": { bgcolor: "#f08b17", boxShadow: "none" },
               }}
             >
               Refresh
@@ -1395,6 +1425,7 @@ export default function LeadFunnelDashboard() {
               "& .MuiOutlinedInput-root": {
                 borderRadius: 3,
                 bgcolor: "#fff",
+                boxShadow: "0 10px 24px rgba(39,76,167,0.08)",
               },
             }}
           />
@@ -1405,8 +1436,8 @@ export default function LeadFunnelDashboard() {
       <Grid container spacing={3}>
         {/* Left Column - Stage Pipeline */}
         <Grid item xs={12} lg={4}>
-          <Card sx={{ borderRadius: 3, overflow: "hidden", height: "100%" }}>
-            <Box sx={{ p: 3, bgcolor: PRIMARY_COLOR, color: "white" }}>
+          <Card sx={{ borderRadius: 3, overflow: "hidden", height: "100%", border: `1px solid ${CARD_BORDER}`, boxShadow: "0 18px 38px rgba(39,76,167,0.08)" }}>
+            <Box sx={{ p: 3, background: `linear-gradient(135deg, ${HEADER_DARK} 0%, ${HEADER_LIGHT} 100%)`, color: "white" }}>
               <Typography variant="h6" fontWeight="bold">
                 Lead Pipeline
               </Typography>
@@ -1508,7 +1539,7 @@ export default function LeadFunnelDashboard() {
 
         {/* Right Column - Stage Details */}
         <Grid item xs={12} lg={8}>
-          <Card sx={{ borderRadius: 3, overflow: "hidden", height: "100%" }}>
+          <Card sx={{ borderRadius: 3, overflow: "hidden", height: "100%", border: `1px solid ${CARD_BORDER}`, boxShadow: "0 18px 38px rgba(39,76,167,0.08)" }}>
             {/* Stage Header */}
             <Box
               sx={{
@@ -1516,6 +1547,7 @@ export default function LeadFunnelDashboard() {
                 bgcolor: alpha(stageConfig.color, 0.08),
                 borderLeft: { xs: "none", sm: `4px solid ${stageConfig.color}` },
                 borderTop: { xs: `4px solid ${stageConfig.color}`, sm: "none" },
+                boxShadow: `inset 0 -1px 0 ${alpha(stageConfig.color, 0.08)}`,
               }}
             >
               <Box
@@ -1631,7 +1663,7 @@ export default function LeadFunnelDashboard() {
                       placeholder="Search leads..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      sx={{ minWidth: 200 }}
+                      sx={{ minWidth: 200, "& .MuiOutlinedInput-root": { borderRadius: 3, bgcolor: "white", boxShadow: "0 8px 20px rgba(39,76,167,0.06)" } }}
                       InputProps={{
                         startAdornment: (
                           <InputAdornment position="start">
@@ -1649,12 +1681,13 @@ export default function LeadFunnelDashboard() {
                           sx={{
                             bgcolor:
                               viewMode === "cards"
-                                ? alpha(PRIMARY_COLOR, 0.1)
-                                : "transparent",
+                                ? alpha(PRIMARY_COLOR, 0.12)
+                                : "white",
                             color:
                               viewMode === "cards"
                                 ? PRIMARY_COLOR
                                 : "text.secondary",
+                            border: `1px solid ${alpha(PRIMARY_COLOR, 0.12)}`,
                           }}
                         >
                           <GridView />
@@ -1667,12 +1700,13 @@ export default function LeadFunnelDashboard() {
                           sx={{
                             bgcolor:
                               viewMode === "list"
-                                ? alpha(PRIMARY_COLOR, 0.1)
-                                : "transparent",
+                                ? alpha(PRIMARY_COLOR, 0.12)
+                                : "white",
                             color:
                               viewMode === "list"
                                 ? PRIMARY_COLOR
                                 : "text.secondary",
+                            border: `1px solid ${alpha(PRIMARY_COLOR, 0.12)}`,
                           }}
                         >
                           <ViewList />
@@ -1685,12 +1719,13 @@ export default function LeadFunnelDashboard() {
                           sx={{
                             bgcolor:
                               viewMode === "table"
-                                ? alpha(PRIMARY_COLOR, 0.1)
-                                : "transparent",
+                                ? alpha(PRIMARY_COLOR, 0.12)
+                                : "white",
                             color:
                               viewMode === "table"
                                 ? PRIMARY_COLOR
                                 : "text.secondary",
+                            border: `1px solid ${alpha(PRIMARY_COLOR, 0.12)}`,
                           }}
                         >
                           <TableChart />
@@ -1857,7 +1892,7 @@ export default function LeadFunnelDashboard() {
                 right: 16,
                 zIndex: 1000,
                 bgcolor: PRIMARY_COLOR,
-                "&:hover": { bgcolor: SECONDARY_COLOR },
+                "&:hover": { bgcolor: ACTION_ORANGE },
                 boxShadow: `0 4px 12px ${alpha(PRIMARY_COLOR, 0.3)}`,
               }}
             >
@@ -1891,6 +1926,9 @@ export default function LeadFunnelDashboard() {
             zIndex: 1000,
             borderRadius: 0,
             borderTop: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+            bgcolor: "rgba(255,255,255,0.96)",
+            backdropFilter: "blur(14px)",
+            boxShadow: "0 -10px 26px rgba(31,45,87,0.08)",
           }}
           elevation={3}
         >
@@ -1933,14 +1971,15 @@ const StageItem = ({ stage, config, isSelected, onClick }) => {
       onClick={onClick}
       sx={{
         p: 2,
-        borderRadius: 2,
+        borderRadius: 2.5,
         cursor: "pointer",
         display: "flex",
         alignItems: "center",
         gap: 2,
         transition: "all 0.2s",
-        border: `2px solid ${isSelected ? config.color : "transparent"}`,
-        bgcolor: isSelected ? alpha(config.color, 0.05) : "transparent",
+        border: `1px solid ${isSelected ? alpha(config.color, 0.28) : CARD_BORDER}`,
+        bgcolor: isSelected ? alpha(config.color, 0.08) : "white",
+        boxShadow: "0 10px 24px rgba(39,76,167,0.08)",
         "&:hover": {
           bgcolor: alpha(config.color, 0.05),
           transform: "translateX(4px)",
@@ -1957,7 +1996,7 @@ const StageItem = ({ stage, config, isSelected, onClick }) => {
           {stage.stage}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          {stage.count} leads • {stage.percentage}%
+          {stage.count} leads | {stage.percentage}%
         </Typography>
       </Box>
       <NavigateNext sx={{ color: "text.secondary" }} />
@@ -1981,10 +2020,12 @@ const LeadCards = ({ leads, stageColor, onView }) => {
             sx={{
               borderRadius: 3,
               height: "100%",
+              border: `1px solid ${alpha(stageColor, 0.12)}`,
+              boxShadow: "0 14px 30px rgba(39,76,167,0.08)",
               transition: "all 0.3s",
               "&:hover": {
                 transform: "translateY(-4px)",
-                boxShadow: 6,
+                boxShadow: `0 20px 38px ${alpha(stageColor, 0.16)}`,
               },
             }}
           >
@@ -2069,13 +2110,15 @@ const LeadList = ({ leads, stageColor, onView }) => {
           key={lead._id}
           sx={{
             p: 2,
-            borderRadius: 2,
+            borderRadius: 2.5,
             display: "flex",
             alignItems: "center",
             gap: 2,
+            border: `1px solid ${alpha(stageColor, 0.12)}`,
+            boxShadow: "0 10px 24px rgba(39,76,167,0.06)",
             transition: "all 0.2s",
             "&:hover": {
-              bgcolor: "action.hover",
+              bgcolor: alpha(stageColor, 0.04),
               transform: "translateX(4px)",
             },
           }}
@@ -2089,7 +2132,7 @@ const LeadList = ({ leads, stageColor, onView }) => {
               {lead.firstName} {lead.lastName}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {lead.email} • {lead.phone}
+              {lead.email} | {lead.phone}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               Assigned To: {assignedTo}
@@ -2132,9 +2175,9 @@ const LeadList = ({ leads, stageColor, onView }) => {
 // Component: Lead Table (Table View) - Desktop
 const LeadTable = ({ leads, stageColor, onView }) => {
   return (
-    <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+    <TableContainer component={Paper} sx={{ borderRadius: 2.5, border: `1px solid ${alpha(stageColor, 0.12)}`, boxShadow: "0 12px 28px rgba(39,76,167,0.06)" }}>
       <Table>
-        <TableHead sx={{ bgcolor: "#f5f5f5" }}>
+        <TableHead sx={{ bgcolor: alpha(stageColor, 0.06) }}>
           <TableRow>
             <TableCell sx={{ fontWeight: 600 }}>Lead</TableCell>
             <TableCell sx={{ fontWeight: 600 }}>Contact</TableCell>
@@ -2256,6 +2299,7 @@ const LeadDetailDialog = ({
         sx: { 
           borderRadius: isMobile ? 0 : 4,
           margin: isMobile ? 0 : 24,
+          boxShadow: "0 24px 56px rgba(31,45,87,0.18)",
         },
       }}
       TransitionComponent={isMobile ? Slide : Fade}
@@ -2263,7 +2307,7 @@ const LeadDetailDialog = ({
     >
       <DialogTitle
         sx={{
-          bgcolor: PRIMARY_COLOR,
+          background: `linear-gradient(135deg, ${HEADER_DARK} 0%, ${HEADER_LIGHT} 100%)`,
           color: "white",
           pb: 2,
           px: { xs: 2, sm: 3 },
@@ -2301,7 +2345,7 @@ const LeadDetailDialog = ({
                   fontSize: { xs: "0.7rem", sm: "0.75rem" },
                 }}
               >
-                Lead Details • {stage}
+                Lead Details | {stage}
               </Typography>
             </Box>
           </Box>
@@ -2316,7 +2360,7 @@ const LeadDetailDialog = ({
           <Grid item xs={12} md={8}>
             <Stack spacing={3}>
               {/* Contact Info */}
-              <Card sx={{ borderRadius: 2 }}>
+               <Card sx={{ borderRadius: 2.5, border: `1px solid ${CARD_BORDER}`, boxShadow: "0 12px 28px rgba(39,76,167,0.06)" }}>
                 <CardContent>
                   <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                     Contact Information
@@ -2348,7 +2392,7 @@ const LeadDetailDialog = ({
               </Card>
 
               {/* Timeline */}
-              <Card sx={{ borderRadius: 2 }}>
+               <Card sx={{ borderRadius: 2.5, border: `1px solid ${CARD_BORDER}`, boxShadow: "0 12px 28px rgba(39,76,167,0.06)" }}>
                 <CardContent>
                   <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                     Stage History
@@ -2369,12 +2413,13 @@ const LeadDetailDialog = ({
           <Grid item xs={12} md={4}>
             <Stack spacing={3}>
               {/* Status Card */}
-              <Card
-                sx={{
-                  borderRadius: 2,
-                  borderLeft: `4px solid ${config.color}`,
-                }}
-              >
+               <Card
+                 sx={{
+                   borderRadius: 2.5,
+                   borderLeft: `4px solid ${config.color}`,
+                   boxShadow: "0 12px 28px rgba(39,76,167,0.06)",
+                 }}
+               >
                 <CardContent>
                   <Typography
                     variant="subtitle2"
@@ -2400,7 +2445,7 @@ const LeadDetailDialog = ({
               </Card>
 
               {/* Actions Card */}
-              <Card sx={{ borderRadius: 2 }}>
+               <Card sx={{ borderRadius: 2.5, border: `1px solid ${CARD_BORDER}`, boxShadow: "0 12px 28px rgba(39,76,167,0.06)" }}>
                 <CardContent>
                   <Typography
                     variant="subtitle2"
@@ -2480,7 +2525,7 @@ const LeadDetailDialog = ({
           sx={{
             bgcolor: PRIMARY_COLOR,
             borderRadius: 2,
-            "&:hover": { bgcolor: SECONDARY_COLOR },
+            "&:hover": { bgcolor: ACTION_ORANGE },
           }}
         >
           {moveNextStageLoading
@@ -2544,3 +2589,4 @@ const TimelineItem = ({ stage, date, isCurrent, color }) => {
     </Box>
   );
 };
+

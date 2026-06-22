@@ -48,7 +48,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from "../contexts/AuthContext";
 import { toBackendAssetUrl } from "../utils/backendAssetUrl";
 
-const API = "https://vanurtech-solar-backend-1.onrender.com/api/v1";
+const API = "http://localhost:9001/api/v1";
 
 const getToken = () =>
   localStorage.getItem("token") ||
@@ -436,8 +436,8 @@ const Topbar = ({
                 <IconButton 
                   onClick={toggleDrawer} 
                   sx={{ 
-                    color: '#4569ea',
-                    '&:hover': { bgcolor: alpha('#4569ea', 0.1) },
+                    color: '#0f1f3d',
+                    '&:hover': { bgcolor: alpha('#0f1f3d', 0.1) },
                   }}
                 >
                   <MenuIcon />
@@ -462,8 +462,8 @@ const Topbar = ({
                   border: '1px solid #e0e0e0',
                   '&:hover': { bgcolor: '#f0f0f0' },
                   '&:focus-within': {
-                    borderColor: '#4569ea',
-                    boxShadow: `0 0 0 2px ${alpha('#4569ea', 0.2)}`,
+                    borderColor: '#0f1f3d',
+                    boxShadow: `0 0 0 2px ${alpha('#0f1f3d', 0.2)}`,
                   },
                 }}
               >
@@ -490,7 +490,7 @@ const Topbar = ({
                 <IconButton
                   sx={{
                     color: '#666',
-                    '&:hover': { bgcolor: alpha('#4569ea', 0.05) },
+                    '&:hover': { bgcolor: alpha('#0f1f3d', 0.05) },
                   }}
                   onClick={() => setMobileSearchOpen(true)}
                 >
@@ -503,10 +503,10 @@ const Topbar = ({
               <IconButton
                 onClick={handleNotificationMenu}
                 sx={{
-                  color: '#4569ea',
+                  color: '#0f1f3d',
                   border: '1px solid #e2e8f0',
                   bgcolor: '#ffffff',
-                  '&:hover': { bgcolor: alpha('#4569ea', 0.06) },
+                  '&:hover': { bgcolor: alpha('#0f1f3d', 0.06) },
                 }}
               >
                 <Badge badgeContent={unreadCount} color="error" overlap="circular">
@@ -525,7 +525,7 @@ const Topbar = ({
                   cursor: 'pointer',
                   p: 0.5,
                   borderRadius: '8px',
-                  '&:hover': { bgcolor: alpha('#4569ea', 0.05) },
+                  '&:hover': { bgcolor: alpha('#0f1f3d', 0.05) },
                 }}
                 onClick={handleProfileMenu}
               >
@@ -535,7 +535,7 @@ const Topbar = ({
                     onError: () => setAvatarLoadFailed(true),
                   }}
                   sx={{
-                    bgcolor: avatarSrc ? 'transparent' : '#4569ea',
+                    bgcolor: avatarSrc ? 'transparent' : '#0f1f3d',
                     width: { xs: 32, sm: 36 },
                     height: { xs: 32, sm: 36 },
                     fontSize: { xs: '0.8rem', sm: '0.9rem' },
@@ -615,7 +615,7 @@ const Topbar = ({
                 onError: () => setAvatarLoadFailed(true),
               }}
               sx={{
-                bgcolor: avatarSrc ? 'transparent' : '#4569ea',
+                bgcolor: avatarSrc ? 'transparent' : '#0f1f3d',
                 color: '#ffffff',
                 width: 48,
                 height: 48,
@@ -685,7 +685,7 @@ const Topbar = ({
                 imgProps={{
                   onError: () => setAvatarLoadFailed(true),
                 }}
-                sx={{ width: 64, height: 64, bgcolor: avatarSrc || profileForm.avatar ? 'transparent' : '#4569ea' }}
+                sx={{ width: 64, height: 64, bgcolor: avatarSrc || profileForm.avatar ? 'transparent' : '#0f1f3d' }}
               >
                 {!profileForm.avatar && !avatarSrc && userInitials}
               </Avatar>
@@ -836,7 +836,7 @@ const Topbar = ({
             </Typography>
           </Box>
           {unreadCount > 0 && (
-            <Button size="small" onClick={handleMarkAllAsRead} sx={{ color: '#4569ea', fontWeight: 700 }}>
+            <Button size="small" onClick={handleMarkAllAsRead} sx={{ color: '#0f1f3d', fontWeight: 700 }}>
               Mark all read
             </Button>
           )}
@@ -864,11 +864,11 @@ const Topbar = ({
                   px: 2,
                   py: 1.5,
                   whiteSpace: 'normal',
-                  bgcolor: notification.read ? '#ffffff' : alpha('#4569ea', 0.045),
-                  borderLeft: notification.read ? '3px solid transparent' : '3px solid #4569ea',
+                  bgcolor: notification.read ? '#ffffff' : alpha('#0f1f3d', 0.045),
+                  borderLeft: notification.read ? '3px solid transparent' : '3px solid #0f1f3d',
                 }}
               >
-                <ListItemIcon sx={{ minWidth: 0, mt: 0.35, color: notification.read ? '#94a3b8' : '#4569ea' }}>
+                <ListItemIcon sx={{ minWidth: 0, mt: 0.35, color: notification.read ? '#94a3b8' : '#0f1f3d' }}>
                   <NotificationsIcon fontSize="small" />
                 </ListItemIcon>
                 <Box sx={{ minWidth: 0 }}>
@@ -893,7 +893,7 @@ const Topbar = ({
             variant="contained"
             onClick={handleNotificationCenter}
             sx={{
-              bgcolor: '#4569ea',
+              bgcolor: '#0f1f3d',
               borderRadius: 2.5,
               fontWeight: 700,
               '&:hover': { bgcolor: '#3a5ac8' },
@@ -914,7 +914,7 @@ const Topbar = ({
 };
 
 // Color constants for mobile border
-const PRIMARY_COLOR = "#4569ea";
+const PRIMARY_COLOR = "#0f1f3d";
 const PRIMARY_LIGHT = "#5c7cec";
 
 export default Topbar;

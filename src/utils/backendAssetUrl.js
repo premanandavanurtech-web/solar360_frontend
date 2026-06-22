@@ -1,4 +1,6 @@
-const BACKEND_ORIGIN = "https://vanurtech-solar-backend-1.onrender.com";
+import { API_ORIGIN } from "./apiConfig";
+
+const BACKEND_ORIGIN = API_ORIGIN;
 const LOCAL_BACKEND_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
 export const toBackendAssetUrl = (value) => {

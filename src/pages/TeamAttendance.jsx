@@ -9,22 +9,21 @@ import {
   Box, Typography, Avatar, Chip, TextField, InputAdornment, Button,
   IconButton, Tooltip, LinearProgress, Divider, CircularProgress,
   Dialog, DialogContent, DialogTitle, DialogActions,
-  Switch, FormControlLabel,
 } from "@mui/material";
 import {
   Search, Refresh, AccessTime, CheckCircle, Cancel, LocationOn, Person,
   BatteryChargingFull, BatteryAlert, Battery20, Battery50, Battery80,
-  CalendarToday, Celebration, Settings,
+  CalendarToday, Celebration, Settings, History,
 } from "@mui/icons-material";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import LiveTrackMap from "../utils/Livetrackmap";
 
-const API = "https://vanurtech-solar-backend-1.onrender.com";
+const API = "http://localhost:9001";
 
 const avatarColors = [
-  "#4569ea", "#7c3aed", "#0ea5e9", "#f59e0b",
+  "#0f1f3d", "#7c3aed", "#0ea5e9", "#f59e0b",
   "#10b981", "#f43f5e", "#8b5cf6", "#06b6d4",
 ];
 const getColor = (name = "") => avatarColors[name.charCodeAt(0) % avatarColors.length];
@@ -329,7 +328,7 @@ const MemberTrailDialog = ({ member, open, onClose }) => {
         <Box sx={{ p: 2 }}>
           {mapState.loading && (
             <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: 420 }}>
-              <CircularProgress sx={{ color: "#4569ea" }} />
+              <CircularProgress sx={{ color: "#0f1f3d" }} />
             </Box>
           )}
 
@@ -453,7 +452,7 @@ const MemberCard = ({ member }) => {
             label={member.role}
             size="small"
             sx={{
-              bgcolor: "#eff6ff", color: "#4569ea", fontWeight: 700,
+              bgcolor: "#eff6ff", color: "#0f1f3d", fontWeight: 700,
               fontSize: "0.68rem", height: 22, border: "1px solid #bfdbfe",
             }}
           />
@@ -500,10 +499,10 @@ const MemberCard = ({ member }) => {
 
             {member.totalHours && (
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
-                <AccessTime sx={{ fontSize: "0.9rem", color: "#4569ea" }} />
+                <AccessTime sx={{ fontSize: "0.9rem", color: "#0f1f3d" }} />
                 <Typography sx={{ fontSize: "0.78rem", color: "#475569" }}>
                   <b>Duration:</b>{" "}
-                  <span style={{ color: "#4569ea", fontWeight: 600 }}>{member.totalHours}</span>
+                  <span style={{ color: "#0f1f3d", fontWeight: 600 }}>{member.totalHours}</span>
                 </Typography>
               </Box>
             )}
@@ -551,10 +550,11 @@ const MemberCard = ({ member }) => {
                   memberPhone: member.phoneNumber,
                   memberEmail: member.email,
                   fromTeam: true,
+                  historyView: true,
                 },
               })
             }
-            startIcon={<AccessTime sx={{ fontSize: "1rem" }} />}
+            startIcon={<History sx={{ fontSize: "1rem" }} />}
             sx={{
               borderRadius: "10px", py: 1, fontSize: "0.78rem", fontWeight: 700,
               textTransform: "none",
@@ -603,7 +603,12 @@ const TeamAttendance = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       const result = res.data?.result || res.data?.data || {};
-      setAttendanceSettings((prev) => ({ ...prev, ...result }));
+      setAttendanceSettings((prev) => ({
+        ...prev,
+        ...result,
+        blockEarlyPunchIn: true,
+        autoPunchOutEnabled: true,
+      }));
     } catch (error) {
       console.error("Attendance settings fetch error:", error.message);
     }
@@ -805,11 +810,20 @@ const TeamAttendance = () => {
       const token = localStorage.getItem("token");
       const res = await axios.put(
         `${API}/api/v1/attendance/settings`,
-        attendanceSettings,
+        {
+          ...attendanceSettings,
+          blockEarlyPunchIn: true,
+          autoPunchOutEnabled: true,
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const result = res.data?.result || res.data?.data || {};
-      setAttendanceSettings((prev) => ({ ...prev, ...result }));
+      setAttendanceSettings((prev) => ({
+        ...prev,
+        ...result,
+        blockEarlyPunchIn: true,
+        autoPunchOutEnabled: true,
+      }));
       setActionMessage({ type: "success", text: "Attendance settings saved." });
       setSettingsOpen(false);
     } catch (error) {
@@ -850,7 +864,7 @@ const TeamAttendance = () => {
   ).length;
 
   const filterBtns = [
-    { key: "all", label: "All", count: team.length, color: "#4569ea" },
+    { key: "all", label: "All", count: team.length, color: "#0f1f3d" },
     { key: "in", label: "Active", count: punchedInCount, color: "#22c55e" },
     { key: "out", label: "Punched Out", count: punchedOutCount, color: "#f59e0b" },
     { key: "holiday", label: "Holiday", count: holidayCount, color: "#9333ea" },
@@ -861,7 +875,7 @@ const TeamAttendance = () => {
   if (loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
-        <CircularProgress sx={{ color: "#4569ea" }} />
+        <CircularProgress sx={{ color: "#0f1f3d" }} />
       </Box>
     );
   }
@@ -872,7 +886,7 @@ const TeamAttendance = () => {
       {/* Header banner */}
       <Box
         sx={{
-          background: "linear-gradient(120deg, #4569ea 0%, #3a5ac8 60%, #6d28d9 100%)",
+          background: "linear-gradient(120deg, #0f1f3d 0%, #3a5ac8 60%, #6d28d9 100%)",
           borderRadius: "18px", p: { xs: 2.5, sm: 3 }, mb: 3,
           display: "flex", alignItems: "center", justifyContent: "space-between",
           flexWrap: "wrap", gap: 2, position: "relative", overflow: "hidden",
@@ -1015,7 +1029,7 @@ const TeamAttendance = () => {
         }}
       >
         {[
-          { label: "Total", value: team.length, color: "#4569ea", bg: "#eff6ff" },
+          { label: "Total", value: team.length, color: "#0f1f3d", bg: "#eff6ff" },
           { label: "Active Now", value: punchedInCount, color: "#16a34a", bg: "#f0fdf4" },
           { label: "Punched Out", value: punchedOutCount, color: "#d97706", bg: "#fffbeb" },
           { label: "Holiday", value: holidayCount, color: "#9333ea", bg: "#faf5ff" },
@@ -1246,34 +1260,20 @@ const TeamAttendance = () => {
               }
               InputLabelProps={{ shrink: true }}
             />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={attendanceSettings.blockEarlyPunchIn}
-                  onChange={(e) =>
-                    setAttendanceSettings((prev) => ({
-                      ...prev,
-                      blockEarlyPunchIn: e.target.checked,
-                    }))
-                  }
-                />
-              }
-              label="Block punch in before office time"
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={attendanceSettings.autoPunchOutEnabled}
-                  onChange={(e) =>
-                    setAttendanceSettings((prev) => ({
-                      ...prev,
-                      autoPunchOutEnabled: e.target.checked,
-                    }))
-                  }
-                />
-              }
-              label="Auto punch out at office time"
-            />
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+              <Chip
+                icon={<CheckCircle />}
+                label="Punch-in window enforced"
+                color="success"
+                variant="outlined"
+              />
+              <Chip
+                icon={<CheckCircle />}
+                label="Auto punch-out enforced"
+                color="success"
+                variant="outlined"
+              />
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>

@@ -12,17 +12,18 @@ import {
   Store, PhotoCamera,
   CalendarToday, GpsFixed,
   ArrowDownward, DirectionsCar, Schedule,
+  ArrowBack, OpenInNew, ReceiptLong,
 } from "@mui/icons-material";
-import { useLocation, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { stopTracking, isCurrentlyTracking } from "../utils/Locationtracker.js";
 import LiveTrackingMap from "../utils/Livetrackmap.jsx";
 
-const BASE_URL = "https://vanurtech-solar-backend-1.onrender.com/api/v1";
+const BASE_URL = "http://localhost:9001/api/v1";
 const BACKEND_ORIGIN = BASE_URL.replace(/\/api\/v1\/?$/, "");
 const PHOTO_BACKEND_ORIGINS = [
   BACKEND_ORIGIN,
-  "https://vanurtech-solar-backend-1.onrender.com",
+  "http://localhost:9001",
   "https://solar-backend-29z1.onrender.com",
 ].filter((origin, index, list) => origin && list.indexOf(origin) === index);
 const KNOWN_BACKEND_HOSTS = new Set([
@@ -33,10 +34,40 @@ const KNOWN_BACKEND_HOSTS = new Set([
   "solar-backend-29z1.onrender.com",
 ]);
 
-const PRIMARY = "#4569ea";
+const PRIMARY = "#0f1f3d";
 const SUCCESS = "#22c55e";
 const WARNING = "#f59e0b";
 const ERROR   = "#ef4444";
+const MONGO_OBJECT_ID_RE = /^[a-f\d]{24}$/i;
+
+const toIdString = (value) => {
+  if (!value) return "";
+  if (typeof value === "object") {
+    return toIdString(value._id || value.id || value.userId);
+  }
+  return String(value).trim();
+};
+
+const isValidMongoObjectId = (value) => MONGO_OBJECT_ID_RE.test(toIdString(value));
+
+const readStoredUserId = () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem("user") || localStorage.getItem("userData") || "null");
+    return toIdString(stored);
+  } catch {
+    return "";
+  }
+};
+
+const getMemberStateUserId = (state = {}) =>
+  toIdString(
+    state.memberId ||
+      state.userId ||
+      state._id ||
+      state.id ||
+      state.user ||
+      state.member
+  );
 
 const getBatteryChipStyle = (percentage) => {
   if (percentage === null || percentage === undefined) {
@@ -77,6 +108,34 @@ const apiFetch = async (path, params = {}, options = {}) => {
 };
 
 const fmt = (d) => d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
+const formatCurrency = (amount) =>
+  `\u20B9${Number(amount || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+
+const formatStatusLabel = (status, hasPunchIn, hasPunchOut) => {
+  if (status) {
+    return String(status)
+      .replace(/[-_]+/g, " ")
+      .replace(/\b\w/g, (match) => match.toUpperCase());
+  }
+  if (hasPunchIn && hasPunchOut) return "Present";
+  if (hasPunchIn) return "On Duty";
+  return "Absent";
+};
+
+const getDateRangeLabel = (dateRange) => {
+  if (dateRange === "today") return "Today";
+  if (dateRange === "yesterday") return "Yesterday";
+  if (dateRange === "week") return "This Week";
+  if (dateRange === "month") return "This Month";
+  if (dateRange?.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return new Date(`${dateRange}T00:00:00`).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }
+  return dateRange || "Today";
+};
 
 const normalizePhotoUrl = (rawUrl) => {
   if (!rawUrl || typeof rawUrl !== "string") return null;
@@ -859,16 +918,13 @@ export default function MemberVisitHistory({ userId: propUserId }) {
   const location = useLocation();
   const { user: authUser } = useAuth();
 
-  const userId      = paramUserId || propUserId || null;
+  const selectedMember = location.state || {};
+  const userId = toIdString(paramUserId || propUserId);
+  const stateUserId = getMemberStateUserId(selectedMember);
+  const authUserId = toIdString(authUser);
+  const targetUserId = stateUserId || userId || authUserId || readStoredUserId();
+  const hasValidTargetUserId = isValidMongoObjectId(targetUserId);
   const isAdminView = !!paramUserId;
-
-const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
-    || (() => {
-      try {
-        const u = JSON.parse(localStorage.getItem("user") || localStorage.getItem("userData") || "null");
-        return u?._id || u?.id || u?.userId || null;
-      } catch { return null; }
-    })();
 
   const [visits,           setVisits]           = useState([]);
   const [loading,          setLoading]          = useState(true);
@@ -878,9 +934,14 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
   const [loadingMore,      setLoadingMore]      = useState(false);
   const [isPunchedIn,      setIsPunchedIn]      = useState(false);
   const [hasPunchedOut,    setHasPunchedOut]    = useState(false);
+  const [attendanceRecord, setAttendanceRecord] = useState(null);
   const [punchInLocation,  setPunchInLocation]  = useState(null);
   const [punchOutLocation, setPunchOutLocation] = useState(null);
-  const [filters,          setFilters]          = useState({ dateRange: "today", statuses: [] });
+  const [expenses,         setExpenses]         = useState([]);
+  const [filters,          setFilters]          = useState(() => {
+    const defaultDate = location.state?.selectedDate || "today";
+    return { dateRange: defaultDate, statuses: [] };
+  });
   const [filterOpen,       setFilterOpen]       = useState(false);
   const [fullscreen,       setFullscreen]       = useState(false);
   const [lastUpdated,      setLastUpdated]      = useState(null);
@@ -893,6 +954,9 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
   const [stayedLocations,  setStayedLocations]  = useState([]);
   const [liveBatteryInfo,  setLiveBatteryInfo]  = useState({ percentage: null, isCharging: false, recordedAt: null });
   const [punchBatteryInfo, setPunchBatteryInfo] = useState({ percentage: null, isCharging: false, recordedAt: null });
+  const [targetUserReady,  setTargetUserReady]  = useState(false);
+  const [targetLookupRetry, setTargetLookupRetry] = useState(0);
+  const canLoadTargetUser = hasValidTargetUserId && targetUserReady;
 
   const handleLocateMe = () => {
     setLocating(true);
@@ -928,12 +992,58 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
     setMapDistance(null);
   }, [targetUserId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setTargetUserReady(false);
+
+    if (!targetUserId) {
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!hasValidTargetUserId) {
+      setLoading(false);
+      setVisits([]);
+      setError("Selected member is not available. Please reopen this page from Team Tracking.");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setLoading(true);
+    setError(null);
+    apiFetch(`/user/getUserById/${targetUserId}`)
+      .then(() => {
+        if (cancelled) return;
+        setTargetUserReady(true);
+        setError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setTargetUserReady(false);
+        setLoading(false);
+        setVisits([]);
+        setError(
+          err.message === "User not found"
+            ? "Selected member no longer exists. Please reopen this page from Team Tracking."
+            : err.message
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [targetUserId, hasValidTargetUserId, targetLookupRetry]);
+
   const fetchPunchInStatus = useCallback(async () => {
-    if (!targetUserId) return;
+    if (!targetUserId || !canLoadTargetUser) return;
     try {
       if (!isSingleDayFilter(filters.dateRange)) {
         setIsPunchedIn(false);
         setHasPunchedOut(false);
+        setAttendanceRecord(null);
         setPunchInLocation(null);
         setPunchOutLocation(null);
         setPunchBatteryInfo({ percentage: null, isCharging: false, recordedAt: null });
@@ -947,6 +1057,7 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
       });
       const list = res?.data?.attendances || res?.result?.attendances || res?.data || [];
       const att  = Array.isArray(list) ? list[0] : list;
+      setAttendanceRecord(att || null);
 
       if (att?.punchIn?.time) {
         const out = !!att?.punchOut?.time;
@@ -995,9 +1106,34 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
         setPunchBatteryInfo({ percentage: null, isCharging: false, recordedAt: null });
       }
     } catch (e) { console.warn("Punch-in status failed:", e.message); }
-  }, [targetUserId, isAdminView, filters.dateRange]);
+  }, [targetUserId, canLoadTargetUser, isAdminView, filters.dateRange]);
+
+  const fetchExpenses = useCallback(async () => {
+    if (!targetUserId || !canLoadTargetUser) {
+      setExpenses([]);
+      return;
+    }
+
+    try {
+      const res = await apiFetch("/expense/getAll", {
+        userId: targetUserId,
+        limit: 100,
+        ...getDateRange(filters.dateRange),
+      });
+      const list = res?.data?.expenses || res?.result?.expenses || res?.expenses || [];
+      setExpenses(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.warn("Expense fetch failed:", e.message);
+      setExpenses([]);
+    }
+  }, [filters.dateRange, targetUserId, canLoadTargetUser]);
 
   const fetchVisits = useCallback(async (pageNum = 1, append = false) => {
+    if (!targetUserId || !canLoadTargetUser) {
+      setLoading(false);
+      setLoadingMore(false);
+      return;
+    }
     try {
       if (pageNum === 1) setLoading(true); else setLoadingMore(true);
       setError(null);
@@ -1024,19 +1160,20 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
       setLastUpdated(new Date());
     } catch (err) { setError(err.message); }
     finally { setLoading(false); setLoadingMore(false); }
-  }, [filters, targetUserId, isAdminView]);
+  }, [filters, targetUserId, canLoadTargetUser, isAdminView]);
 
   const fetchStats = useCallback(async () => {
+    if (!targetUserId || !canLoadTargetUser) return;
     try {
       await apiFetch("/visit/stats/overview", {
         ...getDateRange(filters.dateRange),
         ...(isAdminView ? { userId: targetUserId } : {}),
       });
     } catch {}
-  }, [filters, targetUserId, isAdminView]);
+  }, [filters, targetUserId, canLoadTargetUser, isAdminView]);
 
   const fetchGpsDistance = useCallback(async () => {
-    if (!targetUserId) return;
+    if (!targetUserId || !canLoadTargetUser) return;
     if (!isSingleDayFilter(filters.dateRange)) {
       setGpsDistance(null);
       return;
@@ -1047,10 +1184,10 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
       const data  = res?.data || res?.result || res;
       setGpsDistance({ totalKm: data?.totalKm ?? 0, totalPoints: data?.totalPoints ?? 0 });
     } catch (e) { console.warn("GPS distance fetch failed:", e.message); }
-  }, [filters.dateRange, targetUserId]);
+  }, [filters.dateRange, targetUserId, canLoadTargetUser]);
 
   const fetchStayedLocations = useCallback(async () => {
-    if (!targetUserId || !isSingleDayFilter(filters.dateRange)) {
+    if (!targetUserId || !canLoadTargetUser || !isSingleDayFilter(filters.dateRange)) {
       setStayedLocations([]);
       return;
     }
@@ -1069,10 +1206,10 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
       console.warn("Stayed locations fetch failed:", e.message);
       setStayedLocations([]);
     }
-  }, [filters.dateRange, targetUserId]);
+  }, [filters.dateRange, targetUserId, canLoadTargetUser]);
 
   const fetchLatestBattery = useCallback(async () => {
-    if (!targetUserId) return;
+    if (!targetUserId || !canLoadTargetUser) return;
     try {
       const res = await apiFetch(`/battery/latest/${targetUserId}`);
       const data = res?.data || res?.result || res;
@@ -1088,10 +1225,8 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
         });
       }
     } catch {}
-  }, [targetUserId]);
+  }, [targetUserId, canLoadTargetUser]);
 
-  const authUserId = authUser?._id || authUser?.id || authUser?.userId || null;
-  const selectedMember = location.state || {};
   const memberName =
     selectedMember.memberName ||
     selectedMember.userName ||
@@ -1113,43 +1248,53 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
 
   useEffect(() => {
     if (!targetUserId) return;
+    if (!hasValidTargetUserId) {
+      setLoading(false);
+      setVisits([]);
+      setError("Selected member is not available. Please reopen this page from Team Tracking.");
+      return;
+    }
     setPage(1);
     fetchVisits(1, false);
     fetchStats();
     fetchPunchInStatus();
+    fetchExpenses();
     fetchGpsDistance();
     fetchStayedLocations();
     fetchLatestBattery();
-  }, [filters, userId, authUserId, targetUserId, fetchVisits, fetchStats, fetchPunchInStatus, fetchGpsDistance, fetchStayedLocations, fetchLatestBattery]);
+  }, [filters, userId, authUserId, targetUserId, hasValidTargetUserId, fetchVisits, fetchStats, fetchPunchInStatus, fetchExpenses, fetchGpsDistance, fetchStayedLocations, fetchLatestBattery]);
 
   const handleRefresh = () => {
+    if (!hasValidTargetUserId) return;
     setPage(1);
     fetchVisits(1, false);
     fetchStats();
     fetchPunchInStatus();
+    fetchExpenses();
     fetchGpsDistance();
     fetchStayedLocations();
     fetchLatestBattery();
   };
 
   useEffect(() => {
-    if (!hasPunchedOut) return;
-    const timer = setTimeout(() => { fetchVisits(1, false); fetchGpsDistance(); fetchStayedLocations(); }, 2000);
+    if (!hasPunchedOut || !hasValidTargetUserId) return;
+    const timer = setTimeout(() => { fetchVisits(1, false); fetchExpenses(); fetchGpsDistance(); fetchStayedLocations(); }, 2000);
     return () => clearTimeout(timer);
-  }, [hasPunchedOut, fetchVisits, fetchGpsDistance, fetchStayedLocations]);
+  }, [hasPunchedOut, hasValidTargetUserId, fetchVisits, fetchExpenses, fetchGpsDistance, fetchStayedLocations]);
 
   useEffect(() => {
-    if (!targetUserId) return;
+    if (!targetUserId || !hasValidTargetUserId) return;
     if (filters.dateRange && filters.dateRange !== "today") return;
     const interval = setInterval(() => {
       fetchVisits(1, false);
+      fetchExpenses();
       fetchGpsDistance();
       fetchStayedLocations();
       fetchPunchInStatus();
       fetchLatestBattery();
     }, 12_000);
     return () => clearInterval(interval);
-  }, [targetUserId, filters.dateRange, fetchVisits, fetchGpsDistance, fetchStayedLocations, fetchPunchInStatus, fetchLatestBattery]);
+  }, [targetUserId, hasValidTargetUserId, filters.dateRange, fetchVisits, fetchExpenses, fetchGpsDistance, fetchStayedLocations, fetchPunchInStatus, fetchLatestBattery]);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const selectedMapDate = isSingleDayFilter(filters.dateRange)
@@ -1195,6 +1340,25 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
   const timelineBatteryChip = getBatteryChipStyle(timelineBatteryInfo.percentage);
   const batteryInfo = currentBatteryInfo;
   const batteryChip = currentBatteryChip;
+  const expenseTotal = expenses.reduce((sum, item) => sum + (Number(item?.amount) || 0), 0);
+  const expenseCount = expenses.length;
+  const selectedStatusLabel = formatStatusLabel(attendanceRecord?.status, isPunchedIn, hasPunchedOut);
+  const selectedDayLabel = getDateRangeLabel(filters.dateRange);
+  const punchInTimeValue = punchInLocation?.time || attendanceRecord?.punchIn?.time || null;
+  const punchOutTimeValue = punchOutLocation?.time || attendanceRecord?.punchOut?.time || null;
+  const workHoursValue = attendanceRecord?.workHours !== undefined && attendanceRecord?.workHours !== null
+    ? Number(attendanceRecord.workHours)
+    : null;
+  const summaryCards = [
+    { label: "Date", value: selectedDayLabel },
+    { label: "Punch In", value: punchInTimeValue ? fmt(punchInTimeValue) : "—" },
+    { label: "Punch Out", value: punchOutTimeValue ? fmt(punchOutTimeValue) : "—" },
+    { label: "Hours", value: workHoursValue !== null ? `${workHoursValue.toFixed(2)} hrs` : "—" },
+    { label: "Status", value: selectedStatusLabel },
+    { label: "KM", value: `${displayDistanceKm.toFixed(2)} km` },
+    { label: "Visits", value: `${totalStopCount}` },
+    { label: "Expense", value: formatCurrency(expenseTotal) },
+  ];
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#f4f6fb" }}>
@@ -1305,6 +1469,56 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
               </Box>
             )}
 
+            <Box sx={{
+              bgcolor: "#fff",
+              borderRadius: "16px",
+              border: "1px solid #e8edf2",
+              boxShadow: "0 4px 24px rgba(0,0,0,0.04)",
+              p: { xs: 2, sm: 2.5 },
+            }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, gap: 2, flexWrap: "wrap" }}>
+                <Box>
+                  <Typography sx={{ fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "#64748b" }}>
+                    Day Summary
+                  </Typography>
+                  <Typography sx={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a" }}>
+                    {selectedDayLabel}
+                  </Typography>
+                </Box>
+                <Chip
+                  size="small"
+                  label={`${expenseCount} expense${expenseCount === 1 ? "" : "s"} · ${formatCurrency(expenseTotal)}`}
+                  sx={{ bgcolor: alpha(PRIMARY, 0.08), color: PRIMARY, fontWeight: 700 }}
+                />
+              </Box>
+
+              <Box sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))" },
+                gap: 1.25,
+              }}>
+                {summaryCards.map((item) => (
+                  <Box
+                    key={item.label}
+                    sx={{
+                      borderRadius: "14px",
+                      border: "1px solid #e8edf2",
+                      bgcolor: "#fafbfc",
+                      p: 1.25,
+                      minWidth: 0,
+                    }}
+                  >
+                    <Typography sx={{ fontSize: "0.68rem", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      {item.label}
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.92rem", fontWeight: 800, color: "#0f172a", mt: 0.35, wordBreak: "break-word" }}>
+                      {item.value}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+
             {/* Map */}
             <Box sx={{
               borderRadius: "16px", overflow: "hidden", border: "1px solid #e2e8f0",
@@ -1359,26 +1573,44 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
           
 
 
-<LiveTrackingMap
-  isPunchedIn={isPunchedIn}
-  hasPunchedOut={hasPunchedOut}
-  userId={targetUserId}
-  isOwner={!isAdminView}
-  height="100%"
-  locateTrigger={locateTrigger}
-  onDistanceChange={setMapDistance}
-  punchInLocation={punchInLocation}
-  punchOutLocation={punchOutLocation}
-  visits={visibleVisits} 
-  selectedDate={selectedMapDate}
-  preferVisitTrail={useVisitTrailOnly}
-/>
+{hasValidTargetUserId ? (
+  <LiveTrackingMap
+    isPunchedIn={isPunchedIn}
+    hasPunchedOut={hasPunchedOut}
+    userId={targetUserId}
+    isOwner={!isAdminView}
+    height="100%"
+    locateTrigger={locateTrigger}
+    onDistanceChange={setMapDistance}
+    punchInLocation={punchInLocation}
+    punchOutLocation={punchOutLocation}
+    visits={visibleVisits}
+    selectedDate={selectedMapDate}
+    preferVisitTrail={useVisitTrailOnly}
+  />
+) : (
+  <Box
+    sx={{
+      height: "100%",
+      display: "grid",
+      placeItems: "center",
+      bgcolor: "#f8fafc",
+      borderRadius: "18px",
+      p: 3,
+      textAlign: "center",
+    }}
+  >
+    <Alert severity="warning">
+      Selected member is not available. Please reopen this page from Team Tracking.
+    </Alert>
+  </Box>
+)}
 
 
             </Box>
 
             {/* Stats row */}
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 2 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))" }, gap: 2 }}>
               <Box sx={{ bgcolor: "#fff", borderRadius: "14px", p: 2.5, border: "1px solid #e8edf2", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", "&:hover": { boxShadow: "0 4px 16px rgba(69,105,234,0.1)", borderColor: alpha(PRIMARY, 0.3) }, transition: "all 0.2s" }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
                   <Route sx={{ fontSize: 20, color: PRIMARY }} />
@@ -1427,7 +1659,84 @@ const targetUserId = userId || authUser?._id || authUser?.id || authUser?.userId
                   </Typography>
                 )}
               </Box>
+
+              <Box sx={{ bgcolor: "#fff", borderRadius: "14px", p: 2.5, border: "1px solid #e8edf2", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", "&:hover": { boxShadow: "0 4px 16px rgba(69,105,234,0.1)", borderColor: alpha(PRIMARY, 0.3) }, transition: "all 0.2s" }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                  <ReceiptLong sx={{ fontSize: 20, color: PRIMARY }} />
+                  <Typography sx={{ color: "#64748b", fontWeight: 500, fontSize: "0.78rem" }}>Expenses</Typography>
+                </Box>
+                {loading ? <Skeleton width={80} height={32} /> : (
+                  <>
+                    <Typography sx={{ fontSize: "1.4rem", fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px", lineHeight: 1 }}>
+                      {formatCurrency(expenseTotal)}{" "}
+                      <Typography component="span" sx={{ fontSize: "0.75rem", fontWeight: 400, color: "#94a3b8" }}>total</Typography>
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.65rem", color: "#94a3b8", mt: 0.5 }}>
+                      {expenseCount} expense{expenseCount === 1 ? "" : "s"} in this range
+                    </Typography>
+                  </>
+                )}
+              </Box>
             </Box>
+
+            {!loading && (
+              <Box sx={{ bgcolor: "#fff", borderRadius: "14px", p: 2.5, border: "1px solid #e8edf2" }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, gap: 2, flexWrap: "wrap" }}>
+                  <Typography sx={{ fontWeight: 800, fontSize: "0.9rem", color: "#0f172a" }}>Recent Expenses</Typography>
+                  <Chip
+                    size="small"
+                    label={`${expenseCount} record${expenseCount === 1 ? "" : "s"}`}
+                    sx={{ bgcolor: alpha(PRIMARY, 0.08), color: PRIMARY, fontWeight: 700 }}
+                  />
+                </Box>
+
+                {expenses.length > 0 ? (
+                  <Box sx={{ display: "grid", gap: 1 }}>
+                    {expenses.slice(0, 5).map((expense) => (
+                      <Box
+                        key={expense._id || expense.id}
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 2,
+                          p: 1.25,
+                          borderRadius: "12px",
+                          border: "1px solid #edf2f7",
+                          bgcolor: "#fafbfc",
+                        }}
+                      >
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography sx={{ fontSize: "0.84rem", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {expense.title || "Expense"}
+                          </Typography>
+                          <Typography sx={{ fontSize: "0.72rem", color: "#64748b", mt: 0.2 }}>
+                            {(expense.category || "General")} · {expense.expenseDate ? new Date(expense.expenseDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : selectedDayLabel}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ textAlign: "right", flexShrink: 0 }}>
+                          <Typography sx={{ fontSize: "0.86rem", fontWeight: 900, color: PRIMARY }}>
+                            {formatCurrency(expense.amount)}
+                          </Typography>
+                          <Chip
+                            size="small"
+                            label={String(expense.status || "Pending").replace(/[-_]+/g, " ").replace(/\b\w/g, (match) => match.toUpperCase())}
+                            sx={{ mt: 0.4, height: 20, fontSize: "0.62rem", fontWeight: 700, bgcolor: alpha("#94a3b8", 0.12), color: "#475569" }}
+                          />
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                ) : (
+                  <Box sx={{ py: 2, textAlign: "center", color: "#94a3b8" }}>
+                    <ReceiptLong sx={{ fontSize: 28, mb: 0.5, color: "#cbd5e1" }} />
+                    <Typography sx={{ fontSize: "0.82rem", fontWeight: 600 }}>
+                      No expenses found for this range
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            )}
 
             {/* Completion bar */}
             {!loading && visibleVisits.length > 0 && (

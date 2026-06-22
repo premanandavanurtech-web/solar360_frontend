@@ -94,7 +94,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { toast } from "../components/useToast.jsx";
 
-const PRIMARY_COLOR = "#4569ea";
+const PRIMARY_COLOR = "#0f1f3d";
 const SECONDARY_COLOR = "#1a237e";
 
 const PERIOD_OPTIONS = [

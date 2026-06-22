@@ -16,8 +16,8 @@ import {
   FiberManualRecord as FiberManualRecordIcon,
 } from "@mui/icons-material";
 
-const PRIMARY = "#4569ea";
-const API = "https://vanurtech-solar-backend-1.onrender.com/api/v1";
+const PRIMARY = "#0f1f3d";
+const API = "http://localhost:9001/api/v1";
 
 const getToken = () =>
   localStorage.getItem("token") ||

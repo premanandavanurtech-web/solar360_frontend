@@ -57,7 +57,7 @@ import { format } from "date-fns";
 import { toBackendAssetUrl } from "../utils/backendAssetUrl";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const PRIMARY = "#4569ea";
+const PRIMARY = "#0f1f3d";
 const SECONDARY = "#1a237e";
 const SUCCESS = "#22c55e";
 const DANGER = "#ef4444";
@@ -277,7 +277,7 @@ export const printRecord = (a) => {
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e; background: #fff; padding: 40px; }
-          h1 { font-size: 22px; color: #4569ea; margin-bottom: 4px; }
+          h1 { font-size: 22px; color: #0f1f3d; margin-bottom: 4px; }
           .sub { color: #888; font-size: 13px; margin-bottom: 24px; }
           .card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; }
           .card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 10px; font-weight: 700; }

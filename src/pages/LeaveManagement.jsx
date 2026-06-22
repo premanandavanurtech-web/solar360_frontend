@@ -113,7 +113,7 @@ export default function LeaveManagement() {
               height: 44,
               borderRadius: 2,
               bgcolor: "#e9efff",
-              color: "#4569ea",
+              color: "#0f1f3d",
               display: "grid",
               placeItems: "center",
             }}

@@ -1,4 +1,4 @@
-// pages/LeadOverview.jsx (Updated Modals Design)
+﻿// pages/LeadOverview.jsx (Updated Modals Design)
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
@@ -22,6 +22,7 @@ import {
   FormControl,
   InputLabel,
   Select,
+  Menu,
   MenuItem,
   Dialog,
   DialogTitle,
@@ -126,14 +127,24 @@ import {
   ExpandLess,
   ErrorOutline,
   PersonRemove,
+  MoreVert,
+  ContentCopy,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 import { format, parseISO, isValid } from "date-fns";
 import { useLocation, useNavigate } from "react-router-dom";
 
 // ========== CONSTANTS & UTILITIES ==========
-const PRIMARY_COLOR = "#4569ea";
-const SECONDARY_COLOR = "#1a237e";
+const PRIMARY_COLOR = "#2563eb";
+const SECONDARY_COLOR = "#0f1f3d";
+const GRADIENT_MAIN = "linear-gradient(135deg, #0f1f3d 0%, #1a3a6b 60%, #2563eb 100%)";
+const GRADIENT_BLUE = "linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)";
+const GRADIENT_CARD = "linear-gradient(135deg, #f8faff, #eff6ff)";
+const GRADIENT_DARK = "linear-gradient(135deg, #0f1f3d, #2563eb)";
+const GRADIENT_SOFT_BLUE = "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)";
+const GRADIENT_SOFT_AMBER = "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)";
+const GRADIENT_SOFT_GREEN = "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)";
+const FOCUS_RING = "0 0 0 3px rgba(37,99,235,.12)";
 
 const LEAD_STATUS_OPTIONS = [
   "Visit",
@@ -151,7 +162,7 @@ const PERIOD_OPTIONS = [
   { value: "Today", label: "Today", icon: <CalendarToday /> },
   { value: "This Week", label: "This Week", icon: <DateRange /> },
   { value: "This Month", label: "This Month", icon: <DateRange /> },
-  { value: "All", label: "All Time", icon: <DateRange /> },
+  { value: "All", label: "All time", icon: <DateRange /> },  // ← only this skips date filter
 ];
 
 const ROLE_PERMISSIONS = {
@@ -179,17 +190,77 @@ const ROLE_PERMISSIONS = {
 
 const getStatusColor = (status) => {
   const colorMap = {
-    Visit: { bg: alpha(PRIMARY_COLOR, 0.08), color: PRIMARY_COLOR, icon: <Person /> },
-    Registration: { bg: alpha(PRIMARY_COLOR, 0.08), color: PRIMARY_COLOR, icon: <HowToReg /> },
-    "Bank Loan Apply": { bg: alpha(PRIMARY_COLOR, 0.08), color: PRIMARY_COLOR, icon: <Business /> },
-    "Document Submission": { bg: alpha(PRIMARY_COLOR, 0.08), color: PRIMARY_COLOR, icon: <Description /> },
-    "Bank at Pending": { bg: alpha(PRIMARY_COLOR, 0.08), color: PRIMARY_COLOR, icon: <Pending /> },
-    Disbursement: { bg: alpha(PRIMARY_COLOR, 0.08), color: PRIMARY_COLOR, icon: <Assignment /> },
-    "Installation Completion": { bg: alpha(PRIMARY_COLOR, 0.08), color: PRIMARY_COLOR, icon: <CheckCircle /> },
-    "Missed Leads": { bg: alpha("#f44336", 0.08), color: "#f44336", icon: <Cancel /> },
-    New: { bg: alpha("#4caf50", 0.08), color: "#4caf50", icon: <Add /> },
+    Visit: {
+      bg: "linear-gradient(135deg, rgba(37,99,235,0.18) 0%, rgba(96,165,250,0.28) 100%)",
+      color: "#1d4ed8",
+      icon: <Person />,
+      avatar: "linear-gradient(135deg, #1d4ed8 0%, #60a5fa 100%)",
+      border: alpha("#2563eb", 0.18),
+    },
+    Registration: {
+      bg: "linear-gradient(135deg, rgba(59,130,246,0.16) 0%, rgba(147,197,253,0.3) 100%)",
+      color: "#1d4ed8",
+      icon: <HowToReg />,
+      avatar: "linear-gradient(135deg, #2563eb 0%, #60a5fa 100%)",
+      border: alpha("#3b82f6", 0.18),
+    },
+    "Bank Loan Apply": {
+      bg: "linear-gradient(135deg, rgba(245,158,11,0.14) 0%, rgba(253,224,71,0.32) 100%)",
+      color: "#b45309",
+      icon: <Business />,
+      avatar: "linear-gradient(135deg, #d97706 0%, #fbbf24 100%)",
+      border: alpha("#f59e0b", 0.18),
+    },
+    "Document Submission": {
+      bg: "linear-gradient(135deg, rgba(14,165,233,0.14) 0%, rgba(125,211,252,0.28) 100%)",
+      color: "#0369a1",
+      icon: <Description />,
+      avatar: "linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)",
+      border: alpha("#0ea5e9", 0.18),
+    },
+    "Bank at Pending": {
+      bg: "linear-gradient(135deg, rgba(251,191,36,0.16) 0%, rgba(253,230,138,0.32) 100%)",
+      color: "#b45309",
+      icon: <Pending />,
+      avatar: "linear-gradient(135deg, #d97706 0%, #fbbf24 100%)",
+      border: alpha("#f59e0b", 0.18),
+    },
+    Disbursement: {
+      bg: "linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(110,231,183,0.32) 100%)",
+      color: "#047857",
+      icon: <Assignment />,
+      avatar: "linear-gradient(135deg, #059669 0%, #34d399 100%)",
+      border: alpha("#10b981", 0.18),
+    },
+    "Installation Completion": {
+      bg: "linear-gradient(135deg, rgba(34,197,94,0.15) 0%, rgba(134,239,172,0.32) 100%)",
+      color: "#15803d",
+      icon: <CheckCircle />,
+      avatar: "linear-gradient(135deg, #16a34a 0%, #4ade80 100%)",
+      border: alpha("#22c55e", 0.18),
+    },
+    "Missed Leads": {
+      bg: "linear-gradient(135deg, rgba(239,68,68,0.14) 0%, rgba(252,165,165,0.3) 100%)",
+      color: "#dc2626",
+      icon: <Cancel />,
+      avatar: "linear-gradient(135deg, #dc2626 0%, #f87171 100%)",
+      border: alpha("#ef4444", 0.18),
+    },
+    New: {
+      bg: "linear-gradient(135deg, rgba(34,197,94,0.14) 0%, rgba(134,239,172,0.3) 100%)",
+      color: "#15803d",
+      icon: <Add />,
+      avatar: "linear-gradient(135deg, #16a34a 0%, #4ade80 100%)",
+      border: alpha("#22c55e", 0.18),
+    },
   };
-  return colorMap[status] || { bg: alpha(PRIMARY_COLOR, 0.08), color: PRIMARY_COLOR, icon: <Pending /> };
+  return colorMap[status] || {
+    bg: "linear-gradient(135deg, rgba(37,99,235,0.16) 0%, rgba(191,219,254,0.3) 100%)",
+    color: PRIMARY_COLOR,
+    icon: <Pending />,
+    avatar: GRADIENT_BLUE,
+    border: alpha(PRIMARY_COLOR, 0.18),
+  };
 };
 
 const getRoleColor = (role) => {
@@ -203,6 +274,36 @@ const formatDate = (dateString, formatStr = "MMM dd, yyyy hh:mm a") => {
     const parsedDate = parseISO(dateString);
     return isValid(parsedDate) ? format(parsedDate, formatStr) : "Invalid date";
   } catch { return "Invalid date"; }
+};
+
+const toDateInputValue = (date) => {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const getPeriodDateRange = (period) => {
+  const now = new Date();
+  const end = new Date(now);
+
+  if (period === "All") {
+    return {}; // no date filter — intentional
+  }
+
+  if (period === "This Week") {
+    const start = new Date(now);
+    const day = start.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    start.setDate(start.getDate() + diff);
+    return { fromDate: toDateInputValue(start), toDate: toDateInputValue(end) };
+  }
+
+  if (period === "This Month") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { fromDate: toDateInputValue(start), toDate: toDateInputValue(end) };
+  }
+
+  // Fallback to a one-day window for explicit "Today" or unexpected values.
+  return { fromDate: toDateInputValue(now), toDate: toDateInputValue(now) };
 };
 
 const formatTimelineValue = (value) => {
@@ -295,6 +396,17 @@ const getAssignedPerson = (lead) => {
 
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const validatePhone = (phone) => /^[0-9]{10}$/.test(phone.replace(/\D/g, ""));
+const formatDateTimeLocalValue = (value) => {
+  if (!value) return "";
+  try {
+    const date = typeof value === "string" ? parseISO(value) : new Date(value);
+    if (!isValid(date)) return "";
+    const pad = (num) => String(num).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  } catch {
+    return "";
+  }
+};
 
 const handleDownload = (url, filename) => {
   const link = document.createElement("a");
@@ -315,12 +427,42 @@ const useDebounce = (value, delay) => {
   return debouncedValue;
 };
 
+const gradientIconBoxSx = {
+  width: { xs: 44, sm: 52 },
+  height: { xs: 44, sm: 52 },
+  borderRadius: 2.5,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid rgba(255,255,255,0.22)",
+  boxShadow: "0 12px 28px rgba(15,31,61,0.18)",
+  flexShrink: 0,
+};
+
+const modalSectionSx = {
+  p: 2.5,
+  borderRadius: 3,
+  border: `1px solid ${alpha(PRIMARY_COLOR, 0.16)}`,
+  background: GRADIENT_CARD,
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.72)",
+};
+
+const tableHeaderCellSx = {
+  background: "linear-gradient(180deg, #f8faff, #f0f6ff)",
+  fontWeight: 700,
+  fontSize: "0.78rem",
+  letterSpacing: ".05em",
+  textTransform: "uppercase",
+  color: "#5f6b80",
+  borderBottom: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+};
+
 // ========== SHARED MODAL HEADER ==========
-const ModalHeader = ({ icon, title, subtitle, color = PRIMARY_COLOR, onClose }) => (
+const ModalHeader = ({ icon, title, subtitle, color = PRIMARY_COLOR, onClose, iconGradient = GRADIENT_BLUE }) => (
   <Box
     sx={{
       position: "relative",
-      background: `linear-gradient(135deg, ${color} 0%, ${color}cc 100%)`,
+      background: `linear-gradient(135deg, ${SECONDARY_COLOR} 0%, ${color} 100%)`,
       px: { xs: 2.5, sm: 3.5 },
       pt: { xs: 2.5, sm: 3 },
       pb: { xs: 3, sm: 3.5 },
@@ -337,12 +479,7 @@ const ModalHeader = ({ icon, title, subtitle, color = PRIMARY_COLOR, onClose }) 
   >
     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", position: "relative", zIndex: 1 }}>
       <Stack direction="row" spacing={2} alignItems="center">
-        <Box sx={{
-          width: { xs: 44, sm: 52 }, height: { xs: 44, sm: 52 }, borderRadius: 2.5,
-          bgcolor: "rgba(255,255,255,0.18)", backdropFilter: "blur(8px)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          border: "1px solid rgba(255,255,255,0.25)", flexShrink: 0,
-        }}>
+        <Box sx={{ ...gradientIconBoxSx, background: iconGradient, backdropFilter: "blur(10px)" }}>
           {React.cloneElement(icon, { sx: { color: "#fff", fontSize: { xs: 22, sm: 26 } } })}
         </Box>
         <Box>
@@ -395,14 +532,21 @@ const MobileFilterDrawer = ({
                 <TextField fullWidth size="small" placeholder="Search by name, email, phone..." value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: "text.secondary", fontSize: 20 }} /></InputAdornment>,
-                    endAdornment: searchQuery && <InputAdornment position="end"><IconButton size="small" onClick={() => setSearchQuery("")}><Close fontSize="small" /></IconButton></InputAdornment> }} />
+                    endAdornment: searchQuery && <InputAdornment position="end"><IconButton size="small" onClick={() => setSearchQuery("")}><Close fontSize="small" /></IconButton></InputAdornment> }}
+                  sx={{ "& .MuiOutlinedInput-root": { borderRadius: 999, bgcolor: "#fff", transition: "box-shadow .2s ease, border-color .2s ease", "&.Mui-focused": { boxShadow: FOCUS_RING } } }} />
               )},
               { key: "period", label: "Time Period", icon: <DateRange sx={{ color: PRIMARY_COLOR, fontSize: 20 }} />, content: (
                 <Grid container spacing={1}>
                   {PERIOD_OPTIONS.map((option) => (
                     <Grid item xs={6} key={option.value}>
-                      <Button fullWidth variant={period === option.value ? "contained" : "outlined"} onClick={() => setPeriod(option.value)} startIcon={option.icon} size="small"
-                        sx={{ bgcolor: period === option.value ? PRIMARY_COLOR : "transparent", color: period === option.value ? "#fff" : PRIMARY_COLOR, borderColor: PRIMARY_COLOR }}>
+                      <Button fullWidth variant="text" onClick={() => setPeriod(option.value)} startIcon={option.icon} size="small"
+                        sx={{
+                          borderRadius: 999,
+                          border: `1px solid ${period === option.value ? "transparent" : alpha(PRIMARY_COLOR, 0.16)}`,
+                          background: period === option.value ? GRADIENT_BLUE : "#fff",
+                          color: period === option.value ? "#fff" : PRIMARY_COLOR,
+                          boxShadow: period === option.value ? "0 12px 24px rgba(37,99,235,0.18)" : "none",
+                        }}>
                         {option.label}
                       </Button>
                     </Grid>
@@ -436,7 +580,7 @@ const MobileFilterDrawer = ({
           <Stack direction="row" spacing={2}>
             <Button fullWidth variant="outlined" onClick={() => { handleClearFilters(); onClose(); }} startIcon={<Clear />}
               sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR }}>Clear All</Button>
-            <Button fullWidth variant="contained" onClick={onClose} sx={{ bgcolor: PRIMARY_COLOR, "&:hover": { bgcolor: SECONDARY_COLOR } }}>Apply Filters</Button>
+            <Button fullWidth variant="contained" onClick={onClose} sx={{ background: GRADIENT_BLUE, boxShadow: "0 12px 24px rgba(37,99,235,0.2)", "&:hover": { background: GRADIENT_BLUE } }}>Apply Filters</Button>
           </Stack>
         </Box>
       </Box>
@@ -465,7 +609,13 @@ const RoleBadge = ({ role }) => {
   const config = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.TEAM;
   return (
     <Chip icon={config.icon} label={config.label} size="small"
-      sx={{ bgcolor: alpha(config.color, 0.1), color: config.color, fontWeight: 600, "& .MuiChip-icon": { color: config.color } }} />
+      sx={{
+        background: "linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(96,165,250,0.24) 100%)",
+        color: config.color,
+        fontWeight: 700,
+        border: `1px solid ${alpha(config.color, 0.12)}`,
+        "& .MuiChip-icon": { color: config.color },
+      }} />
   );
 };
 
@@ -483,7 +633,7 @@ const InfoRow = ({ label, value, icon, subValue, action, chip, chipColor }) => (
       <Box sx={{ flex: 1 }}>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
         {chip ? (
-          <Chip label={value} size="small" sx={{ bgcolor: chipColor?.bg, color: chipColor?.color, fontWeight: 600, mt: 0.5 }} />
+          <Chip label={value} size="small" sx={{ background: chipColor?.bg, color: chipColor?.color, fontWeight: 700, mt: 0.5, border: `1px solid ${chipColor?.border || alpha(chipColor?.color || PRIMARY_COLOR, 0.14)}` }} />
         ) : (
           <Typography variant="body1" fontWeight={500}>{value}</Typography>
         )}
@@ -495,15 +645,147 @@ const InfoRow = ({ label, value, icon, subValue, action, chip, chipColor }) => (
 );
 
 const DocumentCard = ({ title, url, icon, filename }) => (
-  <Card variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+  <Card variant="outlined" sx={{ p: 2, borderRadius: 2.5, background: GRADIENT_CARD, borderColor: alpha(PRIMARY_COLOR, 0.14) }}>
     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1 }}>
       {icon}<Typography variant="body2" fontWeight={600} noWrap>{title}</Typography>
     </Box>
-    <Button fullWidth size="small" variant="outlined" startIcon={<OpenInNew />} onClick={() => handleDownload(url, filename || title)}>View Document</Button>
+    <Button fullWidth size="small" variant="outlined" startIcon={<OpenInNew />} onClick={() => handleDownload(url, filename || title)} sx={{ borderColor: alpha(PRIMARY_COLOR, 0.2), color: PRIMARY_COLOR }}>
+      View Document
+    </Button>
   </Card>
 );
 
-const MobileLeadCard = ({ lead, onView, onEdit, onAssign, onDelete, permissions }) => {
+const LeadActionMenu = ({
+  lead,
+  permissions,
+  onEdit,
+  onQuickView,
+  onViewDetails,
+  onCreateQuote,
+  onAssign,
+  onConvertToProject,
+  onUnsupportedAction,
+}) => {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+
+  const closeMenu = () => setAnchorEl(null);
+
+  const runAction = (handler) => {
+    closeMenu();
+    handler?.(lead);
+  };
+
+  const menuItemSx = {
+    gap: 1.25,
+    minHeight: 42,
+    px: 2.25,
+    color: "#5f6b80",
+    fontSize: "0.92rem",
+    "& .MuiSvgIcon-root": {
+      fontSize: 18,
+      color: PRIMARY_COLOR,
+    },
+  };
+
+  return (
+    <>
+      <Tooltip title="Actions">
+        <IconButton
+          size="small"
+          onClick={(event) => {
+            event.stopPropagation();
+            setAnchorEl(event.currentTarget);
+          }}
+          sx={{
+            width: 40,
+            height: 40,
+            borderRadius: 2,
+            bgcolor: open ? alpha(PRIMARY_COLOR, 0.12) : alpha("#64748b", 0.08),
+            color: "#0f172a",
+            "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.12) },
+          }}
+        >
+          <MoreVert fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={closeMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{
+          elevation: 0,
+          sx: {
+            mt: 0.5,
+            minWidth: 224,
+            borderRadius: 3,
+            border: "1px solid #eef2f7",
+            boxShadow: "0 18px 40px rgba(15, 23, 42, 0.12)",
+            overflow: "hidden",
+            py: 1,
+          },
+        }}
+      >
+        {permissions.edit && (
+          <MenuItem sx={menuItemSx} onClick={() => runAction(onEdit)}>
+            <Edit />
+            Edit Lead
+          </MenuItem>
+        )}
+        <MenuItem sx={menuItemSx} onClick={() => runAction(onQuickView)}>
+          <Visibility />
+          Quick View
+        </MenuItem>
+        <MenuItem sx={menuItemSx} onClick={() => runAction(onViewDetails)}>
+          <OpenInNew />
+          View Details
+        </MenuItem>
+        <MenuItem sx={menuItemSx} onClick={() => runAction(onCreateQuote)}>
+          <Description />
+          Create Quote
+        </MenuItem>
+        <MenuItem sx={menuItemSx} onClick={() => runAction(onConvertToProject)}>
+          <Assignment />
+          {lead?.isProject ? "Open Project" : "Convert to Project"}
+        </MenuItem>
+
+        {permissions.assign && (
+          <Box sx={{ borderTop: "1px solid #eef2f7", mt: 0.75, pt: 0.75 }}>
+            <MenuItem sx={menuItemSx} onClick={() => runAction(onAssign)}>
+              <AssignmentInd />
+              Assign Agent
+            </MenuItem>
+          </Box>
+        )}
+
+        <Box sx={{ borderTop: "1px solid #eef2f7", mt: 0.75, pt: 0.75 }}>
+          <MenuItem sx={menuItemSx} onClick={() => runAction(() => onUnsupportedAction("Mark as Duplicate"))}>
+            <ContentCopy />
+            Mark as Duplicate
+          </MenuItem>
+          <MenuItem
+            sx={{
+              ...menuItemSx,
+              "& .MuiSvgIcon-root": { fontSize: 18, color: "#ef4444" },
+            }}
+            onClick={() => runAction(() => onUnsupportedAction("Mark as Junk"))}
+          >
+            <ErrorOutline />
+            Mark as Junk
+          </MenuItem>
+          <MenuItem sx={menuItemSx} onClick={() => runAction(() => onUnsupportedAction("Not Interested"))}>
+            <PersonRemove />
+            Not Interested
+          </MenuItem>
+        </Box>
+      </Menu>
+    </>
+  );
+};
+
+const MobileLeadCard = ({ lead, onView, onEdit, onAssign, onDelete, onConvertToProject, permissions }) => {
   const [expanded, setExpanded] = useState(false);
   const statusColor = getStatusColor(lead.status);
   const initials = `${lead.firstName?.[0] || ""}${lead.lastName?.[0] || ""}`;
@@ -513,11 +795,11 @@ const MobileLeadCard = ({ lead, onView, onEdit, onAssign, onDelete, permissions 
   };
 
   return (
-    <Paper sx={{ mb: 1.5, borderRadius: 3, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, overflow: "hidden" }}>
+    <Paper sx={{ mb: 1.5, borderRadius: 3, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, overflow: "hidden", background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)" }}>
       <Box sx={{ p: 2 }}>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 1.5 }}>
           <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
-            <Avatar sx={{ bgcolor: PRIMARY_COLOR, color: "#fff", width: 48, height: 48, fontWeight: 600 }}>{initials}</Avatar>
+            <Avatar sx={{ background: statusColor.avatar, color: "#fff", width: 48, height: 48, fontWeight: 700, boxShadow: "0 10px 20px rgba(37,99,235,0.18)" }}>{initials}</Avatar>
             <Box>
               <Typography variant="subtitle1" fontWeight="700" color={PRIMARY_COLOR}>{lead.firstName} {lead.lastName}</Typography>
               <Typography variant="caption" color="text.secondary">ID: {lead._id?.slice(-8) || "N/A"}</Typography>
@@ -538,7 +820,7 @@ const MobileLeadCard = ({ lead, onView, onEdit, onAssign, onDelete, permissions 
           </Stack>
         </Box>
         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-          <Chip label={lead.status} icon={statusColor.icon} size="small" sx={{ bgcolor: statusColor.bg, color: statusColor.color, fontWeight: 600, height: 24, fontSize: "0.7rem", "& .MuiChip-icon": { fontSize: 14 } }} />
+          <Chip label={lead.status} icon={statusColor.icon} size="small" sx={{ background: statusColor.bg, color: statusColor.color, fontWeight: 700, height: 24, fontSize: "0.7rem", border: `1px solid ${statusColor.border}`, "& .MuiChip-icon": { fontSize: 14, color: statusColor.color } }} />
         </Box>
         <Collapse in={expanded}>
           <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}` }}>
@@ -548,16 +830,46 @@ const MobileLeadCard = ({ lead, onView, onEdit, onAssign, onDelete, permissions 
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="caption" color="text.secondary" display="block">Assigned To</Typography>
                   <Box display="flex" alignItems="center" gap={1}>
-                    <Avatar sx={{ width: 24, height: 24, fontSize: 12 }}>{assignedPerson.initial}</Avatar>
+                    <Avatar sx={{ width: 24, height: 24, fontSize: 12, background: GRADIENT_BLUE, color: "#fff" }}>{assignedPerson.initial}</Avatar>
                     <Typography variant="body2">{assignedPerson.name}</Typography>
                     <Typography variant="caption" color="text.secondary">({assignedPerson.role})</Typography>
                   </Box>
                 </Box>
+              ) : permissions.assign ? (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="caption" color="text.secondary" display="block">Assigned To</Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => onAssign(lead)}
+                    sx={{
+                      mt: 0.75,
+                      px: 1.5,
+                      py: 0.5,
+                      borderRadius: 2,
+                      borderStyle: "dashed",
+                      borderColor: alpha(PRIMARY_COLOR, 0.45),
+                      color: PRIMARY_COLOR,
+                      fontWeight: 600,
+                      textTransform: "none",
+                      "&:hover": {
+                        borderStyle: "dashed",
+                        borderColor: PRIMARY_COLOR,
+                        bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                      },
+                    }}
+                  >
+                    + Assign
+                  </Button>
+                </Box>
               ) : null;
             })()}
             <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
-              <Button fullWidth size="small" variant="contained" startIcon={<Visibility sx={{ ml: 1 }} />} onClick={() => onView(lead)} sx={{ bgcolor: PRIMARY_COLOR, "&:hover": { bgcolor: SECONDARY_COLOR }, flex: 1 }} />
-              {permissions.edit && (<Button fullWidth size="small" variant="outlined" startIcon={<Edit sx={{ ml: 1 }} />} onClick={() => onEdit(lead)} sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR, flex: 1 }} />)}
+              <Button fullWidth size="small" variant="contained" startIcon={<Visibility sx={{ ml: 1 }} />} onClick={() => onView(lead)} sx={{ background: GRADIENT_DARK, "&:hover": { background: GRADIENT_DARK }, flex: 1, boxShadow: "0 12px 24px rgba(15,31,61,0.18)" }} />
+              {permissions.edit && (<Button fullWidth size="small" variant="contained" startIcon={<Edit sx={{ ml: 1 }} />} onClick={() => onEdit(lead)} sx={{ background: "linear-gradient(135deg, #dbeafe 0%, #93c5fd 100%)", color: "#1d4ed8", flex: 1, boxShadow: "0 10px 20px rgba(147,197,253,0.22)" }} />)}
+              <Button fullWidth size="small" variant="outlined" startIcon={<Assignment sx={{ ml: 1 }} />} onClick={() => onConvertToProject(lead)} sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR, flex: 1 }}>
+                {lead?.isProject ? "Open Project" : "Convert"}
+              </Button>
               {permissions.assign && (<Button fullWidth size="small" variant="outlined" startIcon={<AssignmentInd sx={{ ml: 1 }} />} onClick={() => onAssign(lead)} sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR, flex: 1 }} />)}
               {permissions.delete && (<Button fullWidth size="small" variant="outlined" color="error" startIcon={<Delete sx={{ ml: 1 }} />} onClick={handleDeleteClick} sx={{ borderColor: "#f44336", color: "#f44336", flex: 1 }} />)}
             </Stack>
@@ -682,7 +994,7 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
       <ModalHeader
         icon={<Visibility />}
         title={`${leadDetails.firstName} ${leadDetails.lastName}`}
-        subtitle={`${leadDetails.email || "No email"} · ID: ${leadDetails._id?.slice(-8)}`}
+        subtitle={`${leadDetails.email || "No email"} Â· ID: ${leadDetails._id?.slice(-8)}`}
         color={PRIMARY_COLOR}
         onClose={onClose}
       />
@@ -690,11 +1002,11 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
       {/* Status strip */}
       <Box sx={{ px: 3, py: 1.5, bgcolor: "#fafbff", borderBottom: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}`, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
         <Chip label={leadDetails.status} icon={statusColor.icon} size="small"
-          sx={{ bgcolor: statusColor.bg, color: statusColor.color, fontWeight: 700, fontSize: "0.75rem" }} />
+          sx={{ background: statusColor.bg, color: statusColor.color, fontWeight: 700, fontSize: "0.75rem", border: `1px solid ${statusColor.border}`, "& .MuiChip-icon": { color: statusColor.color } }} />
         {leadDetails.assignedUser && (
           <Stack direction="row" spacing={0.75} alignItems="center">
             <Typography variant="caption" color="text.secondary">Assigned to</Typography>
-            <Avatar sx={{ width: 20, height: 20, fontSize: 10, bgcolor: PRIMARY_COLOR }}>{leadDetails.assignedUser.firstName?.[0]}</Avatar>
+            <Avatar sx={{ width: 20, height: 20, fontSize: 10, background: GRADIENT_BLUE, color: "#fff" }}>{leadDetails.assignedUser.firstName?.[0]}</Avatar>
             <Typography variant="caption" fontWeight={600}>{leadDetails.assignedUser.firstName} {leadDetails.assignedUser.lastName}</Typography>
           </Stack>
         )}
@@ -719,7 +1031,7 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
         {activeTabKey === "basic" && (
           <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
-              <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, bgcolor: "#fff" }}>
+              <Paper elevation={0} sx={modalSectionSx}>
                 <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}><Person fontSize="small" /> Personal Information</Typography>
                 <Stack spacing={2}>
                   <InfoRow label="Full Name" value={`${leadDetails.firstName} ${leadDetails.lastName}`} icon={<AccountCircle sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
@@ -732,7 +1044,7 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
               </Paper>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, bgcolor: "#fff" }}>
+              <Paper elevation={0} sx={modalSectionSx}>
                 <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}><Timeline fontSize="small" /> Assignment & Status</Typography>
                 <Stack spacing={2}>
                   <InfoRow label="Status" value={leadDetails.status} icon={statusColor.icon} chip chipColor={statusColor} />
@@ -744,9 +1056,9 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
               </Paper>
             </Grid>
             <Grid item xs={12}>
-              <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, bgcolor: "#fff" }}>
+              <Paper elevation={0} sx={modalSectionSx}>
                 <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 1.5, display: "flex", alignItems: "center", gap: 1 }}><Note fontSize="small" /> Notes</Typography>
-                <Box sx={{ p: 2, borderRadius: 2, bgcolor: alpha(PRIMARY_COLOR, 0.03), border: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}` }}>
+                <Box sx={{ p: 2, borderRadius: 2.5, background: GRADIENT_SOFT_BLUE, border: `1px solid ${alpha(PRIMARY_COLOR, 0.12)}` }}>
                   <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: leadDetails.notes ? "text.primary" : "text.disabled" }}>
                     {leadDetails.notes || "No notes available"}
                   </Typography>
@@ -758,7 +1070,7 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
 
         {/* Visit */}
         {activeTabKey === "visit" && (
-          <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, bgcolor: "#fff" }}>
+          <Paper elevation={0} sx={modalSectionSx}>
             <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}><CalendarToday fontSize="small" /> Visit Information</Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}><Stack spacing={2}>
@@ -774,7 +1086,7 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
 
         {/* Registration */}
         {activeTabKey === "registration" && (
-          <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, bgcolor: "#fff" }}>
+          <Paper elevation={0} sx={modalSectionSx}>
             <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}><HowToReg fontSize="small" /> Registration Information</Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}><Stack spacing={2}>
@@ -789,11 +1101,11 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
 
         {/* Loan */}
         {activeTabKey === "loan" && (
-          <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, bgcolor: "#fff" }}>
+          <Paper elevation={0} sx={modalSectionSx}>
             <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}><AccountBalance fontSize="small" /> Loan Information</Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}><Stack spacing={2}>
-                <InfoRow label="Loan Amount" value={leadDetails.loanAmount ? `₹${leadDetails.loanAmount.toLocaleString()}` : "Not set"} icon={<Money sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
+                <InfoRow label="Loan Amount" value={leadDetails.loanAmount ? `â‚¹${leadDetails.loanAmount.toLocaleString()}` : "Not set"} icon={<Money sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
                 <InfoRow label="Bank" value={leadDetails.bank || "Not set"} icon={<AccountBalance sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
                 <InfoRow label="Branch Name" value={leadDetails.branchName || "Not set"} icon={<AccountBalance sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
                 <InfoRow label="Loan Status" value={leadDetails.loanStatus || "Not Applied"} icon={<CheckCircle sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} chip chipColor={{ bg: alpha(PRIMARY_COLOR, 0.08), color: PRIMARY_COLOR }} />
@@ -808,7 +1120,7 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
 
         {/* Documents */}
         {activeTabKey === "documents" && (
-          <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, bgcolor: "#fff" }}>
+          <Paper elevation={0} sx={modalSectionSx}>
             <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}><FolderOpen fontSize="small" /> Documents</Typography>
             <Grid container spacing={2}>
               {leadDetails.aadhaar?.url && <Grid item xs={12} sm={6} md={4}><DocumentCard title="Aadhaar Card" url={leadDetails.aadhaar.url} icon={<PictureAsPdf sx={{ color: "#f57c00" }} />} filename="aadhaar-card" /></Grid>}
@@ -830,7 +1142,7 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
 
         {/* Bank */}
         {activeTabKey === "bank" && (
-          <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, bgcolor: "#fff" }}>
+          <Paper elevation={0} sx={modalSectionSx}>
             <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}><Pending fontSize="small" /> Bank at Pending</Typography>
             <Stack spacing={2}>
               <InfoRow label="Status" value={leadDetails.bankAtPendingStatus || "Pending"} icon={<CheckCircle sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} chip chipColor={{ bg: alpha(PRIMARY_COLOR, 0.08), color: PRIMARY_COLOR }} />
@@ -843,10 +1155,10 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
 
         {/* Disbursement */}
         {activeTabKey === "disbursement" && (
-          <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, bgcolor: "#fff" }}>
+          <Paper elevation={0} sx={modalSectionSx}>
             <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}><LocalAtm fontSize="small" /> Disbursement Information</Typography>
             <Stack spacing={2}>
-              <InfoRow label="Disbursement Amount" value={leadDetails.disbursementAmount ? `₹${leadDetails.disbursementAmount.toLocaleString()}` : "Not set"} icon={<Money sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
+              <InfoRow label="Disbursement Amount" value={leadDetails.disbursementAmount ? `â‚¹${leadDetails.disbursementAmount.toLocaleString()}` : "Not set"} icon={<Money sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
               <InfoRow label="Disbursement Date" value={formatDate(leadDetails.disbursementDate)} icon={<Event sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
               <InfoRow label="Disbursement Status" value={leadDetails.disbursementStatus || "Pending"} icon={<CheckCircle sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} chip chipColor={{ bg: alpha(PRIMARY_COLOR, 0.08), color: PRIMARY_COLOR }} />
               {leadDetails.disbursementBankDetails && <>
@@ -860,7 +1172,7 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
 
         {/* Installation */}
         {activeTabKey === "installation" && (
-          <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`, bgcolor: "#fff" }}>
+          <Paper elevation={0} sx={modalSectionSx}>
             <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}><Build fontSize="small" /> Installation Information</Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}><Stack spacing={2}>
@@ -904,7 +1216,7 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
                             </Stack>
                           </Box>
                           <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
-                            Updated by: {group.latestUpdatedRole || "System"} • {group.latestUpdatedBy?.firstName || "System"}
+                            Updated by: {group.latestUpdatedRole || "System"} â€¢ {group.latestUpdatedBy?.firstName || "System"}
                           </Typography>
                         </Box>
                         <Collapse in={isExpanded}>
@@ -912,12 +1224,12 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
                             {group.entries.map((timeline, entryIndex) => {
                               const stageDetails = buildTimelineStageDetails(timeline);
                               return (
-                                <Box key={`${group.stage}-${timeline.updatedAt || entryIndex}`} sx={{ p: 1.25, borderRadius: 2, bgcolor: alpha(PRIMARY_COLOR, 0.03), border: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}` }}>
+                                <Box key={`${group.stage}-${timeline.updatedAt || entryIndex}`} sx={{ p: 1.25, borderRadius: 2.5, background: GRADIENT_SOFT_BLUE, border: `1px solid ${alpha(PRIMARY_COLOR, 0.12)}` }}>
                                   <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 1, mb: 1 }}>
                                     <Box>
                                       <Typography variant="body2" fontWeight={700}>{timeline.notes}</Typography>
                                       <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                                        Updated by: {timeline.updatedRole || "System"} • {timeline.updatedBy?.firstName || "System"}
+                                        Updated by: {timeline.updatedRole || "System"} â€¢ {timeline.updatedBy?.firstName || "System"}
                                       </Typography>
                                     </Box>
                                     <Typography variant="caption" color="text.secondary">{formatDate(timeline.updatedAt, "dd MMM, HH:mm")}</Typography>
@@ -950,10 +1262,13 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: { xs: 2.5, sm: 3.5 }, py: 2, borderTop: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}`, bgcolor: "#fff", justifyContent: "space-between", alignItems: "center" }}>
-        <Typography variant="caption" color="text.secondary">Viewing as: <Box component="span" sx={{ display: "inline-flex", ml: 0.5 }}><RoleBadge role={userRole} /></Box></Typography>
-        <Button onClick={onClose} variant="contained" size={isMobile ? "small" : "medium"}
-          sx={{ bgcolor: PRIMARY_COLOR, borderRadius: 2, fontWeight: 700, px: 3, boxShadow: `0 4px 14px ${alpha(PRIMARY_COLOR, 0.35)}`, "&:hover": { bgcolor: SECONDARY_COLOR } }}>
+      <DialogActions sx={{ px: { xs: 2.5, sm: 3.5 }, py: 2.5, borderTop: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}`, bgcolor: "#fff" }}>
+        <Button
+          onClick={onClose}
+          variant="contained"
+          fullWidth={isMobile}
+          sx={{ background: GRADIENT_DARK, borderRadius: 2, fontWeight: 700, px: 3, boxShadow: "0 12px 24px rgba(15,31,61,0.18)", "&:hover": { background: GRADIENT_DARK } }}
+        >
           Close
         </Button>
       </DialogActions>
@@ -962,30 +1277,79 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
 });
 ViewLeadModal.displayName = "ViewLeadModal";
 
-// ---- EDIT LEAD MODAL ----
-const EditLeadModal = React.memo(({ open, onClose, lead, onSave, userRole }) => {
+export const EditLeadModal = React.memo(({ open, onClose, lead, onSave, userRole }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { fetchAPI } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({ firstName: "", lastName: "", email: "", phone: "", status: "Visit" });
+  const [loadingLead, setLoadingLead] = useState(false);
   const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    if (lead) { setFormData({ firstName: lead.firstName || "", lastName: lead.lastName || "", email: lead.email || "", phone: lead.phone || "", status: lead.status || "Visit" }); setErrors({}); }
-  }, [lead]);
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    status: "Visit",
+    address: "",
+    city: "",
+    pincode: "",
+    solarRequirement: "",
+    visitStatus: "Not Assigned",
+    visitDate: "",
+    followUpAction: "",
+    followUpDate: "",
+    followUpNotes: "",
+  });
 
   const permissions = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.TEAM;
   const canEdit = permissions.edit;
 
+  const buildFormData = useCallback((leadData) => ({
+    firstName: leadData?.firstName || "",
+    lastName: leadData?.lastName || "",
+    email: leadData?.email || "",
+    phone: leadData?.phone || "",
+    status: leadData?.status || "Visit",
+    address: leadData?.address || "",
+    city: leadData?.city || "",
+    pincode: leadData?.pincode || "",
+    solarRequirement: leadData?.solarRequirement || "",
+    visitStatus: leadData?.visitStatus || "Not Assigned",
+    visitDate: formatDateTimeLocalValue(leadData?.visitDate),
+    followUpAction: leadData?.followUpAction || "",
+    followUpDate: formatDateTimeLocalValue(leadData?.followUpDate),
+    followUpNotes: leadData?.followUpNotes || "",
+  }), []);
+
+  useEffect(() => {
+    if (!open || !lead?._id) return;
+
+    let active = true;
+    const loadLead = async () => {
+      setLoadingLead(true);
+      setErrors({});
+      try {
+        const response = await fetchAPI(`/lead/getLeadById/${lead._id}`);
+        const sourceLead = response.success ? response.result : lead;
+        if (active) setFormData(buildFormData(sourceLead));
+      } catch {
+        if (active) setFormData(buildFormData(lead));
+      } finally {
+        if (active) setLoadingLead(false);
+      }
+    };
+
+    loadLead();
+    return () => { active = false; };
+  }, [open, lead, fetchAPI, buildFormData]);
+
   const validateForm = () => {
     const newErrors = {};
     if (!formData.firstName.trim()) newErrors.firstName = "First name is required";
-    if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
-    if (!formData.email.trim()) newErrors.email = "Email is required";
-    else if (!validateEmail(formData.email)) newErrors.email = "Invalid email format";
+    if (formData.email.trim() && !validateEmail(formData.email)) newErrors.email = "Invalid email format";
     if (!formData.phone.trim()) newErrors.phone = "Phone is required";
     else if (!validatePhone(formData.phone)) newErrors.phone = "Phone must be 10 digits";
+    if (formData.pincode && !/^[0-9]{6}$/.test(formData.pincode)) newErrors.pincode = "Pincode must be 6 digits";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -994,11 +1358,27 @@ const EditLeadModal = React.memo(({ open, onClose, lead, onSave, userRole }) => 
     if (!validateForm()) return;
     setLoading(true);
     try {
+      const payload = {
+        ...formData,
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim() || undefined,
+        email: formData.email.trim() || undefined,
+        phone: formData.phone.trim(),
+        address: formData.address.trim() || undefined,
+        city: formData.city.trim() || undefined,
+        pincode: formData.pincode.trim() || undefined,
+        solarRequirement: formData.solarRequirement.trim() || undefined,
+        followUpNotes: formData.followUpNotes.trim() || undefined,
+        visitDate: formData.visitDate ? new Date(formData.visitDate).toISOString() : null,
+        followUpDate: formData.followUpDate ? new Date(formData.followUpDate).toISOString() : null,
+      };
+
       const response = await fetchAPI(`/lead/updateLead/${lead._id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
+
       if (response.success) {
         onSave(response.result);
         onClose();
@@ -1013,13 +1393,11 @@ const EditLeadModal = React.memo(({ open, onClose, lead, onSave, userRole }) => 
   };
 
   const handleChange = (field) => (event) => {
-    const value = event.target.value;
+    let value = event.target.value;
+    if (field === "phone") value = value.replace(/\D/g, "").slice(0, 10);
+    if (field === "pincode") value = value.replace(/\D/g, "").slice(0, 6);
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
-    if (field === "phone" && value) {
-      const phoneDigits = value.replace(/\D/g, "");
-      if (phoneDigits.length > 10) setFormData((prev) => ({ ...prev, phone: phoneDigits.slice(0, 10) }));
-    }
   };
 
   if (!canEdit) {
@@ -1038,7 +1416,12 @@ const EditLeadModal = React.memo(({ open, onClose, lead, onSave, userRole }) => 
   }
 
   const fieldSx = {
-    "& .MuiOutlinedInput-root": { borderRadius: 2, bgcolor: "#f8fafd", "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: PRIMARY_COLOR }, "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: PRIMARY_COLOR } },
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 2,
+      bgcolor: "#f8fafd",
+      "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: PRIMARY_COLOR },
+      "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: PRIMARY_COLOR },
+    },
     "& .MuiInputLabel-root.Mui-focused": { color: PRIMARY_COLOR },
   };
 
@@ -1047,59 +1430,97 @@ const EditLeadModal = React.memo(({ open, onClose, lead, onSave, userRole }) => 
       PaperProps={{ sx: { borderRadius: isMobile ? 0 : 3, overflow: "hidden", boxShadow: `0 24px 64px ${alpha(PRIMARY_COLOR, 0.18)}` } }}
       TransitionComponent={isMobile ? Slide : Fade} transitionDuration={300}>
 
-      <ModalHeader icon={<Edit />} title="Edit Lead" subtitle={lead ? `${lead.firstName} ${lead.lastName} · ${lead.status}` : ""} color={PRIMARY_COLOR} onClose={onClose} />
-      {loading && <LinearProgress sx={{ height: 3, bgcolor: alpha(PRIMARY_COLOR, 0.1), "& .MuiLinearProgress-bar": { bgcolor: PRIMARY_COLOR } }} />}
+      <ModalHeader icon={<Edit />} title="Edit Lead" subtitle={lead ? `${lead.firstName} ${lead.lastName} · ${lead.status}` : ""} color={PRIMARY_COLOR} onClose={onClose} iconGradient={GRADIENT_BLUE} />
+      {(loading || loadingLead) && <LinearProgress sx={{ height: 3, bgcolor: alpha(PRIMARY_COLOR, 0.1), "& .MuiLinearProgress-bar": { bgcolor: PRIMARY_COLOR } }} />}
+
+      {(formData.followUpAction || formData.followUpDate) && (
+        <Box sx={{ px: { xs: 2.5, sm: 3.5 }, py: 1.25, borderBottom: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}`, background: alpha(PRIMARY_COLOR, 0.02) }}>
+          <Chip
+            label={formData.followUpAction ? `Follow-up: ${formData.followUpAction}` : `Follow-up set for ${formatDate(formData.followUpDate)}`}
+            size="small"
+            sx={{
+              background: "linear-gradient(135deg, rgba(37,99,235,0.18) 0%, rgba(96,165,250,0.3) 100%)",
+              color: PRIMARY_COLOR,
+              fontWeight: 700,
+              border: `1px solid ${alpha(PRIMARY_COLOR, 0.14)}`,
+            }}
+          />
+        </Box>
+      )}
 
       <DialogContent sx={{ py: 3, px: { xs: 2.5, sm: 3.5 }, bgcolor: "#fafbff" }}>
         {errors.submit && <Alert severity="error" sx={{ mb: 2.5, borderRadius: 2 }} icon={<ErrorOutline />}>{errors.submit}</Alert>}
         <Stack spacing={2.5}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="First Name" value={formData.firstName} onChange={handleChange("firstName")} error={!!errors.firstName} helperText={errors.firstName} required size={isMobile ? "small" : "medium"} sx={fieldSx} />
+          <Paper elevation={0} sx={{ ...modalSectionSx, p: 2.25 }}>
+            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 700, color: PRIMARY_COLOR }}>Basic Information</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField fullWidth label="First Name" value={formData.firstName} onChange={handleChange("firstName")} error={!!errors.firstName} helperText={errors.firstName} required size={isMobile ? "small" : "medium"} sx={fieldSx} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField fullWidth label="Last Name" value={formData.lastName} onChange={handleChange("lastName")} size={isMobile ? "small" : "medium"} sx={fieldSx} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField fullWidth label="Email" type="email" value={formData.email} onChange={handleChange("email")} error={!!errors.email} helperText={errors.email || "Optional"} size={isMobile ? "small" : "medium"}
+                  InputProps={{ startAdornment: <InputAdornment position="start"><Email sx={{ color: alpha(PRIMARY_COLOR, 0.5), fontSize: 20 }} /></InputAdornment> }} sx={fieldSx} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField fullWidth label="Phone" value={formData.phone} onChange={handleChange("phone")} error={!!errors.phone} helperText={errors.phone || "10 digits"} required size={isMobile ? "small" : "medium"} inputProps={{ maxLength: 10 }}
+                  InputProps={{ startAdornment: <InputAdornment position="start"><Phone sx={{ color: alpha(PRIMARY_COLOR, 0.5), fontSize: 20 }} /></InputAdornment> }} sx={fieldSx} />
+              </Grid>
+              <Grid item xs={12}>
+                <FormControl fullWidth size={isMobile ? "small" : "medium"} required>
+                  <InputLabel sx={{ "&.Mui-focused": { color: PRIMARY_COLOR } }}>Lead Status</InputLabel>
+                  <Select value={formData.status} onChange={handleChange("status")} label="Lead Status"
+                    sx={{ borderRadius: 2, bgcolor: "#f8fafd", "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: PRIMARY_COLOR }, "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: PRIMARY_COLOR } }}>
+                    {LEAD_STATUS_OPTIONS.map((status) => {
+                      const sc = getStatusColor(status);
+                      return (
+                        <MenuItem key={status} value={status}>
+                          <Box display="flex" alignItems="center" gap={1.5}>
+                            <Box sx={{ color: sc.color, display: "flex" }}>{sc.icon}</Box>
+                            <Typography variant="body2">{status}</Typography>
+                          </Box>
+                        </MenuItem>
+                      );
+                    })}
+                  </Select>
+                </FormControl>
+              </Grid>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="Last Name" value={formData.lastName} onChange={handleChange("lastName")} error={!!errors.lastName} helperText={errors.lastName} required size={isMobile ? "small" : "medium"} sx={fieldSx} />
+          </Paper>
+
+          <Paper elevation={0} sx={{ ...modalSectionSx, p: 2.25 }}>
+            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 700, color: PRIMARY_COLOR }}>Address & Requirement</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <TextField fullWidth label="Address" value={formData.address} onChange={handleChange("address")} multiline minRows={2} size={isMobile ? "small" : "medium"} sx={fieldSx} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField fullWidth label="City" value={formData.city} onChange={handleChange("city")}
+                  InputProps={{ startAdornment: <InputAdornment position="start"><LocationOn sx={{ color: alpha(PRIMARY_COLOR, 0.5), fontSize: 20 }} /></InputAdornment> }} size={isMobile ? "small" : "medium"} sx={fieldSx} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField fullWidth label="Pincode" value={formData.pincode} onChange={handleChange("pincode")} error={!!errors.pincode} helperText={errors.pincode || "6 digits"} inputProps={{ maxLength: 6 }} size={isMobile ? "small" : "medium"} sx={fieldSx} />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField fullWidth label="Solar Requirement" value={formData.solarRequirement} onChange={handleChange("solarRequirement")}
+                  InputProps={{ startAdornment: <InputAdornment position="start"><Description sx={{ color: alpha(PRIMARY_COLOR, 0.5), fontSize: 20 }} /></InputAdornment> }} size={isMobile ? "small" : "medium"} sx={fieldSx} />
+              </Grid>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="Email" type="email" value={formData.email} onChange={handleChange("email")} error={!!errors.email} helperText={errors.email} required size={isMobile ? "small" : "medium"}
-                InputProps={{ startAdornment: <InputAdornment position="start"><Email sx={{ color: alpha(PRIMARY_COLOR, 0.5), fontSize: 20 }} /></InputAdornment> }} sx={fieldSx} />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="Phone" value={formData.phone} onChange={handleChange("phone")} error={!!errors.phone} helperText={errors.phone || "10 digits"} required size={isMobile ? "small" : "medium"} inputProps={{ maxLength: 10 }}
-                InputProps={{ startAdornment: <InputAdornment position="start"><Phone sx={{ color: alpha(PRIMARY_COLOR, 0.5), fontSize: 20 }} /></InputAdornment> }} sx={fieldSx} />
-            </Grid>
-            <Grid item xs={12}>
-              <FormControl fullWidth size={isMobile ? "small" : "medium"} error={!!errors.status} required>
-                <InputLabel sx={{ "&.Mui-focused": { color: PRIMARY_COLOR } }}>Status</InputLabel>
-                <Select value={formData.status} onChange={handleChange("status")} label="Status"
-                  sx={{ borderRadius: 2, bgcolor: "#f8fafd", "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: PRIMARY_COLOR }, "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: PRIMARY_COLOR } }}>
-                  {LEAD_STATUS_OPTIONS.map((status) => {
-                    const sc = getStatusColor(status);
-                    return (
-                      <MenuItem key={status} value={status}>
-                        <Box display="flex" alignItems="center" gap={1.5}>
-                          <Box sx={{ color: sc.color, display: "flex" }}>{sc.icon}</Box>
-                          <Typography variant="body2">{status}</Typography>
-                        </Box>
-                      </MenuItem>
-                    );
-                  })}
-                </Select>
-                {errors.status && <FormHelperText error>{errors.status}</FormHelperText>}
-              </FormControl>
-            </Grid>
-          </Grid>
+          </Paper>
+
         </Stack>
       </DialogContent>
 
       <DialogActions sx={{ px: { xs: 2.5, sm: 3.5 }, py: 2.5, borderTop: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}`, bgcolor: "#fff", gap: 1.5, flexDirection: { xs: "column-reverse", sm: "row" } }}>
-        <Button onClick={onClose} variant="outlined" fullWidth={isMobile} disabled={loading}
+        <Button onClick={onClose} variant="outlined" fullWidth={isMobile} disabled={loading || loadingLead}
           sx={{ borderRadius: 2, borderColor: alpha(PRIMARY_COLOR, 0.35), color: PRIMARY_COLOR, fontWeight: 600, px: 3, "&:hover": { borderColor: PRIMARY_COLOR, bgcolor: alpha(PRIMARY_COLOR, 0.04) } }}>
           Cancel
         </Button>
-        <Button onClick={handleSubmit} variant="contained" fullWidth={isMobile} disabled={loading}
+        <Button onClick={handleSubmit} variant="contained" fullWidth={isMobile} disabled={loading || loadingLead}
           startIcon={loading ? <CircularProgress size={18} sx={{ color: "#fff" }} /> : <Save />}
-          sx={{ bgcolor: PRIMARY_COLOR, borderRadius: 2, fontWeight: 700, px: 3, boxShadow: `0 4px 14px ${alpha(PRIMARY_COLOR, 0.4)}`, "&:hover": { bgcolor: SECONDARY_COLOR } }}>
+          sx={{ background: GRADIENT_BLUE, borderRadius: 2, fontWeight: 700, px: 3, boxShadow: "0 12px 24px rgba(37,99,235,0.2)", "&:hover": { background: GRADIENT_BLUE } }}>
           {loading ? "Saving..." : "Save Changes"}
         </Button>
       </DialogActions>
@@ -1235,7 +1656,7 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
         {/* Lead preview */}
         {isBulkAssign ? (
           <Box sx={{ p: 2, mb: 3, borderRadius: 2.5, border: `1.5px solid ${alpha("#00bcd4", 0.2)}`, bgcolor: "#fff" }}>
-            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, color: "#00838f" }}>Bulk Assignment — {bulkLeads.length} leads</Typography>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, color: "#00838f" }}>Bulk Assignment â€” {bulkLeads.length} leads</Typography>
             <Stack spacing={0.75} sx={{ maxHeight: 130, overflow: "auto" }}>
               {bulkLeads.slice(0, 5).map((l) => (
                 <Box key={l._id} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -1252,7 +1673,7 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
             <Avatar sx={{ bgcolor: alpha("#00bcd4", 0.15), color: "#00838f", width: 48, height: 48, fontWeight: 700, fontSize: "1.1rem" }}>{lead.firstName?.[0]}{lead.lastName?.[0]}</Avatar>
             <Box flex={1}>
               <Typography variant="subtitle1" fontWeight={700}>{lead.firstName} {lead.lastName}</Typography>
-              <Typography variant="caption" color="text.secondary">{lead.email} · {lead.phone}</Typography>
+              <Typography variant="caption" color="text.secondary">{lead.email} Â· {lead.phone}</Typography>
               <Box sx={{ mt: 0.5 }}><Chip label={lead.status} size="small" sx={{ bgcolor: getStatusColor(lead.status).bg, color: getStatusColor(lead.status).color, fontWeight: 600, fontSize: "0.65rem", height: 20 }} /></Box>
             </Box>
           </Box>
@@ -1485,11 +1906,22 @@ const LeadOverview = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(isMobile ? 5 : isTablet ? 8 : 10);
   const [totalLeads, setTotalLeads] = useState(0);
+  const [overviewStats, setOverviewStats] = useState({
+    totalLeads: 0,
+    activeLeads: 0,
+    convertedLeads: 0,
+    conversionRate: 0,
+  });
+  const [visitSummary, setVisitSummary] = useState({
+    totalVisits: 0,
+    completedVisits: 0,
+    scheduledVisits: 0,
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [viewMode, setViewMode] = useState(isMobile ? "grid" : "table");
   const [showRoleInfo, setShowRoleInfo] = useState(false);
-  const [period, setPeriod] = useState("Today");
+  const [period, setPeriod] = useState("All");
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -1511,16 +1943,17 @@ const LeadOverview = () => {
   const containerRef = useRef(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
-  const hasFilters = useMemo(() => searchTerm || statusFilter !== "all", [searchTerm, statusFilter]);
+  const hasFilters = useMemo(() => searchTerm || statusFilter !== "all" || period !== "All", [searchTerm, statusFilter, period]);
   const selectedCount = useMemo(() => selectedLeads.length, [selectedLeads]);
   const userRole = user?.role || "TEAM";
   const permissions = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.TEAM;
   const selectedLeadsData = useMemo(() => leads.filter((lead) => selectedLeads.includes(lead._id)), [leads, selectedLeads]);
+  const periodRange = useMemo(() => getPeriodDateRange(period), [period]);
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (searchTerm) count++;
     if (statusFilter !== "all") count++;
-    if (period !== "Today") count++;
+    if (period !== "All") count++;
     return count;
   }, [searchTerm, statusFilter, period]);
 
@@ -1528,24 +1961,91 @@ const LeadOverview = () => {
   const showSnackbar = useCallback((message, severity = "success") => setSnackbar({ open: true, message, severity }), []);
 
   const fetchLeads = useCallback(async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams({ page: (page + 1).toString(), limit: rowsPerPage.toString(), sortBy, sortOrder });
-      if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
-      if (statusFilter !== "all") params.append("status", statusFilter);
-      const data = await fetchAPI(`/lead/getAll?${params.toString()}`);
-      if (data.success) { setLeads(data.result.leads || []); setTotalLeads(data.result.pagination?.total || 0); }
-      else showSnackbar(data.message || "Failed to fetch leads", "error");
-    } catch (error) { showSnackbar(error.message || "Failed to fetch leads", "error"); setLeads([]); }
-    finally { setLoading(false); }
-  }, [fetchAPI, page, rowsPerPage, debouncedSearchTerm, statusFilter, sortBy, sortOrder, showSnackbar]);
+  try {
+    setLoading(true);
+    const params = new URLSearchParams({
+      page: (page + 1).toString(),
+      limit: rowsPerPage.toString(),
+      sortBy,
+      sortOrder,
+    });
+
+    if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+    if (statusFilter !== "all") params.append("status", statusFilter);
+
+    // ✅ Always send date range — fall back to today if periodRange is empty
+    const today = toDateInputValue(new Date());
+    const fromDate = periodRange.fromDate ?? today;
+    const toDate = periodRange.toDate ?? today;
+
+    if (period !== "All") {
+      params.append("fromDate", fromDate);
+      params.append("toDate", toDate);
+    }
+
+    const data = await fetchAPI(`/lead/getAll?${params.toString()}`);
+    if (data.success) {
+      setLeads(data.result.leads || []);
+      setTotalLeads(data.result.pagination?.total || 0);
+    } else {
+      showSnackbar(data.message || "Failed to fetch leads", "error");
+    }
+  } catch (error) {
+    showSnackbar(error.message || "Failed to fetch leads", "error");
+    setLeads([]);
+  } finally {
+    setLoading(false);
+  }
+}, [fetchAPI, page, rowsPerPage, debouncedSearchTerm, statusFilter, sortBy, sortOrder, periodRange, period, showSnackbar]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
+
+  const fetchOverviewStats = useCallback(async () => {
+    try {
+      const data = await fetchAPI("/lead/stats?page=1&limit=1");
+      if (data.success) {
+        setOverviewStats({
+          totalLeads: data.result?.stats?.totalLeads || 0,
+          activeLeads: data.result?.stats?.activeLeads || 0,
+          convertedLeads: data.result?.stats?.convertedLeads || 0,
+          conversionRate: data.result?.stats?.conversionRate || 0,
+        });
+      }
+    } catch {
+      setOverviewStats((prev) => prev);
+    }
+  }, [fetchAPI]);
+
+  const fetchVisitSummary = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ page: "1", limit: "1" });
+      if (periodRange.fromDate) params.append("fromDate", periodRange.fromDate);
+      if (periodRange.toDate) params.append("toDate", periodRange.toDate);
+      const data = await fetchAPI(`/lead/visitSummary?${params.toString()}`);
+      if (data.success) {
+        setVisitSummary({
+          totalVisits: data.result?.summary?.totalVisits || 0,
+          completedVisits: data.result?.summary?.completedVisits || 0,
+          scheduledVisits: data.result?.summary?.scheduledVisits || 0,
+        });
+      }
+    } catch {
+      setVisitSummary({ totalVisits: 0, completedVisits: 0, scheduledVisits: 0 });
+    }
+  }, [fetchAPI, periodRange]);
+
+  useEffect(() => {
+    fetchOverviewStats();
+  }, [fetchOverviewStats]);
+
+  useEffect(() => {
+    fetchVisitSummary();
+  }, [fetchVisitSummary]);
 
   const handleAssignLead = useCallback(async () => { showSnackbar("Lead assigned successfully", "success"); await fetchLeads(); setSelectedLeads([]); setSelectAll(false); }, [fetchLeads, showSnackbar]);
   const handleBulkAssign = useCallback(async (assignData) => { showSnackbar(`${assignData.leadIds?.length || 0} leads assigned successfully`, "success"); setSelectedLeads([]); setSelectAll(false); await fetchLeads(); }, [fetchLeads, showSnackbar]);
 
-  // ✅ FIXED: Use fetchAPI instead of hardcoded fetch URL
+  // âœ… FIXED: Use fetchAPI instead of hardcoded fetch URL
  const handleDeleteLeads = useCallback(async () => {
   try {
     if (!leadsToDelete || leadsToDelete.length === 0) {
@@ -1566,7 +2066,7 @@ const LeadOverview = () => {
   }
 }, [fetchAPI, fetchLeads, showSnackbar, leadsToDelete]);
 
-  // ✅ FIXED: Use fetchAPI instead of hardcoded fetch URL
+  // âœ… FIXED: Use fetchAPI instead of hardcoded fetch URL
   const handleDeleteSingleLead = useCallback(async (leadId) => {
   try {
     if (!leadId) { showSnackbar("Invalid lead ID", "error"); return; }
@@ -1592,6 +2092,7 @@ const LeadOverview = () => {
   const openBulkAssignDialog = useCallback(() => setBulkAssignDialogOpen(true), []);
   const openEditDialog = useCallback((lead) => { setLeadToEdit(lead); setEditModalOpen(true); }, []);
   const openViewDialog = useCallback((lead) => { setLeadToView(lead); setViewModalOpen(true); }, []);
+  const openLeadDetailsPage = useCallback((lead) => { if (lead?._id) navigate(`/all-leads/${lead._id}`, { state: { lead } }); }, [navigate]);
   const openDeleteDialog = useCallback(() => { setLeadsToDelete(selectedLeads); setDeleteDialogOpen(true); }, [selectedLeads]);
 
   useEffect(() => {
@@ -1604,14 +2105,48 @@ const LeadOverview = () => {
   }, [location.pathname, location.state, navigate]);
 
   const handleSort = useCallback((column) => { if (sortBy === column) setSortOrder(sortOrder === "asc" ? "desc" : "asc"); else { setSortBy(column); setSortOrder("asc"); } }, [sortBy, sortOrder]);
-  const handleResetFilters = useCallback(() => { setSearchTerm(""); setStatusFilter("all"); setPeriod("Today"); setPage(0); setSelectedLeads([]); setSelectAll(false); }, []);
-  const handleClearFiltersMobile = useCallback(() => { setSearchTerm(""); setStatusFilter("all"); setPeriod("Today"); }, []);
+  const handleResetFilters = useCallback(() => { setSearchTerm(""); setStatusFilter("all"); setPeriod("All"); setPage(0); setSelectedLeads([]); setSelectAll(false); }, []);
+  const handleClearFiltersMobile = useCallback(() => { setSearchTerm(""); setStatusFilter("all"); setPeriod("All"); }, []);
+
+  const handleCreateQuote = useCallback((lead) => {
+    navigate("/quotation/create", { state: { mode: "create", lead } });
+  }, [navigate]);
+
+  const handleConvertToProject = useCallback(async (lead) => {
+    if (!lead?._id) {
+      showSnackbar("Invalid lead selected", "error");
+      return;
+    }
+
+    if (lead.isProject) {
+      navigate("/projects", { state: { highlightProjectId: lead._id } });
+      return;
+    }
+
+    try {
+      await fetchAPI(`/lead/updateLead/${lead._id}`, {
+        method: "PUT",
+        body: JSON.stringify({ isProject: true }),
+      });
+      showSnackbar("Lead converted to project", "success");
+      await fetchLeads();
+      navigate("/projects", { state: { highlightProjectId: lead._id } });
+    } catch (error) {
+      showSnackbar(error.message || "Failed to convert lead to project", "error");
+    }
+  }, [fetchAPI, fetchLeads, navigate, showSnackbar]);
+
+  const handleUnsupportedLeadAction = useCallback((actionLabel) => {
+    showSnackbar(`${actionLabel} is not connected yet.`, "info");
+  }, [showSnackbar]);
 
   const handleExport = useCallback(async () => {
     try {
       const params = new URLSearchParams({ sortBy, sortOrder });
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
       if (statusFilter !== "all") params.append("status", statusFilter);
+      if (periodRange.fromDate) params.append("fromDate", periodRange.fromDate);
+      if (periodRange.toDate) params.append("toDate", periodRange.toDate);
       const response = await fetchAPI(`/lead/export?${params.toString()}`);
       if (response.success && response.result?.url) {
         const link = document.createElement("a");
@@ -1621,7 +2156,7 @@ const LeadOverview = () => {
         showSnackbar("Export completed successfully", "success");
       } else throw new Error(response.message || "Failed to export leads");
     } catch (error) { showSnackbar(error.message || "Failed to export leads", "error"); }
-  }, [fetchAPI, showSnackbar, sortBy, sortOrder, debouncedSearchTerm, statusFilter]);
+  }, [fetchAPI, showSnackbar, sortBy, sortOrder, debouncedSearchTerm, statusFilter, periodRange]);
 
   const handleChangePage = (event, newPage) => { setPage(newPage); if (containerRef.current) containerRef.current.scrollIntoView({ behavior: "smooth" }); };
 
@@ -1629,59 +2164,129 @@ const LeadOverview = () => {
     const isSelected = selectedLeads.includes(lead._id);
     const statusColor = getStatusColor(lead.status);
     return (
-      <TableRow key={lead._id} hover selected={isSelected} sx={{ "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.02) }, "&.Mui-selected": { bgcolor: alpha(PRIMARY_COLOR, 0.08) } }}>
+      <TableRow key={lead._id} hover selected={isSelected} sx={{ "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.02) }, "&.Mui-selected": { bgcolor: alpha(PRIMARY_COLOR, 0.08) }, "& td": { borderBottom: `1px solid ${alpha(PRIMARY_COLOR, 0.06)}` } }}>
         <TableCell padding="checkbox">{permissions.bulkActions && <Checkbox checked={isSelected} onChange={() => handleSelectLead(lead._id)} sx={{ color: PRIMARY_COLOR, "&.Mui-checked": { color: PRIMARY_COLOR } }} />}</TableCell>
         <TableCell>
           <Box display="flex" alignItems="center" gap={2}>
-            <Avatar sx={{ bgcolor: PRIMARY_COLOR }}>{lead.firstName?.[0]}</Avatar>
+            <Avatar sx={{ background: statusColor.avatar, boxShadow: "0 12px 24px rgba(37,99,235,0.15)" }}>{lead.firstName?.[0]}</Avatar>
             <Box><Typography variant="body1" fontWeight={600}>{lead.firstName} {lead.lastName}</Typography><Typography variant="caption" color="text.secondary">{lead.email}</Typography></Box>
           </Box>
         </TableCell>
         <TableCell><Box display="flex" alignItems="center" gap={1}><Phone fontSize="small" sx={{ color: "text.secondary" }} /><Typography variant="body2">{lead.phone || "Not set"}</Typography></Box></TableCell>
-        <TableCell><Chip label={lead.status} icon={statusColor.icon} size="small" sx={{ bgcolor: statusColor.bg, color: statusColor.color, fontWeight: 600 }} /></TableCell>
+        <TableCell><Chip label={lead.status} icon={statusColor.icon} size="small" sx={{ background: statusColor.bg, color: statusColor.color, fontWeight: 700, border: `1px solid ${statusColor.border}`, "& .MuiChip-icon": { color: statusColor.color } }} /></TableCell>
         <TableCell>
           {(() => {
             const assignedPerson = getAssignedPerson(lead);
             return assignedPerson ? (
               <Box display="flex" alignItems="center" gap={1}>
-                <Avatar sx={{ width: 24, height: 24, fontSize: 12, bgcolor: PRIMARY_COLOR }}>{assignedPerson.initial}</Avatar>
+                <Avatar sx={{ width: 24, height: 24, fontSize: 12, background: GRADIENT_BLUE, color: "#fff" }}>{assignedPerson.initial}</Avatar>
                 <Box><Typography variant="body2">{assignedPerson.name}</Typography><Typography variant="caption" color="text.secondary">{assignedPerson.role}</Typography></Box>
               </Box>
+            ) : permissions.assign ? (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => openAssignDialog(lead)}
+                sx={{
+                  minWidth: 96,
+                  px: 1.5,
+                  py: 0.5,
+                  borderRadius: 2,
+                  borderStyle: "dashed",
+                  borderColor: alpha(PRIMARY_COLOR, 0.45),
+                  color: PRIMARY_COLOR,
+                  fontWeight: 600,
+                  textTransform: "none",
+                  "&:hover": {
+                    borderStyle: "dashed",
+                    borderColor: PRIMARY_COLOR,
+                    bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                  },
+                }}
+              >
+                + Assign
+              </Button>
             ) : <Typography variant="body2" color="text.secondary">Unassigned</Typography>;
           })()}
         </TableCell>
         <TableCell><Typography variant="caption">{formatDate(lead.createdAt, "MMM dd, yyyy")}</Typography></TableCell>
-        <TableCell>
-          <Box display="flex" gap={1}>
-            <Tooltip title="View Details"><IconButton size="small" onClick={() => openViewDialog(lead)} sx={{ bgcolor: alpha(PRIMARY_COLOR, 0.1), color: PRIMARY_COLOR, "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.2) } }}><Visibility fontSize="small" /></IconButton></Tooltip>
-            {permissions.edit && <Tooltip title="Edit Lead"><IconButton size="small" onClick={() => openEditDialog(lead)} sx={{ bgcolor: alpha(PRIMARY_COLOR, 0.1), color: PRIMARY_COLOR, "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.2) } }}><Edit fontSize="small" /></IconButton></Tooltip>}
-            {permissions.assign && <Tooltip title="Assign Lead"><IconButton size="small" onClick={() => openAssignDialog(lead)} sx={{ bgcolor: alpha(PRIMARY_COLOR, 0.1), color: PRIMARY_COLOR, "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.2) } }}><AssignmentInd fontSize="small" /></IconButton></Tooltip>}
-            {permissions.delete && <Tooltip title="Delete Lead"><IconButton size="small" onClick={() => { if (window.confirm(`Delete ${lead.firstName} ${lead.lastName}?`)) handleDeleteSingleLead(lead._id); }} sx={{ bgcolor: alpha("#f44336", 0.1), color: "#f44336", "&:hover": { bgcolor: alpha("#f44336", 0.2) } }}><Delete fontSize="small" /></IconButton></Tooltip>}
-          </Box>
+        <TableCell align="center">
+          <LeadActionMenu
+            lead={lead}
+            permissions={permissions}
+            onEdit={openEditDialog}
+            onQuickView={openViewDialog}
+            onViewDetails={openLeadDetailsPage}
+            onCreateQuote={handleCreateQuote}
+            onAssign={openAssignDialog}
+            onConvertToProject={handleConvertToProject}
+            onUnsupportedAction={handleUnsupportedLeadAction}
+          />
         </TableCell>
       </TableRow>
     );
-  }, [selectedLeads, permissions, handleSelectLead, handleDeleteSingleLead, openViewDialog, openEditDialog, openAssignDialog]);
+  }, [selectedLeads, permissions, handleSelectLead, openLeadDetailsPage, openViewDialog, openAssignDialog, handleCreateQuote, handleConvertToProject, handleUnsupportedLeadAction]);
 
   const renderCardView = useCallback(() => {
     if (loading) return <LoadingSkeleton count={6} isMobile={isMobile} />;
     if (leads.length === 0) return <EmptyState title={hasFilters ? "No matching leads found" : "No leads yet"} description={hasFilters ? "Try adjusting your filters" : "Get started by creating your first lead"} icon={hasFilters ? Search : Person} action={hasFilters && <Button onClick={handleResetFilters} variant="outlined" sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR }}>Clear Filters</Button>} />;
     return (
       <Box sx={{ p: { xs: 1, sm: 2 } }}>
-        {leads.map((lead) => <MobileLeadCard key={lead._id} lead={lead} onView={openViewDialog} onEdit={openEditDialog} onAssign={openAssignDialog} onDelete={handleDeleteSingleLead} permissions={permissions} />)}
+        {leads.map((lead) => <MobileLeadCard key={lead._id} lead={lead} onView={openViewDialog} onEdit={openEditDialog} onAssign={openAssignDialog} onDelete={handleDeleteSingleLead} onConvertToProject={handleConvertToProject} permissions={permissions} />)}
       </Box>
     );
-  }, [loading, leads, hasFilters, permissions, openViewDialog, openEditDialog, openAssignDialog, handleDeleteSingleLead, isMobile, handleResetFilters]);
+  }, [loading, leads, hasFilters, permissions, openViewDialog, openEditDialog, openAssignDialog, handleDeleteSingleLead, handleConvertToProject, isMobile, handleResetFilters]);
 
+  const summaryCards = useMemo(() => ([
+    {
+      label: "Total Leads",
+      value: overviewStats.totalLeads || totalLeads,
+      caption: "Across your workspace",
+      icon: <Groups />,
+      stripe: "linear-gradient(90deg, #2563eb, #60a5fa)",
+      iconGradient: GRADIENT_BLUE,
+    },
+    {
+      label: "Active Leads",
+      value: overviewStats.activeLeads,
+      caption: "Fresh opportunities",
+      icon: <TrendingUp />,
+      stripe: "linear-gradient(90deg, #1e40af, #3b82f6)",
+      iconGradient: "linear-gradient(135deg, #1d4ed8 0%, #60a5fa 100%)",
+    },
+    {
+      label: "Converted",
+      value: overviewStats.convertedLeads,
+      caption: "Installation completion",
+      icon: <CheckCircle />,
+      stripe: "linear-gradient(90deg, #059669, #34d399)",
+      iconGradient: "linear-gradient(135deg, #059669 0%, #34d399 100%)",
+    },
+    {
+      label: "Conversion Rate",
+      value: `${Number(overviewStats.conversionRate || 0).toFixed(2)}%`,
+      caption: "Overall close rate",
+      icon: <Dashboard />,
+      stripe: "linear-gradient(90deg, #d97706, #fbbf24)",
+      iconGradient: "linear-gradient(135deg, #d97706 0%, #fbbf24 100%)",
+    },
+  ]), [overviewStats, totalLeads]);
+
+  const unscheduledVisits = Math.max(
+    (visitSummary.totalVisits || 0) - (visitSummary.completedVisits || 0) - (visitSummary.scheduledVisits || 0),
+    0
+  );
+
+  
   return (
     <Box ref={containerRef} sx={{ p: { xs: 1.5, sm: 2, md: 3 }, minHeight: "100vh", pb: { xs: 8, sm: 3 }, bgcolor: "#f8fafc" }}>
       <MobileFilterDrawer open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)} period={period} setPeriod={setPeriod} statusFilter={statusFilter} setStatusFilter={setStatusFilter} handleClearFilters={handleClearFiltersMobile} searchQuery={searchTerm} setSearchQuery={setSearchTerm} activeFilterCount={activeFilterCount} />
 
       {/* Header */}
-      <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, mb: 3, borderRadius: 3, background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, ${SECONDARY_COLOR} 100%)`, color: "#fff" }}>
+      <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, mb: 3, borderRadius: 4, background: GRADIENT_MAIN, color: "#fff", boxShadow: "0 24px 44px rgba(15,31,61,0.18)" }}>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }}>
           <Box display="flex" alignItems="center" gap={2}>
-            <Avatar sx={{ bgcolor: "rgba(255,255,255,0.2)", color: "#fff" }}><Groups /></Avatar>
+            <Avatar sx={{ background: "linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 100%)", color: "#fff", width: 52, height: 52, border: "1px solid rgba(255,255,255,0.18)" }}><Groups /></Avatar>
             <Box>
               <Typography variant={isMobile ? "h6" : "h5"} fontWeight={700} gutterBottom>Lead Management</Typography>
               <Typography variant="body2" sx={{ opacity: 0.9, fontSize: { xs: "0.75rem", sm: "0.875rem" } }}>Total {totalLeads} leads • {permissions.label} view</Typography>
@@ -1699,67 +2304,289 @@ const LeadOverview = () => {
         </Stack>
       </Paper>
 
-      {/* Desktop Filters */}
-      {!isMobile && (
-        <Card sx={{ mb: 3, borderRadius: 3 }}>
-          <CardContent sx={{ p: 3 }}>
-            <Grid container spacing={3} alignItems="center">
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth placeholder="Search leads by name, email, phone..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                  InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: "text.secondary" }} /></InputAdornment>, endAdornment: searchTerm && <InputAdornment position="end"><IconButton size="small" onClick={() => setSearchTerm("")}><Close /></IconButton></InputAdornment> }}
-                  size="small" sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Filter by Status</InputLabel>
-                  <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} label="Filter by Status" sx={{ borderRadius: 2 }}>
-                    <MenuItem value="all">All Status</MenuItem>
-                    {LEAD_STATUS_OPTIONS.map((status) => <MenuItem key={status} value={status}><Box display="flex" alignItems="center" gap={1}>{getStatusColor(status).icon}{status}</Box></MenuItem>)}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Box display="flex" gap={1} justifyContent="flex-end">
-                  <Tooltip title="Grid View"><IconButton onClick={() => setViewMode("grid")} sx={{ bgcolor: viewMode === "grid" ? alpha(PRIMARY_COLOR, 0.1) : "transparent", color: viewMode === "grid" ? PRIMARY_COLOR : "text.secondary" }}><GridView /></IconButton></Tooltip>
-                  <Tooltip title="Table View"><IconButton onClick={() => setViewMode("table")} sx={{ bgcolor: viewMode === "table" ? alpha(PRIMARY_COLOR, 0.1) : "transparent", color: viewMode === "table" ? PRIMARY_COLOR : "text.secondary" }}><TableChart /></IconButton></Tooltip>
-                  <Divider orientation="vertical" flexItem />
-                  <Tooltip title="Refresh"><IconButton onClick={fetchLeads} sx={{ color: "text.secondary" }}><Refresh /></IconButton></Tooltip>
+      <Grid container spacing={2.25} sx={{ mb: 3 }}>
+        {summaryCards.map((card) => (
+          <Grid item xs={12} sm={6} lg={3} key={card.label}>
+            <Paper
+              elevation={0}
+              sx={{
+                position: "relative",
+                overflow: "hidden",
+                borderRadius: 4,
+                px: 2.25,
+                py: 2,
+                background: "#fff",
+                border: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}`,
+                boxShadow: "0 18px 38px rgba(15,23,42,0.06)",
+                "&::before": {
+                  content: '""',
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "4px",
+                  borderRadius: "16px 16px 0 0",
+                  background: card.stripe,
+                },
+              }}
+            >
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
+                <Box>
+                  <Typography variant="body2" sx={{ color: "#64748b", fontWeight: 600 }}>{card.label}</Typography>
+                  <Typography sx={{ mt: 1, fontSize: { xs: "1.9rem", sm: "2.2rem" }, fontWeight: 800, lineHeight: 1, color: "#0f172a" }}>
+                    {card.value}
+                  </Typography>
+                  <Typography variant="caption" sx={{ mt: 0.75, display: "block", color: "#64748b" }}>{card.caption}</Typography>
                 </Box>
-              </Grid>
-            </Grid>
-            {activeFilterCount > 0 && (
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>Active Filters:</Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap">
-                  {searchTerm && <Chip label={`Search: ${searchTerm}`} size="small" onDelete={() => setSearchTerm("")} sx={{ bgcolor: alpha(PRIMARY_COLOR, 0.1), color: PRIMARY_COLOR }} />}
-                  {statusFilter !== "all" && <Chip label={`Status: ${statusFilter}`} size="small" onDelete={() => setStatusFilter("all")} sx={{ bgcolor: alpha(PRIMARY_COLOR, 0.1), color: PRIMARY_COLOR }} />}
-                  <Chip label="Clear All" size="small" variant="outlined" onClick={handleResetFilters} onDelete={handleResetFilters} deleteIcon={<Close />} sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR }} />
-                </Stack>
-              </Box>
-            )}
-            {selectedCount > 0 && (
-              <Box sx={{ mt: 3, p: 2, bgcolor: alpha(PRIMARY_COLOR, 0.05), borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 2 }}>
-                <Box display="flex" alignItems="center" gap={2}>
-                  <Typography variant="body1" fontWeight={600}>{selectedCount} lead(s) selected</Typography>
-                  <Button size="small" onClick={handleClearSelection} startIcon={<Clear />} sx={{ color: "text.secondary" }}>Clear</Button>
+                <Box sx={{ ...gradientIconBoxSx, width: 48, height: 48, borderRadius: 3, background: card.iconGradient, border: "none", boxShadow: "0 12px 28px rgba(37,99,235,0.18)" }}>
+                  {React.cloneElement(card.icon, { sx: { color: "#fff", fontSize: 24 } })}
                 </Box>
-                <Box display="flex" gap={1} flexWrap="wrap">
-                  {permissions.assign && <Button variant="outlined" size="small" startIcon={<AssignmentInd />} onClick={openBulkAssignDialog} sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR }}>Assign Selected</Button>}
-                  {permissions.export && <Button variant="outlined" size="small" startIcon={<Send />} onClick={handleExport} sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR }}>Export Selected</Button>}
-                  {permissions.delete && <Button variant="contained" color="error" size="small" startIcon={<Delete />} onClick={openDeleteDialog}>Delete Selected</Button>}
+              </Stack>
+            </Paper>
+          </Grid>
+        ))}
+      </Grid>
+
+
+    {/* ===== DESKTOP FILTERS ===== */}
+{!isMobile && (
+  <Card sx={{ mb: 3, borderRadius: 4, border: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}`, boxShadow: "0 4px 24px rgba(15,23,42,0.05)" }}>
+    <CardContent sx={{ p: "16px 20px !important" }}>
+
+      {/* Row 1: Search · Period pills · Status select · View toggle */}
+      <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+
+        {/* Search */}
+        <TextField
+          placeholder="Search leads by name, email, phone…"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          size="small"
+          sx={{
+            flex: 1, minWidth: 220,
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 999,
+              bgcolor: alpha("#64748b", 0.06),
+              "& fieldset": { borderColor: alpha(PRIMARY_COLOR, 0.12) },
+              "&:hover fieldset": { borderColor: alpha(PRIMARY_COLOR, 0.3) },
+              "&.Mui-focused fieldset": { borderColor: PRIMARY_COLOR, borderWidth: 1 },
+            },
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search sx={{ fontSize: 18, color: "text.secondary" }} />
+              </InputAdornment>
+            ),
+            endAdornment: searchTerm && (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => setSearchTerm("")} edge="end">
+                  <Close fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+        />
+
+        {/* Period pills */}
+        <Stack direction="row" spacing={0.75}>
+          {PERIOD_OPTIONS.map((opt) => (
+            <Button
+              key={opt.value}
+              size="small"
+              onClick={() => { setPeriod(opt.value); setPage(0); }}
+              sx={{
+                borderRadius: 999,
+                px: 1.75,
+                height: 34,
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                textTransform: "none",
+                border: `1px solid ${period === opt.value ? "transparent" : alpha(PRIMARY_COLOR, 0.14)}`,
+                background: period === opt.value ? GRADIENT_BLUE : alpha("#64748b", 0.06),
+                color: period === opt.value ? "#fff" : PRIMARY_COLOR,
+                boxShadow: "none",
+                "&:hover": {
+                  background: period === opt.value ? GRADIENT_BLUE : alpha(PRIMARY_COLOR, 0.08),
+                  boxShadow: "none",
+                },
+              }}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </Stack>
+
+        {/* Status select */}
+        <FormControl size="small" sx={{ minWidth: 170 }}>
+          <Select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            displayEmpty
+            sx={{
+              borderRadius: 999,
+              bgcolor: alpha("#64748b", 0.06),
+              fontSize: "0.8rem",
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: alpha(PRIMARY_COLOR, 0.12) },
+              "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: alpha(PRIMARY_COLOR, 0.3) },
+              "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: PRIMARY_COLOR, borderWidth: 1 },
+            }}
+          >
+            <MenuItem value="all">All statuses</MenuItem>
+            {LEAD_STATUS_OPTIONS.map((s) => (
+              <MenuItem key={s} value={s}>
+                <Box display="flex" alignItems="center" gap={1}>
+                  <Box sx={{ color: getStatusColor(s).color, display: "flex", fontSize: 16 }}>
+                    {getStatusColor(s).icon}
+                  </Box>
+                  {s}
                 </Box>
-              </Box>
-            )}
-          </CardContent>
-        </Card>
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {/* View toggle + refresh */}
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <Tooltip title="Table view">
+            <IconButton
+              size="small"
+              onClick={() => setViewMode("table")}
+              sx={{
+                width: 34, height: 34, borderRadius: 2,
+                bgcolor: viewMode === "table" ? alpha(PRIMARY_COLOR, 0.1) : alpha("#64748b", 0.06),
+                color: viewMode === "table" ? PRIMARY_COLOR : "text.secondary",
+                border: `0.5px solid ${viewMode === "table" ? alpha(PRIMARY_COLOR, 0.2) : alpha("#64748b", 0.12)}`,
+              }}
+            >
+              <TableChart sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Grid view">
+            <IconButton
+              size="small"
+              onClick={() => setViewMode("grid")}
+              sx={{
+                width: 34, height: 34, borderRadius: 2,
+                bgcolor: viewMode === "grid" ? alpha(PRIMARY_COLOR, 0.1) : alpha("#64748b", 0.06),
+                color: viewMode === "grid" ? PRIMARY_COLOR : "text.secondary",
+                border: `0.5px solid ${viewMode === "grid" ? alpha(PRIMARY_COLOR, 0.2) : alpha("#64748b", 0.12)}`,
+              }}
+            >
+              <GridView sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          <Box sx={{ width: "1px", height: 24, bgcolor: alpha("#64748b", 0.15), mx: 0.5 }} />
+          <Tooltip title="Refresh">
+            <IconButton size="small" onClick={fetchLeads}
+              sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: alpha("#64748b", 0.06), border: `0.5px solid ${alpha("#64748b", 0.12)}` }}>
+              <Refresh sx={{ fontSize: 18, color: "text.secondary" }} />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      </Stack>
+
+      {/* Row 2: Active filter chips */}
+      {activeFilterCount > 0 && (
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap"
+          sx={{ mt: 1.5, pt: 1.5, borderTop: `0.5px solid ${alpha("#64748b", 0.1)}` }}>
+          <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+            Filters:
+          </Typography>
+          {searchTerm && (
+            <Chip
+              label={`Search: ${searchTerm}`}
+              size="small"
+              onDelete={() => setSearchTerm("")}
+              sx={{ height: 26, fontSize: "0.72rem", bgcolor: "#eff6ff", color: PRIMARY_COLOR,
+                border: `0.5px solid ${alpha(PRIMARY_COLOR, 0.2)}`, "& .MuiChip-deleteIcon": { color: alpha(PRIMARY_COLOR, 0.5) } }}
+            />
+          )}
+          {statusFilter !== "all" && (
+            <Chip
+              label={`Status: ${statusFilter}`}
+              size="small"
+              onDelete={() => setStatusFilter("all")}
+              sx={{ height: 26, fontSize: "0.72rem", bgcolor: "#eff6ff", color: PRIMARY_COLOR,
+                border: `0.5px solid ${alpha(PRIMARY_COLOR, 0.2)}`, "& .MuiChip-deleteIcon": { color: alpha(PRIMARY_COLOR, 0.5) } }}
+            />
+          )}
+          {period !== "All" && (
+            <Chip
+              label={`Period: ${period}`}
+              size="small"
+              onDelete={() => setPeriod("All")}
+              sx={{ height: 26, fontSize: "0.72rem", bgcolor: "#eff6ff", color: PRIMARY_COLOR,
+                border: `0.5px solid ${alpha(PRIMARY_COLOR, 0.2)}`, "& .MuiChip-deleteIcon": { color: alpha(PRIMARY_COLOR, 0.5) } }}
+            />
+          )}
+          <Chip
+            label="Clear all"
+            size="small"
+            variant="outlined"
+            onClick={handleResetFilters}
+            sx={{ height: 26, fontSize: "0.72rem", borderColor: alpha(PRIMARY_COLOR, 0.3), color: PRIMARY_COLOR,
+              cursor: "pointer", "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.05) } }}
+          />
+        </Stack>
       )}
+
+      {/* Row 3: Bulk action bar */}
+      {selectedCount > 0 && (
+        <Box sx={{
+          mt: 1.5, px: 2, py: 1.25, borderRadius: 2,
+          bgcolor: "#eff6ff",
+          border: `1px solid ${alpha(PRIMARY_COLOR, 0.14)}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1.5,
+        }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="body2" fontWeight={600} color={PRIMARY_COLOR}>
+              {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
+            </Typography>
+            <Button size="small" onClick={handleClearSelection} startIcon={<Clear sx={{ fontSize: 14 }} />}
+              sx={{ color: "text.secondary", minWidth: 0, textTransform: "none", fontSize: "0.75rem" }}>
+              Clear
+            </Button>
+          </Stack>
+          <Stack direction="row" spacing={1}>
+            {permissions.assign && (
+              <Button size="small" variant="outlined" startIcon={<AssignmentInd sx={{ fontSize: 15 }} />}
+                onClick={openBulkAssignDialog}
+                sx={{ height: 30, fontSize: "0.75rem", borderRadius: 1.5, borderColor: alpha(PRIMARY_COLOR, 0.3),
+                  color: PRIMARY_COLOR, textTransform: "none", "&:hover": { borderColor: PRIMARY_COLOR } }}>
+                Assign selected
+              </Button>
+            )}
+            {permissions.export && (
+              <Button size="small" variant="outlined" startIcon={<Send sx={{ fontSize: 15 }} />}
+                onClick={handleExport}
+                sx={{ height: 30, fontSize: "0.75rem", borderRadius: 1.5, borderColor: alpha(PRIMARY_COLOR, 0.3),
+                  color: PRIMARY_COLOR, textTransform: "none", "&:hover": { borderColor: PRIMARY_COLOR } }}>
+                Export
+              </Button>
+            )}
+            {permissions.delete && (
+              <Button size="small" variant="outlined" startIcon={<Delete sx={{ fontSize: 15 }} />}
+                onClick={openDeleteDialog}
+                sx={{ height: 30, fontSize: "0.75rem", borderRadius: 1.5, borderColor: alpha("#ef4444", 0.3),
+                  color: "#dc2626", textTransform: "none", "&:hover": { borderColor: "#ef4444", bgcolor: alpha("#ef4444", 0.04) } }}>
+                Delete selected
+              </Button>
+            )}
+          </Stack>
+        </Box>
+      )}
+
+    </CardContent>
+  </Card>
+)}
 
       {/* Mobile Search */}
       {isMobile && (
         <Box sx={{ mb: 2 }}>
           <TextField fullWidth size="small" placeholder="Search leads..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
             InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment>, endAdornment: searchTerm && <InputAdornment position="end"><IconButton size="small" onClick={() => setSearchTerm("")}><Close /></IconButton></InputAdornment> }}
-            sx={{ "& .MuiOutlinedInput-root": { borderRadius: 3, bgcolor: "#fff" } }} />
+            sx={{ "& .MuiOutlinedInput-root": { borderRadius: 999, bgcolor: "#fff", "&.Mui-focused": { boxShadow: FOCUS_RING } } }} />
         </Box>
       )}
 
@@ -1768,7 +2595,7 @@ const LeadOverview = () => {
         <Box sx={{ p: { xs: 2, sm: 3 }, borderBottom: 1, borderColor: "divider", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2, bgcolor: "#fff" }}>
           <Typography variant="h6" fontWeight={600} sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}>
             {viewMode === "table" ? "Lead List" : "Lead Cards"}
-            <Chip label={`${totalLeads} total`} size="small" sx={{ ml: 1, bgcolor: alpha(PRIMARY_COLOR, 0.1), color: PRIMARY_COLOR }} />
+            <Chip label={`${totalLeads} total`} size="small" sx={{ ml: 1, background: "linear-gradient(135deg, rgba(37,99,235,0.14) 0%, rgba(96,165,250,0.24) 100%)", color: PRIMARY_COLOR, border: `1px solid ${alpha(PRIMARY_COLOR, 0.12)}` }} />
           </Typography>
           {!isMobile && viewMode === "table" && (
             <Stack direction="row" spacing={2} alignItems="center">
@@ -1786,9 +2613,9 @@ const LeadOverview = () => {
               <Table stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell padding="checkbox">{permissions.bulkActions && <Checkbox indeterminate={selectedCount > 0 && selectedCount < leads.length} checked={selectAll} onChange={handleSelectAll} sx={{ color: PRIMARY_COLOR, "&.Mui-checked": { color: PRIMARY_COLOR } }} />}</TableCell>
+                    <TableCell padding="checkbox" sx={tableHeaderCellSx}>{permissions.bulkActions && <Checkbox indeterminate={selectedCount > 0 && selectedCount < leads.length} checked={selectAll} onChange={handleSelectAll} sx={{ color: PRIMARY_COLOR, "&.Mui-checked": { color: PRIMARY_COLOR } }} />}</TableCell>
                     {[{ label: "Lead", key: "firstName", sortable: true }, { label: "Contact", sortable: false }, { label: "Status", key: "status", sortable: true }, { label: "Assigned To", key: "assignedUser", sortable: true }, { label: "Created Date", key: "createdAt", sortable: true }, { label: "Actions", sortable: false }].map((col) => (
-                      <TableCell key={col.label}>
+                      <TableCell key={col.label} sx={tableHeaderCellSx}>
                         <Box display="flex" alignItems="center" gap={1}>
                           <Typography variant="subtitle2" fontWeight={600}>{col.label}</Typography>
                           {col.sortable && <IconButton size="small" onClick={() => handleSort(col.key)} sx={{ color: sortBy === col.key ? PRIMARY_COLOR : "inherit" }}><Sort /></IconButton>}

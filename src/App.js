@@ -28,14 +28,23 @@ import BankLoanApply from "./pages/BankLoanApply";
 import DocumentSubmission from "./pages/DocumentSubmission";
 import Disbursement from "./pages/Disbursement";
 import LeadOverview from "./pages/LeadOverview";
+import LeadDetailsPage from "./pages/LeadDetailsPage";
 import BankAtPending from "./pages/BankAtPending";
 import Attandance from "./pages/Attandance";
+import AttendanceHistoryPage from "./pages/AttendanceHistoryPage";
 import VisitDetails from "./pages/AddVisit";
 import TeamTracking from "./pages/TeamTracking";
 import MemberVisitHistory from "./pages/Membervisithistory";
 import TeamAttendance from "./pages/TeamAttendance";
 import Notifications from "./pages/Notifications";
 import LeaveManagement from "./pages/LeaveManagement";
+import HolidayManagement from "./pages/HolidayManagement";
+import ThreeDDesign, { SharedThreeDDesignView, ThreeDDesignDashboard, ThreeDDesignPreview } from "./pages/ThreeDDesign";
+import Quotation from "./pages/Quotation";
+import QuotationEditor from "./pages/QuotationEditor";
+import AllQuotes from "./pages/AllQuotes";
+import PublicDocumentUpload from "./pages/PublicDocumentUpload";
+import Projects from "./pages/Projects";
 
 
 const theme = createTheme({
@@ -94,7 +103,27 @@ function App() {
           <Router>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/s" element={<SharedThreeDDesignView />} />
+              <Route path="/solar-design/view" element={<SharedThreeDDesignView />} />
+              <Route path="/q/:shareToken" element={<Quotation />} />
+              <Route path="/documents/upload/:token" element={<PublicDocumentUpload />} />
               <Route path="/" element={<Navigate to="/login" replace />} />
+              <Route
+                path="/quotation/create"
+                element={
+                  <ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}>
+                    <QuotationEditor initialMode="create" />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/quotation/edit"
+                element={
+                  <ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}>
+                    <QuotationEditor />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/*"
                 element={
@@ -113,6 +142,11 @@ function App() {
                         <Route path="lead-funnel" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><LeadFunnelDashboard /></ProtectedRoute>} />
                         <Route path="missed-leads" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><MissedLeads /></ProtectedRoute>} />
                         <Route path="installation-completion" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Installation /></ProtectedRoute>} />
+                        <Route path="3d-design" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><ThreeDDesignDashboard /></ProtectedRoute>} />
+                        <Route path="3d-design/new" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><ThreeDDesign /></ProtectedRoute>} />
+                        <Route path="3d-design/preview" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><ThreeDDesignPreview /></ProtectedRoute>} />
+                        <Route path="quotation" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Quotation /></ProtectedRoute>} />
+                        <Route path="all-quotes" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><AllQuotes /></ProtectedRoute>} />
                         <Route path="bank-loan-apply" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><BankLoanApply /></ProtectedRoute>} />
                         <Route path="document-submission" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><DocumentSubmission /></ProtectedRoute>} />
                         <Route path="add-visit" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><VisitDetails /></ProtectedRoute>} />
@@ -143,6 +177,14 @@ function App() {
                           }
                         />
                         <Route
+                          path="attendance-history/:userId"
+                          element={
+                            <ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}>
+                              <AttendanceHistoryPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
                           path="team-attendance"
                           element={
                             <ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge"]}>
@@ -158,11 +200,21 @@ function App() {
                             </ProtectedRoute>
                           }
                         />
+                        <Route
+                          path="holiday-management"
+                          element={
+                            <ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}>
+                              <HolidayManagement />
+                            </ProtectedRoute>
+                          }
+                        />
 
                         <Route path="team-tracking" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><TeamTracking /></ProtectedRoute>} />
                        <Route path="member-history/:userId" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><MemberVisitHistory /></ProtectedRoute>} />
                         <Route path="notifications" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Notifications /></ProtectedRoute>} />
+                        <Route path="all-leads/:leadId" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><LeadDetailsPage /></ProtectedRoute>} />
                         <Route path="all-leads" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><LeadOverview /></ProtectedRoute>} />
+                        <Route path="projects" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Projects /></ProtectedRoute>} />
                         <Route path="*" element={<Navigate to="/dashboard" replace />} />
                       </Routes>
                     </MainLayout>

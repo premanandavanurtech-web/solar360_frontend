@@ -6,9 +6,9 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
+import { buildApiUrl } from "../utils/apiConfig";
 
 const AuthContext = createContext({});
-const API_BASE_URL = "https://vanurtech-solar-backend-1.onrender.com/api/v1";
 
 const normalizeRole = (role) => (role === "Head_office" ? "Admin_panel" : role);
 
@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+      const response = await fetch(buildApiUrl(endpoint), config);
       const data = await response.json();
 
       if (!response.ok) {

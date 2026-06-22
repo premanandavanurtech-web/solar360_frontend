@@ -139,8 +139,12 @@ import { useNavigate } from "react-router-dom";
 import AlertTitle from "@mui/material/AlertTitle";
 
 // ========== CONSTANTS & CONFIGURATION ==========
-const PRIMARY = "#4569ea";
+const PRIMARY = "#0f1f3d";
 const SECONDARY = "#1a237e";
+const GRADIENT_MAIN =
+  "linear-gradient(135deg, #0f1f3d 0%, #1a3a6b 60%, #2563eb 100%)";
+const GRADIENT_BLUE = "linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)";
+const GRADIENT_CARD = "linear-gradient(135deg, #f8faff, #eff6ff)";
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 25, 50];
 const DEFAULT_ITEMS_PER_PAGE = 10;
 const ALLOWED_ROLES = ["Admin_panel", "ZSM", "Incharge", "TEAM"];
@@ -163,24 +167,24 @@ const REGISTRATION_STATUS_OPTIONS = [
 
 const REGISTRATION_STATUS_CONFIG = {
   "inProgress": {           // ✅ key matches the option value exactly
-    bg: alpha(PRIMARY, 0.08),
-    color: PRIMARY,
+    bg: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+    color: "#1e40af",
     icon: <AccessTime sx={{ fontSize: 16 }} />,
     label: "In Progress",
     description: "Registration is in progress",
     order: 3,
   },
   pending: {
-    bg: alpha(PRIMARY, 0.08),
-    color: PRIMARY,
+    bg: "linear-gradient(135deg, #fef3c7, #fde68a)",
+    color: "#92400e",
     icon: <PendingActions sx={{ fontSize: 16 }} />,
     label: "Pending",
     description: "Registration is pending review",
     order: 1,
   },
   completed: {
-    bg: alpha(PRIMARY, 0.08),
-    color: PRIMARY,
+    bg: "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+    color: "#14532d",
     icon: <CheckCircle sx={{ fontSize: 16 }} />,
     label: "Completed",
     description: "Registration completed successfully",
@@ -193,20 +197,20 @@ const LEAD_STATUS_OPTIONS = ["Registration", "Document Submission", "Missed Lead
 
 const LEAD_STATUS_CONFIG = {
   Registration: {
-    bg: alpha(PRIMARY, 0.08),
-    color: PRIMARY,
+    bg: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+    color: "#1e40af",
     icon: <HowToReg sx={{ fontSize: 16 }} />,
     description: "Customer registration process",
   },
   "Document Submission": {
-    bg: alpha(PRIMARY, 0.08),
-    color: PRIMARY,
+    bg: "linear-gradient(135deg, #fef3c7, #fde68a)",
+    color: "#92400e",
     icon: <AccountBalance sx={{ fontSize: 16 }} />,
     description: "Documents submitted for verification",
   },
   "Missed Leads": {
-    bg: alpha(PRIMARY, 0.08),
-    color: PRIMARY,
+    bg: "linear-gradient(135deg, #fee2e2, #fecaca)",
+    color: "#b91c1c",
     icon: <Cancel sx={{ fontSize: 16 }} />,
     description: "Lead was not converted",
   },
@@ -252,6 +256,20 @@ const PERIOD_OPTIONS = [
   { value: "This Week", label: "This Week", icon: <DateRange /> },
   { value: "This Month", label: "This Month", icon: <DateRange /> },
   { value: "All", label: "All Time", icon: <DateRange /> },
+];
+
+const CARD_STRIPES = [
+  "linear-gradient(90deg, #2563eb, #60a5fa)",
+  "linear-gradient(90deg, #d97706, #fbbf24)",
+  "linear-gradient(90deg, #16a34a, #4ade80)",
+  "linear-gradient(90deg, #7c3aed, #a78bfa)",
+];
+
+const CARD_ICON_BG = [
+  "linear-gradient(135deg, #dbeafe, #93c5fd)",
+  "linear-gradient(135deg, #fef3c7, #fcd34d)",
+  "linear-gradient(135deg, #dcfce7, #86efac)",
+  "linear-gradient(135deg, #ede9fe, #c4b5fd)",
 ];
 
 // ========== HELPER FUNCTIONS ==========
@@ -969,7 +987,7 @@ const MobileRegistrationCard = ({
           <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
             <Avatar
               sx={{
-                bgcolor: PRIMARY,
+                background: GRADIENT_MAIN,
                 color: "#fff",
                 width: 48,
                 height: 48,
@@ -990,12 +1008,12 @@ const MobileRegistrationCard = ({
           <IconButton
             size="small"
             onClick={() => setExpanded(!expanded)}
-            sx={{
-              transform: expanded ? "rotate(180deg)" : "none",
-              transition: "transform 0.3s",
-              bgcolor: alpha(PRIMARY, 0.1),
-            }}
-          >
+              sx={{
+                transform: expanded ? "rotate(180deg)" : "none",
+                transition: "transform 0.3s",
+                background: GRADIENT_CARD,
+              }}
+            >
             {expanded ? <ExpandLess /> : <ExpandMore />}
           </IconButton>
         </Box>
@@ -1051,7 +1069,7 @@ const MobileRegistrationCard = ({
               icon={regStatusConfig.icon}
               size="small"
               sx={{
-                bgcolor: regStatusConfig.bg,
+                background: regStatusConfig.bg,
                 color: regStatusConfig.color,
                 fontWeight: 600,
                 height: 24,
@@ -1066,7 +1084,7 @@ const MobileRegistrationCard = ({
               icon={leadStatusConfig.icon}
               size="small"
               sx={{
-                bgcolor: leadStatusConfig.bg,
+                background: leadStatusConfig.bg,
                 color: leadStatusConfig.color,
                 fontWeight: 600,
                 height: 24,
@@ -1129,8 +1147,9 @@ const MobileRegistrationCard = ({
                 startIcon={<Visibility />}
                 onClick={() => onView(registration)}
                 sx={{
-                  bgcolor: PRIMARY,
-                  "&:hover": { bgcolor: SECONDARY },
+                  background: GRADIENT_MAIN,
+                  color: "#fff",
+                  "&:hover": { opacity: 0.92, background: GRADIENT_MAIN },
                 }}
               >
                 View
@@ -1143,9 +1162,14 @@ const MobileRegistrationCard = ({
                   startIcon={<Edit />}
                   onClick={() => onEdit(registration)}
                   sx={{
-                    borderColor: PRIMARY,
-                    color: PRIMARY,
-                    "&:hover": { bgcolor: alpha(PRIMARY, 0.1) },
+                    borderColor: "transparent",
+                    background: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                    color: "#1e40af",
+                    "&:hover": {
+                      borderColor: "transparent",
+                      background: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                      opacity: 0.92,
+                    },
                   }}
                 >
                   Edit
@@ -1159,9 +1183,14 @@ const MobileRegistrationCard = ({
                   startIcon={<CloudUpload />}
                   onClick={() => onUpload(registration)}
                   sx={{
-                    borderColor: PRIMARY,
-                    color: PRIMARY,
-                    "&:hover": { bgcolor: alpha(PRIMARY, 0.1) },
+                    borderColor: "transparent",
+                    background: "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+                    color: "#14532d",
+                    "&:hover": {
+                      borderColor: "transparent",
+                      background: "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+                      opacity: 0.92,
+                    },
                   }}
                 >
                   Upload
@@ -1496,8 +1525,8 @@ const ViewRegistrationModal = ({
             sx={{
               p: 2.5,
               borderRadius: 3,
-              bgcolor: alpha(PRIMARY, 0.02),
-              border: `1px solid ${alpha(PRIMARY, 0.1)}`,
+              background: GRADIENT_CARD,
+              border: "1px solid rgba(37,99,235,.18)",
             }}
           >
             <Typography
@@ -1548,8 +1577,8 @@ const ViewRegistrationModal = ({
             sx={{
               p: 2.5,
               borderRadius: 3,
-              bgcolor: alpha(PRIMARY, 0.02),
-              border: `1px solid ${alpha(PRIMARY, 0.1)}`,
+              background: GRADIENT_CARD,
+              border: "1px solid rgba(37,99,235,.18)",
             }}
           >
             <Typography
@@ -1581,7 +1610,7 @@ const ViewRegistrationModal = ({
                   icon={getRegistrationStatusConfig(registration.registrationStatus).icon}
                   size="small"
                   sx={{
-                    bgcolor: getRegistrationStatusConfig(registration.registrationStatus).bg,
+                    background: getRegistrationStatusConfig(registration.registrationStatus).bg,
                     color: getRegistrationStatusConfig(registration.registrationStatus).color,
                     fontWeight: 600,
                   }}
@@ -1603,7 +1632,7 @@ const ViewRegistrationModal = ({
                   icon={getLeadStatusConfig(registration.status).icon}
                   size="small"
                   sx={{
-                    bgcolor: getLeadStatusConfig(registration.status).bg,
+                    background: getLeadStatusConfig(registration.status).bg,
                     color: getLeadStatusConfig(registration.status).color,
                     fontWeight: 600,
                   }}
@@ -1635,8 +1664,8 @@ const ViewRegistrationModal = ({
             sx={{
               p: 2.5,
               borderRadius: 3,
-              bgcolor: alpha(PRIMARY, 0.02),
-              border: `1px solid ${alpha(PRIMARY, 0.1)}`,
+              background: GRADIENT_CARD,
+              border: "1px solid rgba(37,99,235,.18)",
             }}
           >
             <Typography
@@ -1790,8 +1819,8 @@ const ViewRegistrationModal = ({
           sx={{
             p: 2.5,
             borderRadius: 3,
-            bgcolor: alpha(PRIMARY, 0.02),
-            border: `1px solid ${alpha(PRIMARY, 0.1)}`,
+            background: GRADIENT_CARD,
+            border: "1px solid rgba(37,99,235,.18)",
           }}
         >
           <Typography
@@ -1828,8 +1857,8 @@ const ViewRegistrationModal = ({
           sx={{
             p: 2.5,
             borderRadius: 3,
-            bgcolor: alpha(PRIMARY, 0.02),
-            border: `1px solid ${alpha(PRIMARY, 0.1)}`,
+            background: GRADIENT_CARD,
+            border: "1px solid rgba(37,99,235,.18)",
           }}
         >
           <Typography
@@ -2418,8 +2447,9 @@ const EditRegistrationModal = ({
             )
           }
           sx={{
-            bgcolor: PRIMARY,
-            "&:hover": { bgcolor: SECONDARY },
+            background: GRADIENT_BLUE,
+            boxShadow: "0 4px 12px rgba(37,99,235,.3)",
+            "&:hover": { background: GRADIENT_BLUE, opacity: 0.9 },
           }}
         >
           {loading ? "Saving..." : "Save Changes"}
@@ -2845,12 +2875,24 @@ const SummaryCard = ({ card, index }) => (
       sx={{
         p: { xs: 1.5, sm: 2, md: 2.5 },
         borderRadius: 3,
+        position: "relative",
+        overflow: "hidden",
         border: `1px solid ${alpha(card.color, 0.1)}`,
         boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
         transition: "transform 0.2s",
         "&:hover": {
           transform: "translateY(-2px)",
           boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
+        },
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "4px",
+          borderRadius: "16px 16px 0 0",
+          background: CARD_STRIPES[index % CARD_STRIPES.length],
         },
       }}
     >
@@ -2867,7 +2909,7 @@ const SummaryCard = ({ card, index }) => (
               width: { xs: 32, sm: 40, md: 48 },
               height: { xs: 32, sm: 40, md: 48 },
               borderRadius: { xs: 1.5, sm: 2 },
-              bgcolor: alpha(card.color, 0.1),
+              background: CARD_ICON_BG[index % CARD_ICON_BG.length],
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -3740,26 +3782,53 @@ export default function RegistrationPage() {
                       </InputAdornment>
                     ),
                   }}
-                  sx={{ maxWidth: 400 }}
+                  sx={{
+                    maxWidth: 400,
+                    "& .MuiOutlinedInput-root": {
+                      "&.Mui-focused fieldset": {
+                        borderColor: "#3b82f6",
+                        boxShadow: "0 0 0 3px rgba(37,99,235,.12)",
+                      },
+                    },
+                  }}
                 />
 
-                <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <InputLabel>Period</InputLabel>
-                  <Select
-                    value={period}
-                    label="Period"
-                    onChange={(e) => setPeriod(e.target.value)}
-                  >
-                    {PERIOD_OPTIONS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          {option.icon}
-                          <span>{option.label}</span>
-                        </Stack>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Stack direction="row" spacing={0.75}>
+                  {PERIOD_OPTIONS.map((option) => (
+                    <Button
+                      key={option.value}
+                      size="small"
+                      onClick={() => setPeriod(option.value)}
+                      sx={{
+                        borderRadius: "50px",
+                        px: 2,
+                        py: 0.75,
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        background:
+                          period === option.value ? GRADIENT_BLUE : "transparent",
+                        color: period === option.value ? "#fff" : PRIMARY,
+                        border: `1px solid ${
+                          period === option.value
+                            ? "transparent"
+                            : alpha(PRIMARY, 0.2)
+                        }`,
+                        boxShadow:
+                          period === option.value
+                            ? "0 2px 8px rgba(37,99,235,.3)"
+                            : "none",
+                        "&:hover": {
+                          background:
+                            period === option.value
+                              ? GRADIENT_BLUE
+                              : alpha(PRIMARY, 0.06),
+                        },
+                      }}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </Stack>
 
                 <Button
                   variant="outlined"
@@ -3793,7 +3862,7 @@ export default function RegistrationPage() {
                     p: 3,
                     borderRadius: 2,
                     borderColor: alpha(PRIMARY, 0.2),
-                    bgcolor: alpha(PRIMARY, 0.02),
+                    background: GRADIENT_CARD,
                   }}
                 >
                   <Grid container spacing={3}>
@@ -4047,7 +4116,8 @@ export default function RegistrationPage() {
                   <TableRow>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4065,7 +4135,8 @@ export default function RegistrationPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4083,7 +4154,8 @@ export default function RegistrationPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4092,7 +4164,8 @@ export default function RegistrationPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4110,7 +4183,8 @@ export default function RegistrationPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4119,7 +4193,8 @@ export default function RegistrationPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4128,7 +4203,8 @@ export default function RegistrationPage() {
                     </TableCell>
                     <TableCell
                       sx={{
-                        bgcolor: alpha(PRIMARY, 0.05),
+                        bgcolor: "transparent",
+                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -4155,7 +4231,8 @@ export default function RegistrationPage() {
                                 sx={{
                                   width: 32,
                                   height: 32,
-                                  bgcolor: PRIMARY,
+                                  background: GRADIENT_MAIN,
+                                  color: "#fff",
                                   fontSize: '0.875rem',
                                 }}
                               >
@@ -4189,7 +4266,7 @@ export default function RegistrationPage() {
                                 icon={regStatusConfig.icon}
                                 size="small"
                                 sx={{
-                                  bgcolor: regStatusConfig.bg,
+                                  background: regStatusConfig.bg,
                                   color: regStatusConfig.color,
                                   fontWeight: 600,
                                   minWidth: 80,
@@ -4204,7 +4281,7 @@ export default function RegistrationPage() {
                                 icon={leadStatusConfig.icon}
                                 size="small"
                                 sx={{
-                                  bgcolor: leadStatusConfig.bg,
+                                  background: leadStatusConfig.bg,
                                   color: leadStatusConfig.color,
                                   fontWeight: 600,
                                   minWidth: 80,
@@ -4238,8 +4315,12 @@ export default function RegistrationPage() {
                                 size="small"
                                 onClick={() => handleViewClick(registration)}
                                 sx={{
-                                  bgcolor: alpha(PRIMARY, 0.1),
-                                  color: PRIMARY,
+                                  background: GRADIENT_MAIN,
+                                  color: "#fff",
+                                  "&:hover": {
+                                    background: GRADIENT_MAIN,
+                                    opacity: 0.92,
+                                  },
                                 }}
                               >
                                 <Visibility fontSize="small" />
@@ -4249,8 +4330,12 @@ export default function RegistrationPage() {
                                   size="small"
                                   onClick={() => handleEditClick(registration)}
                                   sx={{
-                                    bgcolor: alpha(PRIMARY, 0.1),
-                                    color: PRIMARY,
+                                    background: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                                    color: "#1e40af",
+                                    "&:hover": {
+                                      background: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                                      opacity: 0.92,
+                                    },
                                   }}
                                 >
                                   <Edit fontSize="small" />
@@ -4261,8 +4346,12 @@ export default function RegistrationPage() {
                                   size="small"
                                   onClick={() => handleDocumentUploadClick(registration)}
                                   sx={{
-                                    bgcolor: alpha(PRIMARY, 0.1),
-                                    color: PRIMARY,
+                                    background: "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+                                    color: "#14532d",
+                                    "&:hover": {
+                                      background: "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+                                      opacity: 0.92,
+                                    },
                                   }}
                                 >
                                   <CloudUpload fontSize="small" />

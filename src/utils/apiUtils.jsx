@@ -29,14 +29,6 @@ export const authFetch = async (url, options = {}) => {
     headers
   };
 
-  // Log for debugging
-  //console.log('AuthFetch Request:', {
-    url,
-    method: options.method || 'GET',
-    headers: headers,
-    hasBody: !!options.body
-  });
-
   try {
     const response = await fetch(url, config);
     return response;
