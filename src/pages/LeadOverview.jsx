@@ -2130,7 +2130,7 @@ const LeadOverview = () => {
       });
       showSnackbar("Lead converted to project", "success");
       await fetchLeads();
-      navigate("/projects", { state: { highlightProjectId: lead._id } });
+      navigate("/total-visits", { state: { highlightLeadId: lead._id } });
     } catch (error) {
       showSnackbar(error.message || "Failed to convert lead to project", "error");
     }

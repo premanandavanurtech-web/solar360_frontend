@@ -38,6 +38,7 @@ import MemberVisitHistory from "./pages/Membervisithistory";
 import TeamAttendance from "./pages/TeamAttendance";
 import Notifications from "./pages/Notifications";
 import LeaveManagement from "./pages/LeaveManagement";
+import LeaveTypes from "./pages/LeaveTypes";
 import HolidayManagement from "./pages/HolidayManagement";
 import ThreeDDesign, { SharedThreeDDesignView, ThreeDDesignDashboard, ThreeDDesignPreview } from "./pages/ThreeDDesign";
 import Quotation from "./pages/Quotation";
@@ -197,6 +198,14 @@ function App() {
                           element={
                             <ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}>
                               <LeaveManagement />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="leave-types"
+                          element={
+                            <ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}>
+                              <LeaveTypes />
                             </ProtectedRoute>
                           }
                         />

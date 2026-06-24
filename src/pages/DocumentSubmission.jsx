@@ -120,6 +120,7 @@ import {
   Image as ImageIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
+import LeadAssignDialog from "../components/LeadAssignDialog";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -3214,6 +3215,7 @@ export default function DocumentSubmissionPage() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [statusUpdateModalOpen, setStatusUpdateModalOpen] = useState(false);
+  const [assignLeadModalOpen, setAssignLeadModalOpen] = useState(false);
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState("");
   const [selectedDocument, setSelectedDocument] = useState(null);
@@ -3599,6 +3601,24 @@ export default function DocumentSubmissionPage() {
     [fetchDocumentsData, showSnackbar],
   );
 
+  const handleAssignClick = useCallback(
+    (document) => {
+      if (!document?._id) {
+        showSnackbar("Invalid document data", "error");
+        return;
+      }
+
+      if (!userPermissions.canManage) {
+        showSnackbar("You don't have permission to assign this document", "error");
+        return;
+      }
+
+      setSelectedDocument(document);
+      setAssignLeadModalOpen(true);
+    },
+    [showSnackbar, userPermissions],
+  );
+
   const handleActionMenuOpen = useCallback((event, document) => {
     setActionMenuAnchor(event.currentTarget);
     setSelectedActionLead(document);
@@ -3766,6 +3786,16 @@ export default function DocumentSubmissionPage() {
         onClose={() => setStatusUpdateModalOpen(false)}
         lead={selectedDocument}
         onStatusUpdate={handleStatusUpdate}
+        showSnackbar={showSnackbar}
+      />
+
+      <LeadAssignDialog
+        open={assignLeadModalOpen}
+        onClose={() => setAssignLeadModalOpen(false)}
+        record={selectedDocument}
+        recordTypeLabel="Document"
+        userRole={userRole}
+        onAssigned={fetchDocumentsData}
         showSnackbar={showSnackbar}
       />
 
@@ -4580,9 +4610,32 @@ export default function DocumentSubmissionPage() {
                                 </Typography>
                               </Box>
                             ) : (
-                              <Typography variant="body2" color="text.secondary">
-                                Unassigned
-                              </Typography>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => handleAssignClick(document)}
+                                disabled={!userPermissions.canManage}
+                                sx={{
+                                  minWidth: 96,
+                                  px: 1.5,
+                                  py: 0.5,
+                                  borderRadius: 2,
+                                  borderStyle: "dashed",
+                                  borderColor: alpha(PRIMARY_COLOR, 0.45),
+                                  color: PRIMARY_COLOR,
+                                  fontWeight: 600,
+                                  textTransform: "none",
+                                  cursor: userPermissions.canManage ? "pointer" : "not-allowed",
+                                  "&.Mui-disabled": {
+                                    color: PRIMARY_COLOR,
+                                    WebkitTextFillColor: PRIMARY_COLOR,
+                                    borderColor: alpha(PRIMARY_COLOR, 0.45),
+                                    opacity: 0.8,
+                                  },
+                                }}
+                              >
+                                + Assign
+                              </Button>
                             )}
                           </TableCell>
 

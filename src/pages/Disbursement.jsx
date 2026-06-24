@@ -128,6 +128,7 @@ import {
   CurrencyRupee,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
+import LeadAssignDialog from "../components/LeadAssignDialog";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -2703,6 +2704,7 @@ export default function DisbursementPage() {
   // Modal States
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [statusUpdateModalOpen, setStatusUpdateModalOpen] = useState(false);
+  const [assignLeadModalOpen, setAssignLeadModalOpen] = useState(false);
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState("");
   const [selectedLead, setSelectedLead] = useState(null);
@@ -3053,6 +3055,24 @@ export default function DisbursementPage() {
     [fetchDisbursementData, showSnackbar],
   );
 
+  const handleAssignClick = useCallback(
+    (lead) => {
+      if (!lead?._id) {
+        showSnackbar("Invalid lead data", "error");
+        return;
+      }
+
+      if (!userPermissions.canManage) {
+        showSnackbar("You don't have permission to assign this disbursement", "error");
+        return;
+      }
+
+      setSelectedLead(lead);
+      setAssignLeadModalOpen(true);
+    },
+    [showSnackbar, userPermissions],
+  );
+
   const handleActionMenuOpen = useCallback((event, lead) => {
     setActionMenuAnchor(event.currentTarget);
     setSelectedActionLead(lead);
@@ -3210,6 +3230,16 @@ export default function DisbursementPage() {
         onStatusUpdate={handleStatusUpdate}
         showSnackbar={showSnackbar}
         userRole={userRole}
+      />
+
+      <LeadAssignDialog
+        open={assignLeadModalOpen}
+        onClose={() => setAssignLeadModalOpen(false)}
+        record={selectedLead}
+        recordTypeLabel="Disbursement"
+        userRole={userRole}
+        onAssigned={fetchDisbursementData}
+        showSnackbar={showSnackbar}
       />
 
       {/* Mobile Filter Drawer */}
@@ -4094,9 +4124,32 @@ export default function DisbursementPage() {
                                 </Typography>
                               </Box>
                             ) : (
-                              <Typography variant="body2" color="text.secondary">
-                                Unassigned
-                              </Typography>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => handleAssignClick(lead)}
+                                disabled={!userPermissions.canManage}
+                                sx={{
+                                  minWidth: 96,
+                                  px: 1.5,
+                                  py: 0.5,
+                                  borderRadius: 2,
+                                  borderStyle: "dashed",
+                                  borderColor: alpha(PRIMARY, 0.45),
+                                  color: PRIMARY,
+                                  fontWeight: 600,
+                                  textTransform: "none",
+                                  cursor: userPermissions.canManage ? "pointer" : "not-allowed",
+                                  "&.Mui-disabled": {
+                                    color: PRIMARY,
+                                    WebkitTextFillColor: PRIMARY,
+                                    borderColor: alpha(PRIMARY, 0.45),
+                                    opacity: 0.8,
+                                  },
+                                }}
+                              >
+                                + Assign
+                              </Button>
                             )}
                           </TableCell>
 

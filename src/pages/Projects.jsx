@@ -40,6 +40,7 @@ import {
   Bolt,
   CalendarMonth,
   Call,
+  CloudUpload,
   Description,
   DescriptionOutlined,
   DirectionsCar,
@@ -54,11 +55,12 @@ import {
   Receipt,
   Refresh,
   Search,
-  Sell,
+  SolarPower,
   TableChart,
   TaskAlt,
   TrendingUp,
   ViewKanban,
+  Visibility,
   Workspaces,
 } from "@mui/icons-material";
 import { format, isThisWeek, parseISO } from "date-fns";
@@ -79,7 +81,6 @@ const BORDER   = "#e4eaf5";
 
 // ── Stage config (now with icons) ───────────────────────────────
 const PROJECT_STAGES = [
-  { key: "new",           label: "New",           color: "#22c55e", icon: Sell },
   { key: "visit",         label: "Visit",         color: "#3b82f6", icon: DirectionsCar },
   { key: "registration",  label: "Registration",  color: "#8b5cf6", icon: FactCheck },
   { key: "document",      label: "Document",      color: "#06b6d4", icon: DescriptionOutlined },
@@ -91,7 +92,6 @@ const PROJECT_STAGES = [
 ];
 
 const NEXT_ACTIONS = {
-  new:          "Newly converted project, visit planning pending",
   visit:        "Visit stage is active",
   registration: "Registration completed or in progress",
   document:     "Document review or submission in progress",
@@ -137,34 +137,81 @@ const isDocumentVerified = (status) =>
 const getProjectStage = (project) => {
   const inst = String(project.installationStatus || "");
   const lead = String(project.status || "");
+  const leadStatus = lead.toLowerCase();
   const visitStatus = String(project.visitStatus || "").toLowerCase();
   const registrationStatus = String(project.registrationStatus || "").toLowerCase();
   const bankPendingStatus = String(project.bankAtPendingStatus || "").toLowerCase();
   const disbursementStatus = String(project.disbursementStatus || "").toLowerCase();
   const loanStatus = String(project.loanStatus || "").toLowerCase();
+  const installationInProgress = [
+    "final_payment",
+    "meter_charge",
+    "jee_verified",
+    "sent_for_jee_verification",
+    "installation_progress",
+    "load_Enhancement",
+    "load_enhancement",
+  ].includes(inst);
+
   if (inst === "installation_completed") return "handover";
-  if (
-    [
-      "final_payment",
-      "meter_charge",
-      "jee_verified",
-      "sent_for_jee_verification",
-      "installation_progress",
-      "load_Enhancement",
-      "load_enhancement",
-    ].includes(inst)
-  ) return "installation";
-  if (disbursementStatus === "completed" || lead === "Disbursement") return "disbursement";
-  if (bankPendingStatus || lead === "Bank at Pending" || lead === "Loan Pending") return "loan_pending";
-  if (lead === "Bank Loan Apply" || loanStatus === "submitted" || loanStatus === "approved") return "bank_loan";
-  if (isDocumentVerified(project.documentStatus) || lead === "Document Submission") return "document";
-  if (registrationStatus || lead === "Registration") return "registration";
-  if (visitStatus || lead === "Visit") return "visit";
-  return "new";
+
+  if (leadStatus === "installation completion") return "installation";
+  if (leadStatus === "disbursement") return "disbursement";
+  if (leadStatus === "bank at pending" || leadStatus === "loan pending") return "loan_pending";
+  if (leadStatus === "bank loan apply") return "bank_loan";
+  if (leadStatus === "document submission") return "document";
+  if (leadStatus === "registration") return "registration";
+  if (leadStatus === "visit") return "visit";
+  if (leadStatus === "new") return "visit";
+
+  if (disbursementStatus === "completed") return "disbursement";
+  if (bankPendingStatus && bankPendingStatus !== "pending") return "loan_pending";
+  if (loanStatus === "submitted" || loanStatus === "approved") return "bank_loan";
+  if (isDocumentVerified(project.documentStatus)) return "document";
+  if (registrationStatus && registrationStatus !== "pending") return "registration";
+  if (visitStatus) return "visit";
+  if (installationInProgress) return "installation";
+  return "visit";
 };
 
 const getStageMeta = (key) => PROJECT_STAGES.find((s) => s.key === key) || PROJECT_STAGES[0];
 const getInitials   = (p) => `${p.firstName?.[0] || ""}${p.lastName?.[0] || ""}`.toUpperCase() || "P";
+const getAssignedPerson = (project) => {
+  const person = project.assignedUser || project.assignedManager;
+  if (!person) return null;
+  return {
+    name: [person.firstName, person.lastName].filter(Boolean).join(" ") || "Unknown",
+    role: person.role || "",
+  };
+};
+const getRegistrationDateValue = (project) => project.dateOfRegistration || project.createdAt || project.updatedAt;
+const getRegistrationStatusMeta = (status) => {
+  const value = String(status || "").toLowerCase();
+  if (value === "completed") {
+    return { label: "Completed", bg: alpha(EMERALD, 0.12), color: EMERALD, icon: <AssignmentTurnedIn sx={{ fontSize: 14 }} /> };
+  }
+  if (value === "approved") {
+    return { label: "Approved", bg: alpha(BLUE, 0.12), color: BLUE, icon: <FactCheck sx={{ fontSize: 14 }} /> };
+  }
+  if (value === "rejected") {
+    return { label: "Rejected", bg: alpha(RED, 0.1), color: RED, icon: <DescriptionOutlined sx={{ fontSize: 14 }} /> };
+  }
+  if (value === "pending") {
+    return { label: "Pending", bg: alpha(AMBER, 0.12), color: "#9a6700", icon: <CalendarMonth sx={{ fontSize: 14 }} /> };
+  }
+  return { label: "In Progress", bg: alpha(BLUE, 0.12), color: BLUE, icon: <CalendarMonth sx={{ fontSize: 14 }} /> };
+};
+const getLeadStatusMeta = (status) => {
+  const stage = getProjectStage({ status });
+  const meta = getStageMeta(stage);
+  const LeadIcon = meta.icon;
+  return {
+    label: status || meta.label,
+    bg: alpha(meta.color, 0.12),
+    color: meta.color,
+    icon: <LeadIcon sx={{ fontSize: 14 }} />,
+  };
+};
 const isStuck = (p) => {
   const ref = p.updatedAt || p.projectConvertedAt || p.createdAt;
   if (!ref) return false;
@@ -262,6 +309,216 @@ const ActionMenu = ({ project, onOpen, onCall, onEdit, color }) => {
 };
 
 // ── Kanban project card ────────────────────────────────────────
+const RegistrationActionMenu = ({ project, onView, onEdit, onUpload }) => {
+  const [anchor, setAnchor] = useState(null);
+  const close = () => setAnchor(null);
+
+  return (
+    <>
+      <IconButton
+        size="small"
+        onClick={(event) => {
+          event.stopPropagation();
+          setAnchor(event.currentTarget);
+        }}
+        sx={{
+          color: alpha(NAVY, 0.65),
+          "&:hover": { bgcolor: alpha(NAVY, 0.06), color: NAVY },
+        }}
+      >
+        <MoreVert sx={{ fontSize: 18 }} />
+      </IconButton>
+      <Menu
+        anchorEl={anchor}
+        open={Boolean(anchor)}
+        onClose={close}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{
+          sx: {
+            borderRadius: "12px",
+            minWidth: 190,
+            border: `1px solid ${BORDER}`,
+            boxShadow: "0 12px 32px rgba(15,31,61,0.12)",
+          },
+        }}
+      >
+        <MenuItem
+          onClick={() => {
+            close();
+            onView(project);
+          }}
+          sx={{ fontSize: 13.5, fontWeight: 600, py: 1 }}
+        >
+          <ListItemIcon><OpenInNew sx={{ fontSize: 18, color: NAVY_LT }} /></ListItemIcon>
+          <ListItemText>Open registration</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            close();
+            onEdit(project);
+          }}
+          sx={{ fontSize: 13.5, fontWeight: 600, py: 1 }}
+        >
+          <ListItemIcon><Edit sx={{ fontSize: 18, color: BLUE }} /></ListItemIcon>
+          <ListItemText>Edit registration</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            close();
+            onUpload(project);
+          }}
+          sx={{ fontSize: 13.5, fontWeight: 600, py: 1 }}
+        >
+          <ListItemIcon><CloudUpload sx={{ fontSize: 18, color: EMERALD }} /></ListItemIcon>
+          <ListItemText>Upload documents</ListItemText>
+        </MenuItem>
+      </Menu>
+    </>
+  );
+};
+
+const RegistrationProjectRow = ({ project, highlight, onView, onEdit, onUpload, onCall }) => {
+  const stageKey = getProjectStage(project);
+  const progress = ((stageIndex(stageKey) + 1) / PROJECT_STAGES.length) * 100;
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 1.75, md: 2.25 },
+        borderRadius: 0,
+        borderBottom: `1px solid ${alpha(BORDER, 0.8)}`,
+        bgcolor: highlight ? alpha(EMERALD, 0.04) : "#fff",
+      }}
+    >
+      <Stack
+        direction={{ xs: "column", lg: "row" }}
+        spacing={{ xs: 1.75, lg: 2.5 }}
+        alignItems={{ xs: "flex-start", lg: "center" }}
+      >
+        <Stack
+          direction="row"
+          spacing={1.5}
+          alignItems="center"
+          sx={{ width: { xs: "100%", lg: 320 }, minWidth: 0 }}
+        >
+          <Avatar
+            sx={{
+              width: 48,
+              height: 48,
+              fontSize: 18,
+              fontWeight: 800,
+              bgcolor: alpha("#8b5cf6", 0.12),
+              color: "#6d28d9",
+              flexShrink: 0,
+            }}
+          >
+            {getInitials(project)}
+          </Avatar>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle1" fontWeight={800} color={NAVY} noWrap>
+              {project.projectCode || "Project"}
+            </Typography>
+            <Typography variant="h6" fontWeight={700} color={NAVY_LT} sx={{ lineHeight: 1.15 }}>
+              {[project.firstName, project.lastName].filter(Boolean).join(" ") || "—"}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {project.phone || "No phone"}
+            </Typography>
+          </Box>
+        </Stack>
+
+        <Box sx={{ width: { xs: "100%", lg: 280 }, minWidth: 0 }}>
+          <Chip
+            icon={<FactCheck sx={{ fontSize: 14 }} />}
+            label="Registration"
+            size="small"
+            sx={{
+              bgcolor: alpha("#8b5cf6", 0.10),
+              color: "#8b5cf6",
+              fontWeight: 700,
+              mb: 1.1,
+              "& .MuiChip-icon": { color: "#8b5cf6 !important" },
+            }}
+          />
+          <LinearProgress
+            variant="determinate"
+            value={progress}
+            sx={{
+              height: 5,
+              borderRadius: 999,
+              bgcolor: alpha("#8b5cf6", 0.12),
+              "& .MuiLinearProgress-bar": {
+                bgcolor: "#8b5cf6",
+                borderRadius: 999,
+              },
+            }}
+          />
+        </Box>
+
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="h6" fontWeight={700} color={NAVY} sx={{ lineHeight: 1.2 }}>
+            {NEXT_ACTIONS.registration}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
+            Updated {formatDate(project.updatedAt || getRegistrationDateValue(project))}
+          </Typography>
+        </Box>
+
+        <Typography
+          variant="h6"
+          fontWeight={800}
+          color={NAVY}
+          sx={{ width: { xs: "auto", lg: 90 }, textAlign: { xs: "left", lg: "center" } }}
+        >
+          {formatCurrency(getProjectAmount(project))}
+        </Typography>
+
+        <Stack
+          direction="row"
+          spacing={0.5}
+          alignItems="center"
+          justifyContent="flex-end"
+          sx={{ ml: { lg: "auto" } }}
+        >
+          <Tooltip title="Open registration">
+            <IconButton
+              size="small"
+              onClick={() => onView(project)}
+              sx={{ color: NAVY_LT, "&:hover": { bgcolor: alpha(NAVY, 0.08) } }}
+            >
+              <OpenInNew sx={{ fontSize: 20 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={project.phone ? "Call customer" : "Phone not available"}>
+            <span>
+              <IconButton
+                size="small"
+                disabled={!project.phone}
+                onClick={() => onCall(project)}
+                sx={{
+                  color: EMERALD,
+                  "&:hover": { bgcolor: alpha(EMERALD, 0.08) },
+                  "&.Mui-disabled": { color: alpha(EMERALD, 0.35) },
+                }}
+              >
+                <Call sx={{ fontSize: 20 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <RegistrationActionMenu
+            project={project}
+            onView={onView}
+            onEdit={onEdit}
+            onUpload={onUpload}
+          />
+        </Stack>
+      </Stack>
+    </Paper>
+  );
+};
+
 const ProjectCard = ({ project, onOpen, onCall, onEdit }) => {
   const stage    = getStageMeta(getProjectStage(project));
   const progress = ((stageIndex(stage.key) + 1) / PROJECT_STAGES.length) * 100;
@@ -455,6 +712,13 @@ function Projects() {
   }, [enriched, searchTerm, selectedStage, amountRange, activityFilter]);
 
   const paged = useMemo(() => filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage), [filtered, page, rowsPerPage]);
+  const showRegistrationRows = useMemo(
+    () =>
+      filtered.length > 0 &&
+      (selectedStage === "registration" ||
+        filtered.every((project) => project.currentStage === "registration")),
+    [filtered, selectedStage],
+  );
 
   const summary = useMemo(() => {
     const counts = PROJECT_STAGES.reduce((acc, s) => {
@@ -497,6 +761,18 @@ function Projects() {
 
   const editLead = useCallback(
     (p) => navigate(`/all-leads/${p._id}`, { state: { lead: p, edit: true } }),
+    [navigate],
+  );
+
+  const openRegistrationAction = useCallback(
+    (project, action) => {
+      navigate("/registration", {
+        state: {
+          registrationAction: action,
+          registrationId: project?._id || null,
+        },
+      });
+    },
     [navigate],
   );
 
@@ -807,7 +1083,10 @@ function Projects() {
               />
             )}
             <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-              <b style={{ color: NAVY }}>{filtered.length}</b> project{filtered.length !== 1 ? "s" : ""}
+              <b style={{ color: NAVY }}>{filtered.length}</b>{" "}
+              {selectedStage === "registration"
+                ? `registration${filtered.length !== 1 ? "s" : ""}`
+                : `project${filtered.length !== 1 ? "s" : ""}`}
             </Typography>
           </Stack>
         </Stack>
@@ -894,8 +1173,203 @@ function Projects() {
           </Box>
         )}
 
+        {!loading && viewMode === "table" && showRegistrationRows && (
+          <>
+            <Box>
+              {paged.map((project) => (
+                <RegistrationProjectRow
+                  key={project._id}
+                  project={project}
+                  highlight={highlightId === project._id}
+                  onView={(item) => openRegistrationAction(item, "view")}
+                  onEdit={(item) => openRegistrationAction(item, "edit")}
+                  onUpload={(item) => openRegistrationAction(item, "upload")}
+                  onCall={callCustomer}
+                />
+              ))}
+            </Box>
+
+            <TablePagination
+              component="div"
+              count={filtered.length}
+              page={page}
+              onPageChange={(_, p) => setPage(p)}
+              rowsPerPage={rowsPerPage}
+              onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+              rowsPerPageOptions={[5, 10, 25]}
+              sx={{ borderTop: `1px solid ${BORDER}`, color: alpha(NAVY, 0.7) }}
+            />
+          </>
+        )}
+
+        {/* Registration table */}
+        {!loading && false && viewMode === "table" && showRegistrationRows && (
+          <>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: "#fafbfe" }}>
+                    {["Customer", "Date", "Solar Requirement", "Status", "Lead Status", "Assigned To", "Actions"].map((col, i) => (
+                      <TableCell
+                        key={i}
+                        align={i === 6 ? "right" : "left"}
+                        sx={{
+                          fontWeight: 800, fontSize: 12,
+                          color: alpha(NAVY, 0.6),
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                          borderBottom: `1px solid ${BORDER}`,
+                          py: 1.5,
+                        }}
+                      >
+                        {col}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+
+                <TableBody>
+                  {paged.map((project) => {
+                    const registrationMeta = getRegistrationStatusMeta(project.registrationStatus);
+                    const leadMeta = getLeadStatusMeta(project.status);
+                    const assignedPerson = getAssignedPerson(project);
+                    const highlight = highlightId === project._id;
+
+                    return (
+                      <TableRow
+                        key={project._id}
+                        sx={{
+                          bgcolor: highlight ? alpha(EMERALD, 0.04) : "transparent",
+                          "&:hover": { bgcolor: alpha(NAVY, 0.02) },
+                          "& td": { borderBottom: `1px solid ${alpha(BORDER, 0.6)}` },
+                        }}
+                      >
+                        <TableCell>
+                          <Stack direction="row" spacing={1.5} alignItems="center">
+                            <Avatar
+                              sx={{
+                                width: 38, height: 38, fontSize: 13, fontWeight: 800,
+                                bgcolor: alpha("#1d4ed8", 0.12), color: NAVY_LT,
+                              }}
+                            >
+                              {getInitials(project)}
+                            </Avatar>
+                            <Box>
+                              <Typography variant="subtitle2" fontWeight={800} color={NAVY}>
+                                {[project.firstName, project.lastName].filter(Boolean).join(" ") || "—"}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {project.phone || "No phone"}
+                              </Typography>
+                            </Box>
+                          </Stack>
+                        </TableCell>
+
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={600} color={NAVY}>
+                            {formatDate(getRegistrationDateValue(project))}
+                          </Typography>
+                        </TableCell>
+
+                        <TableCell>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <SolarPower sx={{ fontSize: 18, color: alpha(NAVY, 0.75) }} />
+                            <Typography variant="body2" fontWeight={600} color={NAVY}>
+                              {project.solarRequirement || project.capacity || "—"}
+                            </Typography>
+                          </Stack>
+                        </TableCell>
+
+                        <TableCell>
+                          <Chip
+                            icon={registrationMeta.icon}
+                            label={registrationMeta.label}
+                            size="small"
+                            sx={{
+                              bgcolor: registrationMeta.bg,
+                              color: registrationMeta.color,
+                              fontWeight: 700,
+                              "& .MuiChip-icon": { color: `${registrationMeta.color} !important` },
+                            }}
+                          />
+                        </TableCell>
+
+                        <TableCell>
+                          <Chip
+                            icon={leadMeta.icon}
+                            label={leadMeta.label}
+                            size="small"
+                            sx={{
+                              bgcolor: leadMeta.bg,
+                              color: leadMeta.color,
+                              fontWeight: 700,
+                              "& .MuiChip-icon": { color: `${leadMeta.color} !important` },
+                            }}
+                          />
+                        </TableCell>
+
+                        <TableCell>
+                          <Typography variant="subtitle2" fontWeight={700} color={NAVY}>
+                            {assignedPerson?.name || "Unassigned"}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {(assignedPerson?.role || "Team").toUpperCase()}
+                          </Typography>
+                        </TableCell>
+
+                        <TableCell align="right">
+                          <Stack direction="row" spacing={0.75} justifyContent="flex-end" alignItems="center">
+                            <Tooltip title="View details">
+                              <IconButton
+                                size="small"
+                                onClick={() => openRegistrationAction(project, "view")}
+                                sx={{ color: NAVY_LT, bgcolor: alpha(NAVY, 0.06), "&:hover": { bgcolor: alpha(NAVY, 0.12) } }}
+                              >
+                                <Visibility sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Edit">
+                              <IconButton
+                                size="small"
+                                onClick={() => openRegistrationAction(project, "edit")}
+                                sx={{ color: BLUE, bgcolor: alpha(BLUE, 0.08), "&:hover": { bgcolor: alpha(BLUE, 0.14) } }}
+                              >
+                                <Edit sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Upload documents">
+                              <IconButton
+                                size="small"
+                                onClick={() => openRegistrationAction(project, "upload")}
+                                sx={{ color: EMERALD, bgcolor: alpha(EMERALD, 0.1), "&:hover": { bgcolor: alpha(EMERALD, 0.16) } }}
+                              >
+                                <CloudUpload sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            <TablePagination
+              component="div"
+              count={filtered.length}
+              page={page}
+              onPageChange={(_, p) => setPage(p)}
+              rowsPerPage={rowsPerPage}
+              onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+              rowsPerPageOptions={[5, 10, 25]}
+              sx={{ borderTop: `1px solid ${BORDER}`, color: alpha(NAVY, 0.7) }}
+            />
+          </>
+        )}
+
         {/* Table */}
-        {!loading && viewMode === "table" && filtered.length > 0 && (
+        {!loading && viewMode === "table" && !showRegistrationRows && filtered.length > 0 && (
           <>
             <TableContainer>
               <Table>

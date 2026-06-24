@@ -120,7 +120,6 @@ const DEAL_PIPELINE_STAGES = [
   { key: "qualified", label: "Qualified", icon: <AssignmentTurnedIn />, sub: "Needs confirmed" },
   { key: "site_visit_scheduled", label: "Site Visit", icon: <AccessTime />, sub: "Visit booked" },
   { key: "proposal_sent", label: "Proposal Sent", icon: <DescriptionOutlined />, sub: "Quote shared" },
-  { key: "won", label: "Won", icon: <CheckCircle />, sub: "Deal closed" },
   { key: "project_converted", label: "Project Converted", icon: <Workspaces />, sub: "Active project" },
 ];
 
@@ -823,6 +822,8 @@ function WorkOrderDialog({ open, onClose, lead, quotations, siteSurveyRecord, sh
 
 const IMAGE_DOCUMENT_REGEX = /\.(jpg|jpeg|png|gif|bmp|webp)(\?.*)?$/i;
 const PDF_DOCUMENT_REGEX = /\.pdf(\?.*)?$/i;
+const CLOUDINARY_IMAGE_DOCUMENT_REGEX = /res\.cloudinary\.com\/.+\/image\/upload\//i;
+const CLOUDINARY_PDF_DOCUMENT_REGEX = /res\.cloudinary\.com\/.+\/(?:image|raw)\/upload\/.+\.pdf(\?.*)?$/i;
 const MAX_DOCUMENT_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_DOCUMENT_FILE_TYPES = [
   "image/jpeg",
@@ -831,8 +832,14 @@ const ALLOWED_DOCUMENT_FILE_TYPES = [
   "application/pdf",
 ];
 
-const isImageDocumentUrl = (url) => Boolean(url && IMAGE_DOCUMENT_REGEX.test(url));
-const isPdfDocumentUrl = (url) => Boolean(url && PDF_DOCUMENT_REGEX.test(url));
+const isPdfDocumentUrl = (url) =>
+  Boolean(url && (PDF_DOCUMENT_REGEX.test(url) || CLOUDINARY_PDF_DOCUMENT_REGEX.test(url)));
+const isImageDocumentUrl = (url) =>
+  Boolean(
+    url &&
+      !isPdfDocumentUrl(url) &&
+      (IMAGE_DOCUMENT_REGEX.test(url) || CLOUDINARY_IMAGE_DOCUMENT_REGEX.test(url))
+  );
 
 const getFileNameFromUrl = (url) => {
   if (!url) return "";
@@ -1025,7 +1032,7 @@ const buildSiteVisitEntries = (lead, customActivities = [], assignedPerson = nul
 
 const getDealPipelineStageIndex = (lead, quotationEntries = []) => {
   if (!lead) return 0;
-  if (lead.isProject) return 6;
+  if (lead.isProject) return 5;
 
   const status = String(lead.status || "").toLowerCase();
   const visitStatus = String(lead.visitStatus || "").toLowerCase();
@@ -1040,10 +1047,10 @@ const getDealPipelineStageIndex = (lead, quotationEntries = []) => {
     status === "visit" ||
     Boolean(lead.visitDate);
   const hasProposalSent = Array.isArray(quotationEntries) && quotationEntries.length > 0;
-  const hasWon = ["bank at pending", "disbursement", "installation completion"].includes(status);
+  const hasPostProposalStage = ["bank at pending", "disbursement", "installation completion"].includes(status);
 
-  if (hasWon) {
-    return 5;
+  if (hasPostProposalStage) {
+    return 4;
   }
 
   if (hasProposalSent) return 4;
@@ -1681,7 +1688,7 @@ export default function LeadDetailsPage() {
         isProject: true,
       }));
       setSnackbar({ open: true, message: "Lead converted to project.", severity: "success" });
-      navigate("/projects", { state: { highlightProjectId: leadDetails._id } });
+      navigate("/total-visits", { state: { highlightLeadId: leadDetails._id } });
     } catch (error) {
       setSnackbar({
         open: true,

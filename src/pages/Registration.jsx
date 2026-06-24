@@ -121,6 +121,7 @@ import {
   PictureAsPdfOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
+import LeadAssignDialog from "../components/LeadAssignDialog";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -3013,6 +3014,7 @@ export default function RegistrationPage() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [documentUploadModalOpen, setDocumentUploadModalOpen] = useState(false);
+  const [assignLeadModalOpen, setAssignLeadModalOpen] = useState(false);
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState("");
   const [selectedRegistration, setSelectedRegistration] = useState(null);
@@ -3376,6 +3378,24 @@ export default function RegistrationPage() {
     [fetchRegistrationsData, showSnackbar],
   );
 
+  const handleAssignClick = useCallback(
+    (registration) => {
+      if (!registration?._id) {
+        showSnackbar("Invalid registration data", "error");
+        return;
+      }
+
+      if (!userPermissions.canManage) {
+        showSnackbar("You don't have permission to assign this registration", "error");
+        return;
+      }
+
+      setSelectedRegistration(registration);
+      setAssignLeadModalOpen(true);
+    },
+    [showSnackbar, userPermissions],
+  );
+
   const handleActionMenuOpen = useCallback((event, registration) => {
     setActionMenuAnchor(event.currentTarget);
     setSelectedActionRegistration(registration);
@@ -3538,6 +3558,16 @@ export default function RegistrationPage() {
         registration={selectedRegistration}
         onUpload={handleDocumentUpload}
         userRole={userRole}
+        showSnackbar={showSnackbar}
+      />
+
+      <LeadAssignDialog
+        open={assignLeadModalOpen}
+        onClose={() => setAssignLeadModalOpen(false)}
+        record={selectedRegistration}
+        recordTypeLabel="Registration"
+        userRole={userRole}
+        onAssigned={fetchRegistrationsData}
         showSnackbar={showSnackbar}
       />
 
@@ -4303,9 +4333,32 @@ export default function RegistrationPage() {
                                   </Typography>
                                 </Box>
                               ) : (
-                                <Typography variant="body2" color="text.secondary">
-                                  Unassigned
-                                </Typography>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => handleAssignClick(registration)}
+                                  disabled={!userPermissions.canManage}
+                                  sx={{
+                                    minWidth: 96,
+                                    px: 1.5,
+                                    py: 0.5,
+                                    borderRadius: 2,
+                                    borderStyle: "dashed",
+                                    borderColor: alpha(PRIMARY, 0.45),
+                                    color: PRIMARY,
+                                    fontWeight: 600,
+                                    textTransform: "none",
+                                    cursor: userPermissions.canManage ? "pointer" : "not-allowed",
+                                    "&.Mui-disabled": {
+                                      color: PRIMARY,
+                                      WebkitTextFillColor: PRIMARY,
+                                      borderColor: alpha(PRIMARY, 0.45),
+                                      opacity: 0.8,
+                                    },
+                                  }}
+                                >
+                                  + Assign
+                                </Button>
                               );
                             })()}
                           </TableCell>

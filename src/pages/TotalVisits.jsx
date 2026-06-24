@@ -108,6 +108,7 @@ import {
   FiberManualRecord,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
+import LeadAssignDialog from "../components/LeadAssignDialog";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { TimePicker } from "@mui/x-date-pickers/TimePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -124,6 +125,7 @@ import {
 } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import Save from "@mui/icons-material/Save";
+import { toBackendAssetUrl } from "../utils/backendAssetUrl";
 
 // ========== DESIGN TOKENS ==========
 const PRIMARY = "#0f1f3d";
@@ -336,6 +338,122 @@ const formatVisitTimeForSave = (value) => {
 
 const getInitials = (firstName, lastName) =>
   `${firstName?.charAt(0) || ""}${lastName?.charAt(0) || ""}`.toUpperCase();
+
+const formatSurveyValue = (value) => {
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "—";
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "string") return value.trim() || "—";
+  return String(value);
+};
+
+const getPhotoUrl = (photo) => {
+  if (!photo) return "";
+  if (typeof photo === "string") return toBackendAssetUrl(photo);
+  return toBackendAssetUrl(
+    photo.url ||
+      photo.uri ||
+      photo.photoUrl ||
+      photo.imageUrl ||
+      photo.secure_url ||
+      photo.downloadURL ||
+      photo.path ||
+      photo.location ||
+      photo.filename ||
+      photo.filePath ||
+      photo.file_url ||
+      photo.src ||
+      ""
+  );
+};
+
+const getVisitCoordinates = (visit) => {
+  if (visit?.visitCoordinates?.lat != null && visit?.visitCoordinates?.lng != null) {
+    return visit.visitCoordinates;
+  }
+  if (visit?.coordinates?.lat != null && visit?.coordinates?.lng != null) {
+    return visit.coordinates;
+  }
+  if (visit?.siteSurvey?.latitude != null && visit?.siteSurvey?.longitude != null) {
+    return {
+      lat: Number(visit.siteSurvey.latitude),
+      lng: Number(visit.siteSurvey.longitude),
+    };
+  }
+  return null;
+};
+
+const getVisitPhotoUrls = (visit) => {
+  const surveyPhotos = Array.isArray(visit?.siteSurvey?.photos) ? visit.siteSurvey.photos : [];
+  const visitPhotos = Array.isArray(visit?.visitPhotos) ? visit.visitPhotos : [];
+  return [...surveyPhotos, ...visitPhotos]
+    .map(getPhotoUrl)
+    .filter((url, index, arr) => url && arr.indexOf(url) === index);
+};
+
+const hasSiteSurveyData = (visit) =>
+  Boolean(
+    visit?.siteSurvey &&
+      (visit.siteSurvey.savedAt ||
+        visit.siteSurvey.summary ||
+        visit.siteSurvey.locationName ||
+        visit.siteSurvey.latitude ||
+        visit.siteSurvey.longitude ||
+        visit.siteSurvey.photos?.length)
+  );
+
+const normalizeLeadStatus = (status) => {
+  const safeStatus = String(status || "").trim();
+  if (!safeStatus || safeStatus === "Other") return "Visit";
+  return safeStatus;
+};
+
+const isSiteSurveySummaryText = (value) =>
+  String(value || "").trim().toLowerCase().startsWith("site survey summary");
+
+const getCleanVisitNotes = (visit) => {
+  const rawNotes = String(visit?.visitNotes || visit?.remarks || "").trim();
+  if (!rawNotes) return "";
+  if (isSiteSurveySummaryText(rawNotes)) {
+    return String(visit?.siteSurvey?.remarks || "").trim();
+  }
+  return rawNotes;
+};
+
+const getAssignedPerson = (visit) => visit?.assignedUser || visit?.assignedManager || null;
+
+const getAssignedPersonName = (person) =>
+  [person?.firstName, person?.lastName].filter(Boolean).join(" ").trim() ||
+  person?.name ||
+  person?.companyName ||
+  person?.email ||
+  "";
+
+const getAssignedPersonRole = (visit) => {
+  const person = getAssignedPerson(visit);
+  if (!person) return "";
+  return person.role || (visit?.assignedUser ? "Assigned User" : "Manager");
+};
+
+const SITE_SURVEY_FIELDS = [
+  ["roofType", "Roof Type"],
+  ["roofMaterial", "Roof Material"],
+  ["roofCondition", "Roof Condition"],
+  ["shadingIssues", "Shading Issues"],
+  ["siteAccess", "Site Access"],
+  ["existingElectricalLoad", "Existing Electrical Load"],
+  ["mainDistributionBoardLocation", "Main DB Location"],
+  ["earthingAvailable", "Earthing Available"],
+  ["phaseType", "Phase Type"],
+  ["recommendedPanelBrand", "Recommended Panel Brand"],
+  ["recommendedInverterBrand", "Recommended Inverter Brand"],
+  ["inverterType", "Inverter Type"],
+  ["availableRoofArea", "Available Roof Area"],
+  ["usableRoofArea", "Usable Roof Area"],
+  ["distanceFromRoofToDb", "Distance Roof to DB"],
+  ["customerExpectations", "Customer Expectations"],
+  ["specialRequirements", "Special Requirements"],
+  ["challengesConcerns", "Challenges / Concerns"],
+];
 
 // ========== STATUS PILL ==========
 const StatusPill = ({ status }) => {
@@ -565,8 +683,9 @@ const MobileFilterDrawer = ({
 const MobileVisitCard = ({ visit, onView, onEdit }) => {
   const [expanded, setExpanded] = useState(false);
   const visitStatusConfig = getStatusConfig(visit.visitStatus);
-  const leadStatusConfig = getLeadStatusConfig(visit.status);
+  const leadStatusConfig = getLeadStatusConfig(normalizeLeadStatus(visit.status));
   const initials = getInitials(visit.firstName, visit.lastName);
+  const cleanVisitNotes = getCleanVisitNotes(visit);
 
   return (
     <Paper elevation={0} sx={{
@@ -634,18 +753,18 @@ const MobileVisitCard = ({ visit, onView, onEdit }) => {
 
         <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
           <StatusPill status={visit.visitStatus} />
-          <LeadPill status={visit.status} />
+          <LeadPill status={normalizeLeadStatus(visit.status)} />
         </Box>
 
         <Collapse in={expanded}>
           <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${alpha(PRIMARY, 0.08)}` }}>
-            {(visit.visitNotes || visit.remarks) && (
+            {cleanVisitNotes && (
               <Box sx={{ mb: 1.5, p: 1.5, background: GRAD_CARD, borderRadius: 2, border: `1px solid ${alpha(ACCENT, 0.15)}` }}>
                 <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-                  {visit.status === "Other" ? "Description" : "Notes"}
+                  Visit Notes
                 </Typography>
                 <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
-                  {visit.visitNotes || visit.remarks}
+                  {cleanVisitNotes}
                 </Typography>
               </Box>
             )}
@@ -675,11 +794,18 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
   const [activeTab, setActiveTab] = useState(0);
   const userRoleConfig = useMemo(() => getRoleConfig(userRole), [userRole]);
   const visitStatusConfig = useMemo(() => getStatusConfig(visit?.visitStatus), [visit?.visitStatus]);
-  const leadStatusConfig = useMemo(() => getLeadStatusConfig(visit?.status), [visit?.status]);
+  const leadStatusConfig = useMemo(
+    () => getLeadStatusConfig(normalizeLeadStatus(visit?.status)),
+    [visit?.status]
+  );
 
   if (!visit) return null;
-  const notesLabel = visit.status === "Other" ? "Description" : "Visit Notes";
-  const visitNotes = visit.visitNotes || visit.remarks || "";
+  const notesLabel = "Visit Notes";
+  const visitNotes = getCleanVisitNotes(visit);
+  const siteSurvey = hasSiteSurveyData(visit) ? visit.siteSurvey : null;
+  const surveyGeneral = siteSurvey?.general || {};
+  const visitCoordinates = getVisitCoordinates(visit);
+  const photoUrls = getVisitPhotoUrls(visit);
 
   const infoSectionSx = {
     p: 2.5, borderRadius: 3,
@@ -729,7 +855,7 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
               </Box>
               <Box sx={infoRowSx}>
                 <Typography variant="body2" color="text.secondary">Lead status</Typography>
-                <LeadPill status={visit.status} />
+                <LeadPill status={normalizeLeadStatus(visit.status)} />
               </Box>
               <Box sx={infoRowSx}>
                 <Typography variant="body2" color="text.secondary">Visit date</Typography>
@@ -754,6 +880,75 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
               <Typography variant="body2" sx={{ wordBreak: "break-word" }}>{visit.visitLocation}</Typography>
             </Box>
           )}
+          {visitCoordinates && (
+            <Box sx={infoSectionSx}>
+              <Typography sx={infoSectionTitleSx}><LocationOn sx={{ fontSize: 16 }} /> GPS coordinates</Typography>
+              <Stack>
+                <Box sx={infoRowSx}>
+                  <Typography variant="body2" color="text.secondary">Latitude</Typography>
+                  <Typography variant="body2" fontWeight={500}>{visitCoordinates.lat}</Typography>
+                </Box>
+                <Box sx={infoRowSx}>
+                  <Typography variant="body2" color="text.secondary">Longitude</Typography>
+                  <Typography variant="body2" fontWeight={500}>{visitCoordinates.lng}</Typography>
+                </Box>
+              </Stack>
+            </Box>
+          )}
+          {(visit.checkInTime || visit.checkOutTime || visit.timeSpentMinutes) && (
+            <Box sx={infoSectionSx}>
+              <Typography sx={infoSectionTitleSx}><AccessTime sx={{ fontSize: 16 }} /> Visit time</Typography>
+              <Stack>
+                {visit.checkInTime && (
+                  <Box sx={infoRowSx}>
+                    <Typography variant="body2" color="text.secondary">Check-in</Typography>
+                    <Typography variant="body2" fontWeight={500}>
+                      {formatDate(visit.checkInTime, "dd MMM yyyy · hh:mm a")}
+                    </Typography>
+                  </Box>
+                )}
+                {visit.checkOutTime && (
+                  <Box sx={infoRowSx}>
+                    <Typography variant="body2" color="text.secondary">Check-out</Typography>
+                    <Typography variant="body2" fontWeight={500}>
+                      {formatDate(visit.checkOutTime, "dd MMM yyyy · hh:mm a")}
+                    </Typography>
+                  </Box>
+                )}
+                {visit.timeSpentMinutes ? (
+                  <Box sx={infoRowSx}>
+                    <Typography variant="body2" color="text.secondary">Time spent</Typography>
+                    <Typography variant="body2" fontWeight={500}>{visit.timeSpentMinutes} min</Typography>
+                  </Box>
+                ) : null}
+              </Stack>
+            </Box>
+          )}
+          {photoUrls.length > 0 && (
+            <Box sx={infoSectionSx}>
+              <Typography sx={infoSectionTitleSx}><Visibility sx={{ fontSize: 16 }} /> Visit images</Typography>
+              <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
+                {photoUrls.map((photoUrl, index) => (
+                  <Box
+                    key={`${photoUrl}-${index}`}
+                    component="img"
+                    src={photoUrl}
+                    alt={`Visit ${index + 1}`}
+                    onClick={() => window.open(photoUrl, "_blank", "noopener,noreferrer")}
+                    sx={{
+                      width: 96,
+                      height: 96,
+                      borderRadius: 2,
+                      objectFit: "cover",
+                      cursor: "pointer",
+                      border: `1px solid ${alpha(ACCENT, 0.15)}`,
+                      boxShadow: "0 4px 12px rgba(15,31,61,0.08)",
+                    }}
+                  />
+                ))}
+              </Stack>
+            </Box>
+          )}
           {visitNotes ? (
             <Box sx={infoSectionSx}>
               <Typography sx={infoSectionTitleSx}><Notes sx={{ fontSize: 16 }} /> {notesLabel}</Typography>
@@ -767,6 +962,100 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
             </Box>
           )}
         </Stack>
+      ),
+    },
+    {
+      label: "Site Survey", icon: <HowToReg sx={{ fontSize: 18 }} />,
+      content: siteSurvey ? (
+        <Stack spacing={2}>
+          <Box sx={infoSectionSx}>
+            <Typography sx={infoSectionTitleSx}><Info sx={{ fontSize: 16 }} /> Survey summary</Typography>
+            <Stack>
+              <Box sx={infoRowSx}>
+                <Typography variant="body2" color="text.secondary">Saved on</Typography>
+                <Typography variant="body2" fontWeight={500}>
+                  {formatDate(siteSurvey.savedAt, "dd MMM yyyy · hh:mm a")}
+                </Typography>
+              </Box>
+              <Box sx={infoRowSx}>
+                <Typography variant="body2" color="text.secondary">Location</Typography>
+                <Typography variant="body2" fontWeight={500}>
+                  {siteSurvey.locationName || visit.visitLocation || "—"}
+                </Typography>
+              </Box>
+              <Box sx={infoRowSx}>
+                <Typography variant="body2" color="text.secondary">Status</Typography>
+                <Typography variant="body2" fontWeight={500}>
+                  {siteSurvey.status || "Completed"}
+                </Typography>
+              </Box>
+            </Stack>
+          </Box>
+
+          <Box sx={infoSectionSx}>
+            <Typography sx={infoSectionTitleSx}><HowToReg sx={{ fontSize: 16 }} /> Survey details</Typography>
+            <Grid container spacing={1.5}>
+              {SITE_SURVEY_FIELDS.map(([key, label]) => (
+                <Grid item xs={12} sm={6} key={key}>
+                  <Box
+                    sx={{
+                      p: 1.25,
+                      borderRadius: 2,
+                      background: "rgba(255,255,255,0.7)",
+                      border: `1px solid ${alpha(ACCENT, 0.08)}`,
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary">{label}</Typography>
+                    <Typography variant="body2" fontWeight={600} sx={{ mt: 0.35 }}>
+                      {formatSurveyValue(surveyGeneral[key])}
+                    </Typography>
+                  </Box>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+
+          {(siteSurvey.remarks || siteSurvey.summary) && (
+            <Box sx={infoSectionSx}>
+              <Typography sx={infoSectionTitleSx}><Notes sx={{ fontSize: 16 }} /> Survey notes</Typography>
+              <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                {siteSurvey.remarks || siteSurvey.summary}
+              </Typography>
+            </Box>
+          )}
+
+          {photoUrls.length > 0 && (
+            <Box sx={infoSectionSx}>
+              <Typography sx={infoSectionTitleSx}><Visibility sx={{ fontSize: 16 }} /> Survey photos</Typography>
+              <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
+                {photoUrls.map((photoUrl, index) => (
+                  <Box
+                    key={`survey-${photoUrl}-${index}`}
+                    component="img"
+                    src={photoUrl}
+                    alt={`Survey ${index + 1}`}
+                    onClick={() => window.open(photoUrl, "_blank", "noopener,noreferrer")}
+                    sx={{
+                      width: 96,
+                      height: 96,
+                      borderRadius: 2,
+                      objectFit: "cover",
+                      cursor: "pointer",
+                      border: `1px solid ${alpha(ACCENT, 0.15)}`,
+                      boxShadow: "0 4px 12px rgba(15,31,61,0.08)",
+                    }}
+                  />
+                ))}
+              </Stack>
+            </Box>
+          )}
+        </Stack>
+      ) : (
+        <Box sx={infoSectionSx}>
+          <Typography variant="body2" color="text.secondary" fontStyle="italic">
+            No site survey data available for this visit.
+          </Typography>
+        </Box>
       ),
     },
     {
@@ -814,7 +1103,6 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
               </Typography>
               <Typography variant="caption" sx={{ opacity: 0.8 }}>
                 Visit Details · ID: {visit._id?.slice(-8)}
-                {visit.status === "Other" && " · Other Visit"}
               </Typography>
             </Box>
           </Box>
@@ -880,8 +1168,8 @@ const EditVisitModal = React.memo(({ open, onClose, visit, onSave, userRole, sho
         visitDate: visit.visitDate && isValid(parseISO(visit.visitDate)) ? parseISO(visit.visitDate) : null,
         visitTime: parseVisitTime(visit.visitTime),
         visitLocation: visit.visitLocation || "",
-        status: visit.status || "Visit",
-        visitNotes: visit.visitNotes || "",
+        status: normalizeLeadStatus(visit.status),
+        visitNotes: getCleanVisitNotes(visit),
         followUpAction: visit.followUpAction || "",
         followUpNotes: visit.followUpNotes || "",
         locationImage: null, locationImagePreview: visit.locationImageUrl || null,
@@ -949,8 +1237,8 @@ const EditVisitModal = React.memo(({ open, onClose, visit, onSave, userRole, sho
   }, [validationErrors]);
 
   if (!visit) return null;
-  const notesLabel = visit.status === "Other" ? "Description" : "Visit Notes";
-  const notesPlaceholder = visit.status === "Other" ? "Add or update the description for this visit" : "Add any notes related to this visit";
+  const notesLabel = "Visit Notes";
+  const notesPlaceholder = "Add any notes related to this visit";
 
   const fieldSx = { "& .MuiOutlinedInput-root": { borderRadius: "10px" } };
 
@@ -972,7 +1260,7 @@ const EditVisitModal = React.memo(({ open, onClose, visit, onSave, userRole, sho
             <Box>
               <Typography variant="h6" fontWeight={700} sx={{ fontSize: { xs: "1rem", sm: "1.1rem" } }}>Edit Visit</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                {visit.firstName} {visit.lastName}{visit.status === "Other" && " · Other Visit"}
+                {visit.firstName} {visit.lastName}
               </Typography>
             </Box>
           </Box>
@@ -1205,6 +1493,7 @@ export default function TotalVisitsPage() {
   const [rowsPerPage, setRowsPerPage] = useState(isMobile ? 10 : DEFAULT_ITEMS_PER_PAGE);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [assignLeadModalOpen, setAssignLeadModalOpen] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [viewMode, setViewMode] = useState(isMobile ? "card" : "table");
@@ -1230,16 +1519,52 @@ export default function TotalVisitsPage() {
       ]);
 
       if (response?.success) {
-        const leadVisits = response.result?.visits || response.result || [];
+        const leadVisitsRaw = response.result?.visits || response.result || [];
+        const leadVisits = leadVisitsRaw.map((v) => ({
+          ...v,
+          visitPhotos: Array.isArray(v?.siteSurvey?.photos) ? v.siteSurvey.photos : [],
+          visitCoordinates:
+            v?.siteSurvey?.latitude != null && v?.siteSurvey?.longitude != null
+              ? { lat: Number(v.siteSurvey.latitude), lng: Number(v.siteSurvey.longitude) }
+              : null,
+          locationImageUrl: getPhotoUrl(v?.siteSurvey?.photos?.[0] || ""),
+        }));
         const rawVisits = visitResponse?.result?.visits || [];
         const otherVisits = rawVisits.map((v) => ({
           _id: v._id, firstName: v.contactPerson || v.user?.firstName || "", lastName: v.contactPerson ? "" : (v.user?.lastName || ""),
-          phone: v.phone || "", email: v.email || "", status: "Other",
+          phone: v.phone || "", email: v.email || "", status: "Visit", visitType: "Other",
           visitStatus: v.status || "Completed", visitDate: v.visitDate || v.createdAt,
           visitTime: v.checkInTime || v.createdAt, visitLocation: v.locationName || "",
-          visitNotes: v.remarks || "", createdAt: v.createdAt, updatedAt: v.updatedAt,
-          assignedUser: v.user ? { _id: v.user._id, firstName: v.user.firstName, lastName: v.user.lastName } : null,
-          assignedManager: null,
+          visitNotes: isSiteSurveySummaryText(v.remarks) ? "" : (v.remarks || ""), createdAt: v.createdAt, updatedAt: v.updatedAt,
+          checkInTime: v.checkInTime || null, checkOutTime: v.checkOutTime || null,
+          timeSpentMinutes: v.timeSpentMinutes || 0,
+          travelTimeMinutes: v.travelTimeMinutes || 0,
+          visitCoordinates: v.coordinates || null,
+          visitPhotos: Array.isArray(v.photos) ? v.photos : [],
+          locationImageUrl: getPhotoUrl(v?.photos?.[0] || ""),
+          address: v.address || "",
+          assignedUser: v.assignedUser
+            ? {
+                _id: v.assignedUser._id,
+                firstName: v.assignedUser.firstName,
+                lastName: v.assignedUser.lastName,
+                name: v.assignedUser.name,
+                companyName: v.assignedUser.companyName,
+                email: v.assignedUser.email,
+                role: v.assignedUser.role,
+              }
+            : null,
+          assignedManager: v.assignedManager
+            ? {
+                _id: v.assignedManager._id,
+                firstName: v.assignedManager.firstName,
+                lastName: v.assignedManager.lastName,
+                name: v.assignedManager.name,
+                companyName: v.assignedManager.companyName,
+                email: v.assignedManager.email,
+                role: v.assignedManager.role,
+              }
+            : null,
         }));
 
         const visits = [...leadVisits, ...otherVisits].sort(
@@ -1359,6 +1684,23 @@ export default function TotalVisitsPage() {
   const handleViewClick = useCallback((visit) => { if (!visit?._id) { showSnackbar("Invalid visit data", "error"); return; } setSelectedVisit(visit); setViewModalOpen(true); }, [showSnackbar]);
   const handleEditClick = useCallback((visit) => { if (!visit?._id) { showSnackbar("Invalid visit data", "error"); return; } setSelectedVisit(visit); setEditModalOpen(true); }, [showSnackbar]);
   const handleVisitUpdate = useCallback(async () => { try { await fetchVisitsData(); } catch (err) { showSnackbar("Failed to refresh data", "error"); } }, [fetchVisitsData, showSnackbar]);
+  const handleAssignClick = useCallback(
+    (visit) => {
+      if (!visit?._id) {
+        showSnackbar("Invalid visit data", "error");
+        return;
+      }
+
+      if (!["Admin_panel", "ZSM", "Incharge"].includes(userRole)) {
+        showSnackbar("You don't have permission to assign this visit", "error");
+        return;
+      }
+
+      setSelectedVisit(visit);
+      setAssignLeadModalOpen(true);
+    },
+    [showSnackbar, userRole],
+  );
   const handleCloseSnackbar = useCallback(() => setSnackbar((p) => ({ ...p, open: false })), []);
   const handleStatusCheckboxChange = useCallback((s) => setSelectedStatuses((p) => ({ ...p, [s]: !p[s] })), []);
   const handleClearFilters = useCallback(() => {
@@ -1420,6 +1762,15 @@ export default function TotalVisitsPage() {
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <ViewVisitModal open={viewModalOpen} onClose={() => setViewModalOpen(false)} visit={selectedVisit} userRole={userRole} showSnackbar={showSnackbar} />
       <EditVisitModal open={editModalOpen} onClose={() => setEditModalOpen(false)} visit={selectedVisit} onSave={handleVisitUpdate} userRole={userRole} showSnackbar={showSnackbar} updating={updating} />
+      <LeadAssignDialog
+        open={assignLeadModalOpen}
+        onClose={() => setAssignLeadModalOpen(false)}
+        record={selectedVisit}
+        recordTypeLabel="Visit"
+        userRole={userRole}
+        onAssigned={fetchVisitsData}
+        showSnackbar={showSnackbar}
+      />
       <MobileFilterDrawer
         open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}
         period={period} setPeriod={setPeriod} statusFilter={statusFilter} setStatusFilter={setStatusFilter}
@@ -1741,7 +2092,6 @@ export default function TotalVisitsPage() {
                           </Avatar>
                           <Box>
                             <Typography variant="body2" fontWeight={600} sx={{ color: PRIMARY }}>{visit.firstName} {visit.lastName}</Typography>
-                            {visit.status === "Other" && <Typography variant="caption" color="text.secondary">(Other visit)</Typography>}
                           </Box>
                         </Stack>
                       </TableCell>
@@ -1773,12 +2123,45 @@ export default function TotalVisitsPage() {
                                 ? `${visit.assignedUser.firstName || ""} ${visit.assignedUser.lastName || ""}`.trim()
                                 : `${visit.assignedManager?.firstName || ""} ${visit.assignedManager?.lastName || ""}`.trim()}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" color="text.secondary">
                               {visit.assignedUser ? visit.assignedUser.role || "Assigned User" : visit.assignedManager?.role || "Manager"}
                             </Typography>
                           </Box>
+                        ) : visit.visitType === "Other" ? (
+                          <Typography variant="body2" color="text.secondary">
+                            —
+                          </Typography>
                         ) : (
-                          <Typography variant="body2" color="text.secondary" fontStyle="italic">Unassigned</Typography>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleAssignClick(visit)}
+                            disabled={!["Admin_panel", "ZSM", "Incharge"].includes(userRole)}
+                            sx={{
+                              minWidth: 96,
+                              px: 1.5,
+                              py: 0.5,
+                              borderRadius: 2,
+                              borderStyle: "dashed",
+                              borderColor: alpha(PRIMARY, 0.45),
+                              color: PRIMARY,
+                              fontWeight: 600,
+                              textTransform: "none",
+                              cursor: "pointer",
+                              "&.Mui-disabled": {
+                                color: PRIMARY,
+                                WebkitTextFillColor: PRIMARY,
+                                borderColor: alpha(PRIMARY, 0.45),
+                                opacity: 0.8,
+                              },
+                              "&:hover": {
+                                borderColor: PRIMARY,
+                                bgcolor: alpha(PRIMARY, 0.05),
+                              },
+                            }}
+                          >
+                            + Assign
+                          </Button>
                         )}
                       </TableCell>
                       <TableCell sx={{ pr: 3 }}>

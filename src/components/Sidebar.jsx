@@ -43,6 +43,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExpandMore,
+  Inventory2Outlined,
   Menu as MenuIcon,
   Close as CloseIcon,
   RequestQuote,
@@ -124,6 +125,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         roles: ["Admin_panel","ZSM","Incharge","TEAM"],
       },
       { text: "Leave Management",   icon: <EventBusy />,          path: "/leave-management",   roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
+      { text: "Leave Types",        icon: <Inventory2Outlined />, path: "/leave-types",        roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Holiday Management", icon: <Celebration />,        path: "/holiday-management", roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       {
         text: "Location Visit",
@@ -151,7 +153,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         { text: "Overview",    icon: <Dashboard />,    itemNames: ["Dashboard","Lead Funnel"] },
         { text: "Leads",       icon: <FilterAlt />,    itemNames: ["All Leads","Missed Leads","Import Leads"] },
         { text: "Projects",    icon: <TaskAlt />,      itemNames: ["Projects","Total Visits","Registration","Document","Payment","Loan Pending","Installation","Disbursement","3D Design","Add Quotation","All Quotes"] },
-        { text: "Attendance",  icon: <CalendarMonth />,itemNames: ["Team Attendance","My Attendance","Leave Management","Holiday Management"] },
+        { text: "Attendance",  icon: <CalendarMonth />,itemNames: ["Team Attendance","My Attendance","Leave Management","Leave Types","Holiday Management"] },
         { text: "Team",        icon: <Groups />,       itemNames: ["Location Visit","Expense","Users"] },
         { text: "Insights",    icon: <Insights />,     itemNames: ["Reports","Notifications"] },
       ]

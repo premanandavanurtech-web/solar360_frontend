@@ -31,6 +31,19 @@ const DOCUMENT_FIELDS = [
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
 const IMAGE_FILE_REGEX = /\.(jpg|jpeg|png|gif|bmp|webp)(\?.*)?$/i;
+const PDF_FILE_REGEX = /\.pdf(\?.*)?$/i;
+const CLOUDINARY_IMAGE_FILE_REGEX = /res\.cloudinary\.com\/.+\/image\/upload\//i;
+const CLOUDINARY_PDF_FILE_REGEX = /res\.cloudinary\.com\/.+\/(?:image|raw)\/upload\/.+\.pdf(\?.*)?$/i;
+
+const isPdfPreviewUrl = (url) =>
+  Boolean(url && (PDF_FILE_REGEX.test(url) || CLOUDINARY_PDF_FILE_REGEX.test(url)));
+
+const isImagePreviewUrl = (url) =>
+  Boolean(
+    url &&
+      !isPdfPreviewUrl(url) &&
+      (IMAGE_FILE_REGEX.test(url) || CLOUDINARY_IMAGE_FILE_REGEX.test(url))
+  );
 
 const getFileNameFromUrl = (url) => {
   if (!url) return "";
@@ -213,7 +226,7 @@ export default function PublicDocumentUpload() {
                   {hasUploadedDocs && (
                     <Stack direction="row" spacing={1} sx={{ mt: 1.25, overflowX: "auto", pb: 0.25 }}>
                       {uploadedDocs.map((doc) => {
-                        const isImage = IMAGE_FILE_REGEX.test(doc.url || "");
+                        const isImage = isImagePreviewUrl(doc.url || "");
                         return (
                           <Paper
                             key={`${field.key}-${doc.url}`}

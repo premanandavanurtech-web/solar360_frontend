@@ -9,10 +9,6 @@ import {
   Chip,
   CircularProgress,
   Divider,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   FormControlLabel,
   Grid,
   IconButton,
@@ -64,7 +60,6 @@ import {
   InfoWindow,
   Marker,
   Polygon,
-  Polyline,
   useJsApiLoader,
 } from "@react-google-maps/api";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -4268,12 +4263,11 @@ export const ThreeDDesignDashboard = () => {
 const ThreeDDesign = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { fetchAPI } = useAuth();
   const sourceLead = location.state?.lead || null;
-  const stateDesign = location.state?.design?.points?.length ? location.state.design : null;
-  const sourceLeadDesign = sourceLead?.threeDDesign?.points?.length
-    ? sourceLead.threeDDesign
-    : stateDesign;
+  const shouldRestoreOutline = location.state?.restoreOutline === true;
+  const stateDesign =
+    shouldRestoreOutline && location.state?.design?.points?.length ? location.state.design : null;
+  const sourceLeadDesign = stateDesign || sourceLead?.threeDDesign || null;
   const incomingLeadSeed = useMemo(
     () => getIncomingLeadLocationSeed(sourceLead, location.state?.initialLocation),
     [sourceLead, location.state?.initialLocation]
@@ -4288,8 +4282,8 @@ const ThreeDDesign = () => {
   }, [incomingLeadSeed]);
   const appliedIncomingLeadSeedRef = useRef("");
   const savedRoofPoints = useMemo(
-    () => sanitizeRoofPoints(sourceLeadDesign?.points),
-    [sourceLeadDesign]
+    () => sanitizeRoofPoints(stateDesign?.points),
+    [stateDesign]
   );
   const savedRoofPointsKey = useMemo(
     () => savedRoofPoints.map((point) => `${point.lat},${point.lng}`).join("|"),
@@ -4309,7 +4303,8 @@ const ThreeDDesign = () => {
   const [placeInfoOpen, setPlaceInfoOpen] = useState(
     () => Boolean(incomingLeadSeed?.selectedPlace)
   );
-  const [outlineChoiceOpen, setOutlineChoiceOpen] = useState(() => savedRoofPoints.length > 0);
+  const [mapRenderKey, setMapRenderKey] = useState(0);
+  const [savedOutlineDismissed, setSavedOutlineDismissed] = useState(false);
   const roofPolylineRef = useRef(null);
   const roofPolygonRef = useRef(null);
   const appliedSavedOutlineKeyRef = useRef("");
@@ -4360,7 +4355,11 @@ const ThreeDDesign = () => {
   useEffect(() => {
     if (!savedRoofPoints.length) {
       appliedSavedOutlineKeyRef.current = "";
-      setOutlineChoiceOpen(false);
+      setSavedOutlineDismissed(false);
+      return;
+    }
+
+    if (savedOutlineDismissed) {
       return;
     }
 
@@ -4369,10 +4368,9 @@ const ThreeDDesign = () => {
     }
 
     appliedSavedOutlineKeyRef.current = savedRoofPointsKey;
-    setRoofPoints([]);
-    setOutlineChoiceOpen(true);
-    setStatus(`Saved outline found (${savedRoofPoints.length} points)`);
-  }, [savedRoofPoints, savedRoofPointsKey]);
+    setRoofPoints(savedRoofPoints);
+    setStatus(`Saved outline restored (${savedRoofPoints.length} points)`);
+  }, [savedOutlineDismissed, savedRoofPoints, savedRoofPointsKey]);
 
   const handleSearchResults = useCallback((query, results = []) => {
     const nextResults = results
@@ -4517,22 +4515,11 @@ const ThreeDDesign = () => {
 
   const clearSelection = () => {
     clearRoofOverlays();
+    setSavedOutlineDismissed(true);
     setRoofPoints([]);
+    setMapRenderKey((current) => current + 1);
     setStatus("Selection cleared");
   };
-
-  const continueSavedOutline = useCallback(() => {
-    setRoofPoints(savedRoofPoints);
-    setOutlineChoiceOpen(false);
-    setStatus(`Continuing saved outline (${savedRoofPoints.length} points)`);
-  }, [savedRoofPoints]);
-
-  const startNewOutline = useCallback(() => {
-    clearRoofOverlays();
-    setRoofPoints([]);
-    setOutlineChoiceOpen(false);
-    setStatus("Start selecting roof points");
-  }, [clearRoofOverlays]);
 
   const undoPoint = () => {
     setRoofPoints((currentPoints) => {
@@ -4640,6 +4627,7 @@ const ThreeDDesign = () => {
 
       {isLoaded && (
         <GoogleMap
+          key={`roof-map-${mapRenderKey}`}
           mapContainerStyle={mapContainerStyle}
           center={center}
           zoom={19}
@@ -4685,24 +4673,6 @@ const ThreeDDesign = () => {
               }}
             />
           ))}
-          {roofPoints.length > 1 && (
-            <Polyline
-              key={`roof-polyline-${roofOverlayKey}`}
-              path={roofPoints}
-              onLoad={(polyline) => {
-                roofPolylineRef.current = polyline;
-              }}
-              onUnmount={() => {
-                roofPolylineRef.current = null;
-              }}
-              options={{
-                strokeColor: "#f59e0b",
-                strokeOpacity: 1,
-                strokeWeight: 3,
-                clickable: false,
-              }}
-            />
-          )}
           {roofPoints.length >= 3 && (
             <Polygon
               key={`roof-polygon-${roofOverlayKey}`}
@@ -4785,16 +4755,6 @@ const ThreeDDesign = () => {
                   icon={<Place />}
                   label={status}
                   sx={{ bgcolor: alpha(PRIMARY, 0.08), color: "#20304d" }}
-                />
-                <Chip
-                  size="small"
-                  icon={<HomeWork />}
-                  label={`${roofPoints.length} outline point${roofPoints.length === 1 ? "" : "s"}`}
-                  sx={{
-                    bgcolor:
-                      canGenerateRoofModel(roofPoints) ? alpha(ACCENT, 0.12) : alpha(WARNING, 0.15),
-                    color: canGenerateRoofModel(roofPoints) ? "#0b6f4d" : "#945a00",
-                  }}
                 />
               </Stack>
             </Box>
@@ -4917,10 +4877,27 @@ const ThreeDDesign = () => {
             >
               Generate 3D
             </Button>
-            <Tooltip title="Remove last point" arrow>
+            <Button
+              variant="outlined"
+              startIcon={<Delete />}
+              onClick={clearSelection}
+              disabled={!roofPoints.length}
+              sx={{
+                minWidth: 140,
+                color: "#e53935",
+                borderColor: "rgba(229, 57, 53, 0.28)",
+                "&:hover": {
+                  borderColor: "#e53935",
+                  bgcolor: "rgba(229, 57, 53, 0.05)",
+                },
+              }}
+            >
+              Remove Points
+            </Button>
+            <Tooltip title="Clear all points" arrow>
               <span>
                 <IconButton
-                  onClick={undoPoint}
+                  onClick={clearSelection}
                   disabled={!roofPoints.length}
                   sx={{ border: "1px solid", borderColor: "divider" }}
                 >
@@ -4928,10 +4905,10 @@ const ThreeDDesign = () => {
                 </IconButton>
               </span>
             </Tooltip>
-            <Tooltip title="Clear selection" arrow>
+            <Tooltip title="Remove last point" arrow>
               <span>
                 <IconButton
-                  onClick={clearSelection}
+                  onClick={undoPoint}
                   disabled={!roofPoints.length}
                   sx={{ border: "1px solid", borderColor: "divider" }}
                 >
@@ -4943,30 +4920,6 @@ const ThreeDDesign = () => {
         </Stack>
       </Paper>
 
-      <Dialog
-        open={outlineChoiceOpen}
-        disableEscapeKeyDown
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle sx={{ fontWeight: 800 }}>Saved outline found</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            This lead already has a saved roof outline with {savedRoofPoints.length} point{savedRoofPoints.length === 1 ? "" : "s"}.
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Do you want to continue editing the old outline or start a new one? Starting new will not delete the saved outline until you save again.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button variant="outlined" onClick={startNewOutline}>
-            Start New
-          </Button>
-          <Button variant="contained" onClick={continueSavedOutline}>
-            Continue Old Outline
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };
@@ -5065,21 +5018,27 @@ export const ThreeDDesignPreview = () => {
 
   }, [design, designLeadId, environmentMode, solarConfig, sunConfig]);
 
-  const buildCurrentDraftDesign = useCallback(() => ({
-    ...design,
-    leadId: designLeadId,
-    points: modelPoints,
-    satelliteTextureUrl,
-    solarLayout: solarConfig,
-    sunSettings: sunConfig,
-    environmentMode,
-    captureImage,
-    status: "draft",
-    updatedAt: Date.now(),
-    createdAt: design?.createdAt || Date.now(),
-  }), [captureImage, design, designLeadId, environmentMode, modelPoints, satelliteTextureUrl, solarConfig, sunConfig]);
+  const buildCurrentDraftDesign = useCallback(
+    (nextCaptureImage = captureImage) => ({
+      ...design,
+      leadId: designLeadId,
+      points: modelPoints,
+      satelliteTextureUrl,
+      solarLayout: solarConfig,
+      sunSettings: sunConfig,
+      environmentMode,
+      captureImage: nextCaptureImage,
+      status: "draft",
+      updatedAt: Date.now(),
+      createdAt: design?.createdAt || Date.now(),
+    }),
+    [captureImage, design, designLeadId, environmentMode, modelPoints, satelliteTextureUrl, solarConfig, sunConfig]
+  );
 
-  const saveDraftDesign = useCallback(async () => {
+  const saveDraftDesign = useCallback(async (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
     if (!designLeadId) {
       setSaveStatus({
         saving: false,
@@ -5110,7 +5069,7 @@ export const ThreeDDesignPreview = () => {
         severity: "error",
       });
     }
-  }, [buildCurrentDraftDesign, designLeadId, fetchAPI]);
+  }, [buildCurrentDraftDesign, designLeadId, fetchAPI, navigate]);
 
   useEffect(() => {
     if (!isSunPlaying) return undefined;
@@ -5362,7 +5321,7 @@ export const ThreeDDesignPreview = () => {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
   }, [shareUrl]);
 
-  const handleCapturePreview = useCallback(() => {
+  const handleCapturePreview = useCallback(async () => {
     try {
       if (!capturePreviewRef.current) {
         throw new Error("3D view is not ready yet");
@@ -5370,19 +5329,26 @@ export const ThreeDDesignPreview = () => {
 
       const imageDataUrl = capturePreviewRef.current();
       setCaptureImage(imageDataUrl);
-      const safeLeadName = getLeadDisplayName(sourceLead)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || "solar-design";
-      const link = document.createElement("a");
-      link.href = imageDataUrl;
-      link.download = `${safeLeadName}-3d-house-${Date.now()}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const capturedDesign = buildCurrentDraftDesign(imageDataUrl);
+
+      try {
+        sessionStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(capturedDesign));
+      } catch (error) {
+        console.warn("Unable to save captured 3D preview locally", error);
+      }
+
+      if (designLeadId) {
+        await fetchAPI(`/lead/updateLead/${designLeadId}`, {
+          method: "PUT",
+          body: JSON.stringify({ threeDDesign: capturedDesign }),
+        });
+      }
+
       setSaveStatus({
         saving: false,
-        message: "Capture downloaded. Click Save Draft to use it in quotation.",
+        message: designLeadId
+          ? "Capture saved. It will show in quotation."
+          : "Capture saved in this 3D design. Open from a lead to show it in quotation.",
         severity: "success",
       });
     } catch (error) {
@@ -5392,7 +5358,7 @@ export const ThreeDDesignPreview = () => {
         severity: "error",
       });
     }
-  }, [sourceLead]);
+  }, [buildCurrentDraftDesign, designLeadId, fetchAPI]);
 
   if (modelPoints.length < MIN_ROOF_POINTS) {
     return (
@@ -5403,7 +5369,11 @@ export const ThreeDDesignPreview = () => {
         <Button
           variant="contained"
           startIcon={<ArrowBack />}
-          onClick={() => navigate("/3d-design/new", { state: { design, lead: sourceLead } })}
+          onClick={() =>
+            navigate("/3d-design/new", {
+              state: { design, lead: sourceLead, restoreOutline: true },
+            })
+          }
           sx={{ alignSelf: "flex-start" }}
         >
           Back to Map
@@ -5442,7 +5412,11 @@ export const ThreeDDesignPreview = () => {
             <Button
               variant="outlined"
               startIcon={<ArrowBack />}
-              onClick={() => navigate("/3d-design/new", { state: { design, lead: sourceLead } })}
+              onClick={() =>
+                navigate("/3d-design/new", {
+                  state: { design, lead: sourceLead, restoreOutline: true },
+                })
+              }
             >
               Back to Map
             </Button>
@@ -5490,6 +5464,7 @@ export const ThreeDDesignPreview = () => {
             </Button>
             <Button
               size="small"
+              type="button"
               variant="contained"
               startIcon={saveStatus.saving ? <CircularProgress size={14} color="inherit" /> : <Save />}
               onClick={saveDraftDesign}
