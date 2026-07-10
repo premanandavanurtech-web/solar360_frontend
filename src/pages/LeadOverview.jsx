@@ -133,6 +133,9 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { format, parseISO, isValid } from "date-fns";
 import { useLocation, useNavigate } from "react-router-dom";
+import ConvertProjectDialog from "../components/ConvertProjectDialog";
+import { getQuotationsForLead, setCurrentQuotation } from "../utils/quotationStorage";
+import { resolveVisitStatus } from "../utils/visitStatus";
 
 // ========== CONSTANTS & UTILITIES ==========
 const PRIMARY_COLOR = "#2563eb";
@@ -147,7 +150,12 @@ const GRADIENT_SOFT_GREEN = "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)";
 const FOCUS_RING = "0 0 0 3px rgba(37,99,235,.12)";
 
 const LEAD_STATUS_OPTIONS = [
+  "Contacted",
+  "Qualified",
   "Visit",
+  "Proposal Sent",
+  "Won",
+  "Lost",
   "Registration",
   "Bank Loan Apply",
   "Document Submission",
@@ -1074,7 +1082,7 @@ const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
             <Typography variant="subtitle2" fontWeight={700} color={PRIMARY_COLOR} sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}><CalendarToday fontSize="small" /> Visit Information</Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}><Stack spacing={2}>
-                <InfoRow label="Visit Status" value={leadDetails.visitStatus || "Not Scheduled"} icon={<CheckCircle sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
+                <InfoRow label="Visit Status" value={resolveVisitStatus(leadDetails)} icon={<CheckCircle sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
                 <InfoRow label="Visit Date" value={formatDate(leadDetails.visitDate)} icon={<Event sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
                 <InfoRow label="Visit Time" value={leadDetails.visitTime || "Not set"} icon={<AccessTime sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
                 <InfoRow label="Visit Location" value={leadDetails.visitLocation || "Not set"} icon={<LocationOn sx={{ color: alpha(PRIMARY_COLOR, 0.6) }} />} />
@@ -1892,6 +1900,94 @@ const DeleteConfirmationDialog = React.memo(({ open, onClose, leadsToDelete, onD
 });
 DeleteConfirmationDialog.displayName = "DeleteConfirmationDialog";
 
+const PIPELINE_STAGES = [
+  { key: "all", label: "All", icon: <Dashboard />, status: null },
+  { key: "new", label: "New", icon: <Add />, status: "New" },
+  { key: "contacted", label: "Contacted", icon: <Phone />, status: "Contacted" },
+  { key: "qualified", label: "Qualified", icon: <CheckCircle />, status: "Qualified" },
+  { key: "siteVisitScheduled", label: "Site Visit Sched", icon: <CalendarToday />, status: "Visit" },
+  { key: "proposalSent", label: "Proposal Sent", icon: <Description />, status: "Proposal Sent" },
+  { key: "won", label: "Won", icon: <WorkspacePremium />, status: "Won" },
+  { key: "lost", label: "Lost", icon: <Cancel />, status: "Lost" },
+  { key: "projectConverted", label: "Project Converted", icon: <Assignment />, status: null },
+];
+
+const PIPELINE_STAGE_STYLE = {
+  all: { bg: "#33465f", text: "#ffffff", icon: "#ffffff", flex: 1.1 },
+  new: { bg: "#43a46f", text: "#ffffff", icon: "#ffffff", flex: 1.06 },
+  contacted: { bg: "#fae7bc", text: "#172033", icon: "#64748b", flex: 1.08 },
+  qualified: { bg: "#f8e3b2", text: "#172033", icon: "#6d5bd0", flex: 1.08 },
+  siteVisitScheduled: { bg: "#dcefed", text: "#172033", icon: "#3b82f6", flex: 1.16 },
+  proposalSent: { bg: "#f2bd55", text: "#172033", icon: "#9a650f", flex: 1.14 },
+  won: { bg: "#c9e8de", text: "#172033", icon: "#047857", flex: 0.98 },
+  lost: { bg: "#e6e8ee", text: "#172033", icon: "#b91c1c", flex: 0.98 },
+  projectConverted: { bg: "#e8ebf2", text: "#172033", icon: PRIMARY_COLOR, flex: 1.18 },
+};
+
+const EMPTY_PIPELINE_COUNTS = {
+  all: 0,
+  new: 0,
+  contacted: 0,
+  qualified: 0,
+  siteVisitScheduled: 0,
+  proposalSent: 0,
+  won: 0,
+  lost: 0,
+  projectConverted: 0,
+};
+
+const hasLeadDocuments = (lead = {}) =>
+  Boolean(
+    lead.uploadDocument?.url ||
+      lead.aadhaar?.url ||
+      lead.panCard?.url ||
+      lead.passbook?.url ||
+      (Array.isArray(lead.otherDocuments) && lead.otherDocuments.some((doc) => doc?.url))
+  );
+
+const hasSiteSurveyData = (lead = {}) => {
+  const siteSurvey = lead.siteSurvey;
+  if (!siteSurvey || typeof siteSurvey !== "object") return false;
+  return Boolean(
+    siteSurvey.savedAt ||
+      siteSurvey.status ||
+      siteSurvey.general ||
+      siteSurvey.locationName ||
+      (Array.isArray(siteSurvey.photos) && siteSurvey.photos.length > 0)
+  );
+};
+
+const getPipelineBucket = (lead = {}) => {
+  const status = String(lead.status || "").trim().toLowerCase();
+  const visitStatus = String(lead.visitStatus || "").trim().toLowerCase();
+
+  if (lead.isProject) return "projectConverted";
+  if (status === "missed leads" || status === "lost") return "lost";
+  if (status === "installation completion" || status === "won") return "won";
+  if (["proposal sent", "bank at pending", "disbursement"].includes(status) || hasSiteSurveyData(lead)) return "proposalSent";
+  if (status === "visit" || status === "site visit" || lead.visitDate || ["scheduled", "completed"].includes(visitStatus)) return "siteVisitScheduled";
+  if (status === "qualified" || ["registration", "bank loan apply", "document submission"].includes(status) || hasLeadDocuments(lead)) return "qualified";
+  if (status === "contacted" || lead.lastContactedAt || lead.followUpAction || lead.followUpNotes) return "contacted";
+  return "new";
+};
+
+const buildPipelineCountsFromLeads = (items = []) =>
+  items.reduce(
+    (counts, lead) => {
+      const bucket = getPipelineBucket(lead);
+      counts.all += 1;
+      counts[bucket] = (counts[bucket] || 0) + 1;
+      return counts;
+    },
+    { ...EMPTY_PIPELINE_COUNTS }
+  );
+
+const applyPipelineStageToRows = (items = [], stageKey = "") => {
+  if (!stageKey || stageKey === "all") return items;
+  return items.filter((lead) => getPipelineBucket(lead) === stageKey);
+};
+
+
 // ========== MAIN COMPONENT ==========
 const LeadOverview = () => {
   const { fetchAPI, user } = useAuth();
@@ -1909,8 +2005,21 @@ const LeadOverview = () => {
   const [overviewStats, setOverviewStats] = useState({
     totalLeads: 0,
     activeLeads: 0,
+    newLeads: 0,
     convertedLeads: 0,
     conversionRate: 0,
+    followUpToday: 0,
+    pipelineThisQuarter: {
+      all: 0,
+      new: 0,
+      contacted: 0,
+      qualified: 0,
+      siteVisitScheduled: 0,
+      proposalSent: 0,
+      won: 0,
+      lost: 0,
+      projectConverted: 0,
+    },
   });
   const [visitSummary, setVisitSummary] = useState({
     totalVisits: 0,
@@ -1919,6 +2028,7 @@ const LeadOverview = () => {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [quickFilter, setQuickFilter] = useState("");
   const [viewMode, setViewMode] = useState(isMobile ? "grid" : "table");
   const [showRoleInfo, setShowRoleInfo] = useState(false);
   const [period, setPeriod] = useState("All");
@@ -1933,6 +2043,9 @@ const LeadOverview = () => {
   const [leadToEdit, setLeadToEdit] = useState(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [leadToView, setLeadToView] = useState(null);
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [projectDialogLead, setProjectDialogLead] = useState(null);
+  const [projectDialogSubmitting, setProjectDialogSubmitting] = useState(false);
 
   const [selectedLeads, setSelectedLeads] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
@@ -1943,7 +2056,7 @@ const LeadOverview = () => {
   const containerRef = useRef(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
-  const hasFilters = useMemo(() => searchTerm || statusFilter !== "all" || period !== "All", [searchTerm, statusFilter, period]);
+  const hasFilters = useMemo(() => searchTerm || statusFilter !== "all" || period !== "All" || quickFilter, [searchTerm, statusFilter, period, quickFilter]);
   const selectedCount = useMemo(() => selectedLeads.length, [selectedLeads]);
   const userRole = user?.role || "TEAM";
   const permissions = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.TEAM;
@@ -1954,8 +2067,9 @@ const LeadOverview = () => {
     if (searchTerm) count++;
     if (statusFilter !== "all") count++;
     if (period !== "All") count++;
+    if (quickFilter) count++;
     return count;
-  }, [searchTerm, statusFilter, period]);
+  }, [searchTerm, statusFilter, period, quickFilter]);
 
   const addLeads = () => navigate("/add-lead");
   const showSnackbar = useCallback((message, severity = "success") => setSnackbar({ open: true, message, severity }), []);
@@ -1972,6 +2086,8 @@ const LeadOverview = () => {
 
     if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
     if (statusFilter !== "all") params.append("status", statusFilter);
+    if (quickFilter === "followUpToday") params.append("followUpDue", "today");
+    if (quickFilter.startsWith("pipeline:")) params.append("pipelineStage", quickFilter.replace("pipeline:", ""));
 
     // ✅ Always send date range — fall back to today if periodRange is empty
     const today = toDateInputValue(new Date());
@@ -1985,8 +2101,14 @@ const LeadOverview = () => {
 
     const data = await fetchAPI(`/lead/getAll?${params.toString()}`);
     if (data.success) {
-      setLeads(data.result.leads || []);
-      setTotalLeads(data.result.pagination?.total || 0);
+      const pipelineStageKey = quickFilter.startsWith("pipeline:")
+        ? quickFilter.replace("pipeline:", "")
+        : "";
+      const rows = data.result.leads || [];
+      const visibleRows = applyPipelineStageToRows(rows, pipelineStageKey);
+
+      setLeads(visibleRows);
+      setTotalLeads(pipelineStageKey ? visibleRows.length : data.result.pagination?.total || 0);
     } else {
       showSnackbar(data.message || "Failed to fetch leads", "error");
     }
@@ -1996,7 +2118,7 @@ const LeadOverview = () => {
   } finally {
     setLoading(false);
   }
-}, [fetchAPI, page, rowsPerPage, debouncedSearchTerm, statusFilter, sortBy, sortOrder, periodRange, period, showSnackbar]);
+}, [fetchAPI, page, rowsPerPage, debouncedSearchTerm, statusFilter, quickFilter, sortBy, sortOrder, periodRange, period, showSnackbar]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
@@ -2004,11 +2126,25 @@ const LeadOverview = () => {
     try {
       const data = await fetchAPI("/lead/stats?page=1&limit=1");
       if (data.success) {
+        const stats = data.result?.stats || {};
+        let pipelineThisQuarter = stats.pipelineThisQuarter || { ...EMPTY_PIPELINE_COUNTS };
+        const totalStatsLeads = stats.totalLeads || 0;
+
+        if ((pipelineThisQuarter.all || 0) === 0 && totalStatsLeads > 0) {
+          const leadData = await fetchAPI("/lead/getAll?limit=1000&sortBy=createdAt&sortOrder=desc");
+          if (leadData.success) {
+            pipelineThisQuarter = buildPipelineCountsFromLeads(leadData.result?.leads || []);
+          }
+        }
+
         setOverviewStats({
-          totalLeads: data.result?.stats?.totalLeads || 0,
-          activeLeads: data.result?.stats?.activeLeads || 0,
-          convertedLeads: data.result?.stats?.convertedLeads || 0,
-          conversionRate: data.result?.stats?.conversionRate || 0,
+          totalLeads: totalStatsLeads,
+          activeLeads: stats.activeLeads || 0,
+          newLeads: stats.newLeads || stats.activeLeads || 0,
+          convertedLeads: stats.convertedLeads || 0,
+          conversionRate: stats.conversionRate || 0,
+          followUpToday: stats.followUpToday || 0,
+          pipelineThisQuarter,
         });
       }
     } catch {
@@ -2105,14 +2241,119 @@ const LeadOverview = () => {
   }, [location.pathname, location.state, navigate]);
 
   const handleSort = useCallback((column) => { if (sortBy === column) setSortOrder(sortOrder === "asc" ? "desc" : "asc"); else { setSortBy(column); setSortOrder("asc"); } }, [sortBy, sortOrder]);
-  const handleResetFilters = useCallback(() => { setSearchTerm(""); setStatusFilter("all"); setPeriod("All"); setPage(0); setSelectedLeads([]); setSelectAll(false); }, []);
-  const handleClearFiltersMobile = useCallback(() => { setSearchTerm(""); setStatusFilter("all"); setPeriod("All"); }, []);
+  const handleResetFilters = useCallback(() => { setSearchTerm(""); setStatusFilter("all"); setQuickFilter(""); setPeriod("All"); setPage(0); setSelectedLeads([]); setSelectAll(false); }, []);
+  const handleClearFiltersMobile = useCallback(() => { setSearchTerm(""); setStatusFilter("all"); setQuickFilter(""); setPeriod("All"); }, []);
+
+  const handleViewTodayFollowUps = useCallback(async () => {
+    try {
+      const data = await fetchAPI("/lead/getAll?page=1&limit=2&followUpDue=today&sortBy=followUpDate&sortOrder=asc");
+      const todayReminderLeads = data?.success ? (data.result?.leads || []) : [];
+      const totalTodayReminders = data?.result?.pagination?.total || todayReminderLeads.length;
+
+      if (totalTodayReminders === 1 && todayReminderLeads[0]?._id) {
+        navigate(`/all-leads/${todayReminderLeads[0]._id}`, {
+          state: {
+            lead: todayReminderLeads[0],
+            initialTab: "reminders",
+          },
+        });
+        return;
+      }
+    } catch {
+      // Fall back to the filtered list if the direct reminder lookup fails.
+    }
+
+    setSearchTerm("");
+    setStatusFilter("all");
+    setQuickFilter("followUpToday");
+    setPeriod("All");
+    setPage(0);
+    setSelectedLeads([]);
+    setSelectAll(false);
+  }, [fetchAPI, navigate]);
+
+  const handleViewNewLeads = useCallback(() => {
+    setSearchTerm("");
+    setStatusFilter("New");
+    setQuickFilter("");
+    setPeriod("All");
+    setPage(0);
+    setSelectedLeads([]);
+    setSelectAll(false);
+  }, []);
+
+  const handleViewVisitCalendar = useCallback(() => {
+    navigate("/total-visits");
+  }, [navigate]);
+
+  const handlePipelineStageFilter = useCallback((card) => {
+    setSearchTerm("");
+    setPeriod("All");
+    setPage(0);
+    setSelectedLeads([]);
+    setSelectAll(false);
+
+    if (card.key === "all") {
+      setStatusFilter("all");
+      setQuickFilter("");
+      return;
+    }
+
+    setStatusFilter("all");
+    if ((card.value || 0) === 0) {
+      setLeads([]);
+      setTotalLeads(0);
+    }
+    setQuickFilter(`pipeline:${card.key}`);
+  }, []);
 
   const handleCreateQuote = useCallback((lead) => {
     navigate("/quotation/create", { state: { mode: "create", lead } });
   }, [navigate]);
 
-  const handleConvertToProject = useCallback(async (lead) => {
+  const closeProjectDialog = useCallback(() => {
+    if (projectDialogSubmitting) return;
+    setProjectDialogOpen(false);
+    setProjectDialogLead(null);
+  }, [projectDialogSubmitting]);
+
+  const completeProjectConversion = useCallback(async (lead, quotation = null) => {
+    if (!lead?._id) {
+      showSnackbar("Invalid lead selected", "error");
+      return;
+    }
+
+    try {
+      setProjectDialogSubmitting(true);
+      const response = await fetchAPI(`/lead/updateLead/${lead._id}`, {
+        method: "PUT",
+        body: JSON.stringify({ isProject: true }),
+      });
+      if (response?.success === false) {
+        throw new Error(response.message || "Failed to convert lead to project");
+      }
+      if (quotation) {
+        setCurrentQuotation(quotation);
+      }
+      showSnackbar("Lead converted to project", "success");
+      setProjectDialogOpen(false);
+      setProjectDialogLead(null);
+      await fetchLeads();
+      navigate("/total-visits", {
+        state: {
+          highlightLeadId: lead._id,
+          quotationId: quotation?.id || null,
+          quotationData: quotation || null,
+        },
+      });
+    } catch (error) {
+      showSnackbar(error.message || "Failed to convert lead to project", "error");
+    } finally {
+      setProjectDialogSubmitting(false);
+    }
+  }, [fetchAPI, fetchLeads, navigate, showSnackbar]);
+
+  const handleConvertToProject = useCallback((lead) => {
     if (!lead?._id) {
       showSnackbar("Invalid lead selected", "error");
       return;
@@ -2123,18 +2364,21 @@ const LeadOverview = () => {
       return;
     }
 
-    try {
-      await fetchAPI(`/lead/updateLead/${lead._id}`, {
-        method: "PUT",
-        body: JSON.stringify({ isProject: true }),
-      });
-      showSnackbar("Lead converted to project", "success");
-      await fetchLeads();
-      navigate("/total-visits", { state: { highlightLeadId: lead._id } });
-    } catch (error) {
-      showSnackbar(error.message || "Failed to convert lead to project", "error");
-    }
-  }, [fetchAPI, fetchLeads, navigate, showSnackbar]);
+    setProjectDialogLead(lead);
+    setProjectDialogOpen(true);
+  }, [navigate, showSnackbar]);
+
+  const handleProjectDialogCreateQuotation = useCallback(() => {
+    if (!projectDialogLead) return;
+    setProjectDialogOpen(false);
+    setProjectDialogLead(null);
+    navigate("/quotation/create", { state: { mode: "create", lead: projectDialogLead } });
+  }, [navigate, projectDialogLead]);
+
+  const projectDialogQuotations = useMemo(
+    () => (projectDialogLead?._id ? getQuotationsForLead(projectDialogLead._id) : []),
+    [projectDialogLead],
+  );
 
   const handleUnsupportedLeadAction = useCallback((actionLabel) => {
     showSnackbar(`${actionLabel} is not connected yet.`, "info");
@@ -2238,49 +2482,84 @@ const LeadOverview = () => {
   }, [loading, leads, hasFilters, permissions, openViewDialog, openEditDialog, openAssignDialog, handleDeleteSingleLead, handleConvertToProject, isMobile, handleResetFilters]);
 
   const summaryCards = useMemo(() => ([
-    {
-      label: "Total Leads",
-      value: overviewStats.totalLeads || totalLeads,
-      caption: "Across your workspace",
-      icon: <Groups />,
-      stripe: "linear-gradient(90deg, #2563eb, #60a5fa)",
-      iconGradient: GRADIENT_BLUE,
-    },
-    {
-      label: "Active Leads",
-      value: overviewStats.activeLeads,
-      caption: "Fresh opportunities",
-      icon: <TrendingUp />,
-      stripe: "linear-gradient(90deg, #1e40af, #3b82f6)",
-      iconGradient: "linear-gradient(135deg, #1d4ed8 0%, #60a5fa 100%)",
-    },
-    {
-      label: "Converted",
-      value: overviewStats.convertedLeads,
-      caption: "Installation completion",
-      icon: <CheckCircle />,
-      stripe: "linear-gradient(90deg, #059669, #34d399)",
-      iconGradient: "linear-gradient(135deg, #059669 0%, #34d399 100%)",
-    },
-    {
-      label: "Conversion Rate",
-      value: `${Number(overviewStats.conversionRate || 0).toFixed(2)}%`,
-      caption: "Overall close rate",
-      icon: <Dashboard />,
-      stripe: "linear-gradient(90deg, #d97706, #fbbf24)",
-      iconGradient: "linear-gradient(135deg, #d97706 0%, #fbbf24 100%)",
-    },
-  ]), [overviewStats, totalLeads]);
+  {
+    label: "Need follow-up today",
+    value: overviewStats.followUpToday || 0,
+    caption: "Reminders due today",
+    action: "View list",
+    icon: <Warning />,
+    iconBg: "rgba(255,255,255,0.14)",       // subtle glass circle, not solid navy-on-navy
+    iconColor: "#fff",
+    borderColor: "#f97316",                  // orange accent border like your screenshot
+    background: "linear-gradient(115deg, #0f1f3d 0%, #3b57f7 55%, #0f1f3d 100%)",
+    actionColor: "#fdba74",                   // light orange so it's visible on dark bg
+    textOnDark: true,                         // <-- new flag
+    onClick: handleViewTodayFollowUps,
+  },
+  {
+    label: "New leads",
+    value: overviewStats.newLeads || overviewStats.activeLeads || 0,
+    caption: "Fresh in the pipeline - assign & engage",
+    action: "Assign now",
+    icon: <AssignmentInd />,
+    iconBg: alpha("#2563eb", 0.08),
+    iconColor: PRIMARY_COLOR,
+    borderColor: alpha("#94a3b8", 0.25),
+    background: "#fff",
+    actionColor: "#1d4ed8",
+    textOnDark: false,
+    onClick: handleViewNewLeads,
+  },
+  {
+    label: "Site visits scheduled",
+    value: visitSummary.scheduledVisits || 0,
+    caption: "Inspector visits coming up",
+    action: "View calendar",
+    icon: <CalendarToday />,
+    iconBg: alpha("#10b981", 0.1),
+    iconColor: "#047857",
+    borderColor: alpha("#94a3b8", 0.25),
+    background: "#fff",
+    actionColor: "#1d4ed8",
+    textOnDark: false,
+    onClick: handleViewVisitCalendar,
+  },
+]), [handleViewNewLeads, handleViewTodayFollowUps, handleViewVisitCalendar, overviewStats, visitSummary.scheduledVisits]);
 
-  const unscheduledVisits = Math.max(
-    (visitSummary.totalVisits || 0) - (visitSummary.completedVisits || 0) - (visitSummary.scheduledVisits || 0),
-    0
-  );
+  const pipelineQuarterCards = useMemo(() => {
+    const counts = overviewStats.pipelineThisQuarter || {};
+    const total = counts.all || 0;
+    return PIPELINE_STAGES.map((stage) => ({
+      ...stage,
+      value: counts[stage.key] || 0,
+      total,
+      percent: total > 0 ? Math.round(((counts[stage.key] || 0) / total) * 100) : 0,
+    }));
+  }, [overviewStats.pipelineThisQuarter]);
 
-  
+  const selectedPipelineStage = useMemo(() => {
+    if (!quickFilter.startsWith("pipeline:")) return null;
+    const selectedKey = quickFilter.replace("pipeline:", "");
+    return pipelineQuarterCards.find((card) => card.key === selectedKey) || null;
+  }, [pipelineQuarterCards, quickFilter]);
+
+  const isPipelineCardActive = useCallback((card) => {
+    if (card.key === "all") return statusFilter === "all" && !quickFilter;
+    return quickFilter === `pipeline:${card.key}` || (quickFilter === "" && statusFilter === card.status);
+  }, [quickFilter, statusFilter]);
   return (
     <Box ref={containerRef} sx={{ p: { xs: 1.5, sm: 2, md: 3 }, minHeight: "100vh", pb: { xs: 8, sm: 3 }, bgcolor: "#f8fafc" }}>
       <MobileFilterDrawer open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)} period={period} setPeriod={setPeriod} statusFilter={statusFilter} setStatusFilter={setStatusFilter} handleClearFilters={handleClearFiltersMobile} searchQuery={searchTerm} setSearchQuery={setSearchTerm} activeFilterCount={activeFilterCount} />
+      <ConvertProjectDialog
+        open={projectDialogOpen}
+        lead={projectDialogLead}
+        quotations={projectDialogQuotations}
+        submitting={projectDialogSubmitting}
+        onClose={closeProjectDialog}
+        onCreateQuotation={handleProjectDialogCreateQuotation}
+        onCreateWithoutQuotation={() => completeProjectConversion(projectDialogLead)}
+        onContinueWithQuotation={(quotation) => completeProjectConversion(projectDialogLead, quotation)}
+      />
 
       {/* Header */}
       <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, mb: 3, borderRadius: 4, background: GRADIENT_MAIN, color: "#fff", boxShadow: "0 24px 44px rgba(15,31,61,0.18)" }}>
@@ -2304,50 +2583,205 @@ const LeadOverview = () => {
         </Stack>
       </Paper>
 
-      <Grid container spacing={2.25} sx={{ mb: 3 }}>
-        {summaryCards.map((card) => (
-          <Grid item xs={12} sm={6} lg={3} key={card.label}>
-            <Paper
-              elevation={0}
+     <Grid container spacing={2.25} sx={{ mb: 3 }}>
+  {summaryCards.map((card) => (
+    <Grid item xs={12} md={4} key={card.label}>
+      <Paper
+        elevation={0}
+        onClick={card.onClick}
+        sx={{
+          overflow: "hidden",
+          borderRadius: 3,
+          px: { xs: 2, sm: 2.25 },
+          py: { xs: 2, sm: 2.25 },
+          minHeight: 154,
+          background: card.background,
+          border: card.textOnDark
+            ? `1px solid ${alpha(card.borderColor, 0.9)}`
+            : `1px solid ${card.borderColor}`,
+          borderLeft: card.textOnDark ? `3px solid ${card.borderColor}` : undefined,
+          boxShadow: card.textOnDark
+            ? "0 18px 36px rgba(15,23,42,0.35)"
+            : "0 14px 30px rgba(15,23,42,0.04)",
+          cursor: "pointer",
+          transition: "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
+          "&:hover": {
+            transform: "translateY(-2px)",
+            boxShadow: card.textOnDark
+              ? "0 22px 44px rgba(15,23,42,0.45)"
+              : "0 18px 36px rgba(15,23,42,0.08)",
+            borderColor: card.actionColor,
+          },
+        }}
+      >
+        <Stack direction="row" spacing={1.75} alignItems="flex-start">
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: 2.5,
+              display: "grid",
+              placeItems: "center",
+              flexShrink: 0,
+              bgcolor: card.iconBg,
+              border: card.textOnDark ? "1px solid rgba(255,255,255,0.18)" : "none",
+              boxShadow: card.textOnDark ? "0 12px 24px rgba(0,0,0,0.25)" : "none",
+            }}
+          >
+            {React.cloneElement(card.icon, { sx: { color: card.iconColor, fontSize: 25 } })}
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{
+              fontSize: { xs: "2rem", sm: "2.25rem" },
+              fontWeight: 900,
+              lineHeight: 0.9,
+              color: card.textOnDark ? "#fff" : "#0f172a",
+            }}>
+              {card.value}
+            </Typography>
+            <Typography sx={{
+              mt: 0.5, fontSize: "0.92rem", fontWeight: 800, lineHeight: 1.25,
+              color: card.textOnDark ? "#fff" : "#020617",
+            }}>
+              {card.label}
+            </Typography>
+            <Typography sx={{
+              mt: 1.05, fontSize: "0.84rem", lineHeight: 1.45,
+              color: card.textOnDark ? "rgba(255,255,255,0.72)" : "#64748b",
+            }}>
+              {card.caption}
+            </Typography>
+            <Button
+              size="small"
+              endIcon={<OpenInNew sx={{ fontSize: 13 }} />}
+              onClick={(event) => { event.stopPropagation(); card.onClick(); }}
               sx={{
-                position: "relative",
-                overflow: "hidden",
-                borderRadius: 4,
-                px: 2.25,
-                py: 2,
-                background: "#fff",
-                border: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}`,
-                boxShadow: "0 18px 38px rgba(15,23,42,0.06)",
-                "&::before": {
-                  content: '""',
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: "4px",
-                  borderRadius: "16px 16px 0 0",
-                  background: card.stripe,
-                },
+                mt: 0.8, p: 0, minWidth: 0,
+                color: card.actionColor,
+                fontWeight: 900, fontSize: "0.8rem", textTransform: "none",
+                "& .MuiButton-endIcon": { ml: 0.45 },
+                "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
               }}
             >
-              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
-                <Box>
-                  <Typography variant="body2" sx={{ color: "#64748b", fontWeight: 600 }}>{card.label}</Typography>
-                  <Typography sx={{ mt: 1, fontSize: { xs: "1.9rem", sm: "2.2rem" }, fontWeight: 800, lineHeight: 1, color: "#0f172a" }}>
-                    {card.value}
-                  </Typography>
-                  <Typography variant="caption" sx={{ mt: 0.75, display: "block", color: "#64748b" }}>{card.caption}</Typography>
-                </Box>
-                <Box sx={{ ...gradientIconBoxSx, width: 48, height: 48, borderRadius: 3, background: card.iconGradient, border: "none", boxShadow: "0 12px 28px rgba(37,99,235,0.18)" }}>
-                  {React.cloneElement(card.icon, { sx: { color: "#fff", fontSize: 24 } })}
-                </Box>
-              </Stack>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
+              {card.action}
+            </Button>
+          </Box>
+        </Stack>
+      </Paper>
+    </Grid>
+  ))}
+</Grid>
 
+      <Paper
+        elevation={0}
+        sx={{
+          mb: 3,
+          p: { xs: 2, md: 3 },
+          borderRadius: "14px",
+          bgcolor: "#fff",
+          border: `1px solid ${alpha("#94a3b8", 0.28)}`,
+          boxShadow: "none",
+        }}
+      >
+        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2} sx={{ mb: 2.3 }}>
+          <Box>
+            <Typography sx={{ fontSize: "1rem", fontWeight: 900, color: "#0f172a", lineHeight: 1.2 }}>
+              Lead pipeline
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1.25} alignItems="center">
+            <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: "#475569" }}>
+              Click a stage to filter
+            </Typography>
+            {(statusFilter !== "all" || quickFilter) && (
+              <Button
+                size="small"
+                startIcon={<Close sx={{ fontSize: 14 }} />}
+                onClick={handleResetFilters}
+                sx={{ color: PRIMARY_COLOR, fontWeight: 800, fontSize: "0.76rem", textTransform: "none", px: 0.75 }}
+              >
+                Clear
+              </Button>
+            )}
+          </Stack>
+        </Stack>
 
+        <Box sx={{ overflowX: "auto", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
+          <Stack direction="row" spacing={1} sx={{ minWidth: { xs: 1120, lg: "100%" } }}>
+            {pipelineQuarterCards.map((card) => {
+              const isActive = isPipelineCardActive(card);
+              const style = PIPELINE_STAGE_STYLE[card.key] || PIPELINE_STAGE_STYLE.all;
+              const isAll = card.key === "all";
+              const activeDark = isAll && isActive;
+
+              return (
+                <Tooltip
+                  key={card.key}
+                  title={`${card.label} - ${card.value} lead${card.value !== 1 ? "s" : ""}${card.total ? ` (${card.percent}%)` : ""}`}
+                >
+                  <Box
+                    onClick={() => handlePipelineStageFilter(card)}
+                    sx={{
+                      flex: style.flex,
+                      minWidth: card.key === "projectConverted" ? 152 : 136,
+                      px: 1.35,
+                      py: 1.1,
+                      borderRadius: "12px",
+                      cursor: "pointer",
+                      border: `1.5px solid ${isActive && !activeDark ? style.icon : "#dbe3ef"}`,
+                      bgcolor: activeDark ? "#263d63" : isActive ? alpha(style.icon, 0.07) : "#fafbfe",
+                      color: activeDark ? "#fff" : "#0f172a",
+                      transition: "all 0.15s ease",
+                      "&:hover": {
+                        borderColor: activeDark ? "#263d63" : style.icon,
+                        bgcolor: activeDark ? "#263d63" : alpha(style.icon, 0.06),
+                      },
+                    }}
+                  >
+                    <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.5, minWidth: 0 }}>
+                      <Box
+                        sx={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: "7px",
+                          bgcolor: activeDark ? "transparent" : alpha(style.icon, 0.14),
+                          color: activeDark ? "#fff" : style.icon,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {React.cloneElement(card.icon, {
+                          sx: { fontSize: 13, color: "inherit" },
+                        })}
+                      </Box>
+                      <Typography sx={{ fontSize: "1.25rem", fontWeight: 900, color: activeDark ? "#fff" : style.icon, lineHeight: 1 }}>
+                        {card.value}
+                      </Typography>
+                    </Stack>
+
+                    <Typography
+                      sx={{
+                        fontSize: "0.73rem",
+                        fontWeight: 800,
+                        color: activeDark ? alpha("#fff", 0.86) : "#334155",
+                        lineHeight: 1.15,
+                        display: "-webkit-box",
+                        overflow: "hidden",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                      }}
+                    >
+                      {isAll ? "All Leads" : card.label}
+                    </Typography>
+                  </Box>
+                </Tooltip>
+              );
+            })}
+          </Stack>
+        </Box>
+      </Paper>
     {/* ===== DESKTOP FILTERS ===== */}
 {!isMobile && (
   <Card sx={{ mb: 3, borderRadius: 4, border: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}`, boxShadow: "0 4px 24px rgba(15,23,42,0.05)" }}>
@@ -2516,6 +2950,24 @@ const LeadOverview = () => {
               label={`Period: ${period}`}
               size="small"
               onDelete={() => setPeriod("All")}
+              sx={{ height: 26, fontSize: "0.72rem", bgcolor: "#eff6ff", color: PRIMARY_COLOR,
+                border: `0.5px solid ${alpha(PRIMARY_COLOR, 0.2)}`, "& .MuiChip-deleteIcon": { color: alpha(PRIMARY_COLOR, 0.5) } }}
+            />
+          )}
+          {quickFilter === "followUpToday" && (
+            <Chip
+              label="Follow-up: Today"
+              size="small"
+              onDelete={() => setQuickFilter("")}
+              sx={{ height: 26, fontSize: "0.72rem", bgcolor: "#fff7ed", color: "#c2410c",
+                border: `0.5px solid ${alpha("#f97316", 0.25)}`, "& .MuiChip-deleteIcon": { color: alpha("#c2410c", 0.5) } }}
+            />
+          )}
+          {selectedPipelineStage && (
+            <Chip
+              label={`Pipeline: ${selectedPipelineStage.label}`}
+              size="small"
+              onDelete={() => setQuickFilter("")}
               sx={{ height: 26, fontSize: "0.72rem", bgcolor: "#eff6ff", color: PRIMARY_COLOR,
                 border: `0.5px solid ${alpha(PRIMARY_COLOR, 0.2)}`, "& .MuiChip-deleteIcon": { color: alpha(PRIMARY_COLOR, 0.5) } }}
             />

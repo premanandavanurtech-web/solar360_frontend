@@ -66,6 +66,7 @@ import {
 import { format, isThisWeek, parseISO } from "date-fns";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { getProjectStage } from "../utils/projectStage";
 
 // ── Design tokens ──────────────────────────────────────────────
 const NAVY     = "#1e3a5f";
@@ -81,25 +82,33 @@ const BORDER   = "#e4eaf5";
 
 // ── Stage config (now with icons) ───────────────────────────────
 const PROJECT_STAGES = [
-  { key: "visit",         label: "Visit",         color: "#3b82f6", icon: DirectionsCar },
-  { key: "registration",  label: "Registration",  color: "#8b5cf6", icon: FactCheck },
-  { key: "document",      label: "Document",      color: "#06b6d4", icon: DescriptionOutlined },
-  { key: "bank_loan",     label: "Bank Loan",     color: "#6366f1", icon: Receipt },
-  { key: "loan_pending",  label: "Loan Pending",  color: AMBER,     icon: CalendarMonth },
-  { key: "disbursement",  label: "Disbursement",  color: "#f97316", icon: TrendingUp },
-  { key: "installation",  label: "Installation",  color: "#0ea5e9", icon: Bolt },
-  { key: "handover",      label: "Handover",      color: EMERALD,   icon: Handshake },
+  { key: "lead_converted", label: "Lead Converted", color: EMERALD,   icon: Workspaces },
+  { key: "registration",   label: "Registration",   color: "#8b5cf6", icon: FactCheck },
+  { key: "document",       label: "Document",       color: "#06b6d4", icon: DescriptionOutlined },
+  { key: "payment",        label: "Payment",        color: "#6366f1", icon: Receipt },
+  { key: "loan_pending",   label: "Loan Pending",   color: AMBER,     icon: CalendarMonth },
+  { key: "installation",   label: "Installation",   color: "#0ea5e9", icon: Bolt },
+  { key: "disbursement",   label: "Disbursement",   color: "#f97316", icon: TrendingUp },
 ];
 
 const NEXT_ACTIONS = {
-  visit:        "Visit stage is active",
+  lead_converted: "Lead converted to project",
   registration: "Registration completed or in progress",
   document:     "Document review or submission in progress",
-  bank_loan:    "Bank loan process started",
+  payment:      "Payment process started",
   loan_pending: "Loan approval or pending bank action",
-  disbursement: "Disbursement stage is active",
   installation: "Installation work is in progress",
-  handover:     "Project handed over successfully",
+  disbursement: "Disbursement stage is active",
+};
+
+const PROJECT_STAGE_ROUTES = {
+  lead_converted: "/all-leads",
+  registration: "/registration",
+  document: "/document-submission",
+  payment: "/bank-loan-apply",
+  loan_pending: "/bank-at-pending",
+  installation: "/installation-completion",
+  disbursement: "/disbursement",
 };
 
 const AMOUNT_RANGES = [
@@ -131,50 +140,14 @@ const formatDate = (value, pattern = "dd MMM yyyy") => {
 
 const getProjectAmount = (p) => Number(p.disbursementAmount || p.loanAmount || 0);
 
-const isDocumentVerified = (status) =>
-  ["submitted", "approved", "completed", "verified"].includes(String(status || "").toLowerCase());
-
-const getProjectStage = (project) => {
-  const inst = String(project.installationStatus || "");
-  const lead = String(project.status || "");
-  const leadStatus = lead.toLowerCase();
-  const visitStatus = String(project.visitStatus || "").toLowerCase();
-  const registrationStatus = String(project.registrationStatus || "").toLowerCase();
-  const bankPendingStatus = String(project.bankAtPendingStatus || "").toLowerCase();
-  const disbursementStatus = String(project.disbursementStatus || "").toLowerCase();
-  const loanStatus = String(project.loanStatus || "").toLowerCase();
-  const installationInProgress = [
-    "final_payment",
-    "meter_charge",
-    "jee_verified",
-    "sent_for_jee_verification",
-    "installation_progress",
-    "load_Enhancement",
-    "load_enhancement",
-  ].includes(inst);
-
-  if (inst === "installation_completed") return "handover";
-
-  if (leadStatus === "installation completion") return "installation";
-  if (leadStatus === "disbursement") return "disbursement";
-  if (leadStatus === "bank at pending" || leadStatus === "loan pending") return "loan_pending";
-  if (leadStatus === "bank loan apply") return "bank_loan";
-  if (leadStatus === "document submission") return "document";
-  if (leadStatus === "registration") return "registration";
-  if (leadStatus === "visit") return "visit";
-  if (leadStatus === "new") return "visit";
-
-  if (disbursementStatus === "completed") return "disbursement";
-  if (bankPendingStatus && bankPendingStatus !== "pending") return "loan_pending";
-  if (loanStatus === "submitted" || loanStatus === "approved") return "bank_loan";
-  if (isDocumentVerified(project.documentStatus)) return "document";
-  if (registrationStatus && registrationStatus !== "pending") return "registration";
-  if (visitStatus) return "visit";
-  if (installationInProgress) return "installation";
-  return "visit";
-};
-
 const getStageMeta = (key) => PROJECT_STAGES.find((s) => s.key === key) || PROJECT_STAGES[0];
+const normalizeProjectStage = (projectOrStage) => {
+  const rawStage = typeof projectOrStage === "string" ? projectOrStage : getProjectStage(projectOrStage);
+  if (rawStage === "visit") return "lead_converted";
+  if (rawStage === "bank_loan") return "payment";
+  if (rawStage === "handover") return "disbursement";
+  return rawStage;
+};
 const getInitials   = (p) => `${p.firstName?.[0] || ""}${p.lastName?.[0] || ""}`.toUpperCase() || "P";
 const getAssignedPerson = (project) => {
   const person = project.assignedUser || project.assignedManager;
@@ -202,7 +175,7 @@ const getRegistrationStatusMeta = (status) => {
   return { label: "In Progress", bg: alpha(BLUE, 0.12), color: BLUE, icon: <CalendarMonth sx={{ fontSize: 14 }} /> };
 };
 const getLeadStatusMeta = (status) => {
-  const stage = getProjectStage({ status });
+  const stage = normalizeProjectStage({ status });
   const meta = getStageMeta(stage);
   const LeadIcon = meta.icon;
   return {
@@ -379,7 +352,7 @@ const RegistrationActionMenu = ({ project, onView, onEdit, onUpload }) => {
 };
 
 const RegistrationProjectRow = ({ project, highlight, onView, onEdit, onUpload, onCall }) => {
-  const stageKey = getProjectStage(project);
+  const stageKey = normalizeProjectStage(project);
   const progress = ((stageIndex(stageKey) + 1) / PROJECT_STAGES.length) * 100;
 
   return (
@@ -520,7 +493,7 @@ const RegistrationProjectRow = ({ project, highlight, onView, onEdit, onUpload, 
 };
 
 const ProjectCard = ({ project, onOpen, onCall, onEdit }) => {
-  const stage    = getStageMeta(getProjectStage(project));
+  const stage    = getStageMeta(normalizeProjectStage(project));
   const progress = ((stageIndex(stage.key) + 1) / PROJECT_STAGES.length) * 100;
   const stuck    = isStuck(project);
 
@@ -561,7 +534,7 @@ const ProjectCard = ({ project, onOpen, onCall, onEdit }) => {
       </Stack>
 
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.25, lineHeight: 1.4 }}>
-        {NEXT_ACTIONS[getProjectStage(project)]}
+        {NEXT_ACTIONS[stage.key]}
       </Typography>
 
       <LinearProgress
@@ -685,15 +658,31 @@ function Projects() {
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
   useEffect(() => {
-    if (location.state?.highlightProjectId) {
-      setHighlightId(location.state.highlightProjectId);
-      setSnackbar({ open: true, message: "Lead converted to project", severity: "success" });
+    const nextStage = location.state?.stageFilter;
+    const nextHighlightId = location.state?.highlightProjectId;
+
+    const normalizedNextStage = nextStage === "all" ? "all" : normalizeProjectStage(nextStage);
+    if (nextStage && (normalizedNextStage === "all" || PROJECT_STAGES.some((stage) => stage.key === normalizedNextStage))) {
+      setSelectedStage(normalizedNextStage);
+      setPage(0);
+    }
+
+    if (nextHighlightId) {
+      setHighlightId(nextHighlightId);
+      setSnackbar({
+        open: true,
+        message: location.state?.message || "Lead converted to project",
+        severity: "success",
+      });
+    }
+
+    if (nextStage || nextHighlightId) {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.pathname, location.state, navigate]);
 
   const enriched = useMemo(
-    () => projects.map((p) => ({ ...p, currentStage: getProjectStage(p) })),
+    () => projects.map((p) => ({ ...p, currentStage: normalizeProjectStage(p) })),
     [projects],
   );
 
@@ -750,8 +739,18 @@ function Projects() {
     setPage(0);
   };
 
-  const openLead = useCallback(
-    (p) => navigate(`/all-leads/${p._id}`, { state: { lead: p } }),
+  const openProject = useCallback(
+    (p) => {
+      const stage = normalizeProjectStage(p);
+      const state = {
+        fromProjects: true,
+        projectStage: stage,
+        projectId: p?._id || null,
+        leadId: p?._id || null,
+        project: p,
+      };
+      navigate(`/projects/${p._id}`, { state });
+    },
     [navigate],
   );
 
@@ -1134,7 +1133,7 @@ function Projects() {
                             <Typography variant="caption" color="text.disabled">No projects</Typography>
                           </Box>
                         ) : cols.map((p) => (
-                          <ProjectCard key={p._id} project={p} onOpen={openLead} onCall={callCustomer} onEdit={editLead} />
+                          <ProjectCard key={p._id} project={p} onOpen={openProject} onCall={callCustomer} onEdit={editLead} />
                         ))}
                       </Stack>
                     </Box>
@@ -1489,7 +1488,7 @@ function Projects() {
                             <Tooltip title="Open project">
                               <IconButton
                                 size="small"
-                                onClick={() => openLead(project)}
+                                onClick={() => openProject(project)}
                                 sx={{ color: NAVY_LT, "&:hover": { bgcolor: alpha(NAVY, 0.06) } }}
                               >
                                 <OpenInNew sx={{ fontSize: 18 }} />
@@ -1504,7 +1503,7 @@ function Projects() {
                                 <Call sx={{ fontSize: 17 }} />
                               </IconButton>
                             </Tooltip>
-                            <ActionMenu project={project} onOpen={openLead} onCall={callCustomer} onEdit={editLead} color={stage.color} />
+                            <ActionMenu project={project} onOpen={openProject} onCall={callCustomer} onEdit={editLead} color={stage.color} />
                           </Stack>
                         </TableCell>
                       </TableRow>

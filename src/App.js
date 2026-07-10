@@ -46,6 +46,7 @@ import QuotationEditor from "./pages/QuotationEditor";
 import AllQuotes from "./pages/AllQuotes";
 import PublicDocumentUpload from "./pages/PublicDocumentUpload";
 import Projects from "./pages/Projects";
+import ProjectDetails from "./pages/ProjectDetails";
 
 
 const theme = createTheme({
@@ -223,6 +224,7 @@ function App() {
                         <Route path="notifications" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Notifications /></ProtectedRoute>} />
                         <Route path="all-leads/:leadId" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><LeadDetailsPage /></ProtectedRoute>} />
                         <Route path="all-leads" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><LeadOverview /></ProtectedRoute>} />
+                        <Route path="projects/:projectId" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><ProjectDetails /></ProtectedRoute>} />
                         <Route path="projects" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Projects /></ProtectedRoute>} />
                         <Route path="*" element={<Navigate to="/dashboard" replace />} />
                       </Routes>

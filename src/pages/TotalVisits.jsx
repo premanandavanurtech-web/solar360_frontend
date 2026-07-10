@@ -32,7 +32,6 @@ import {
   Snackbar,
   Alert,
   AlertTitle,
-  CircularProgress,
   Button,
   Tooltip,
   InputAdornment,
@@ -49,7 +48,6 @@ import {
   Tab,
   Tabs,
   Skeleton,
-  FormHelperText,
   Pagination,
   SwipeableDrawer,
   Badge,
@@ -62,7 +60,6 @@ import {
   BottomNavigationAction,
 } from "@mui/material";
 import {
-  Edit,
   Visibility,
   Close,
   CheckCircle,
@@ -106,11 +103,11 @@ import {
   KeyboardArrowLeft,
   KeyboardArrowRight,
   FiberManualRecord,
+  OpenInNew,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 import LeadAssignDialog from "../components/LeadAssignDialog";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
-import { TimePicker } from "@mui/x-date-pickers/TimePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import {
@@ -124,8 +121,13 @@ import {
   subMonths,
 } from "date-fns";
 import { useNavigate } from "react-router-dom";
-import Save from "@mui/icons-material/Save";
 import { toBackendAssetUrl } from "../utils/backendAssetUrl";
+import { getProjectStage } from "../utils/projectStage";
+import {
+  buildVisitStatusInfo,
+  decorateVisitForDisplay,
+  hasVisitSiteSurvey,
+} from "../utils/visitStatus";
 
 // ========== DESIGN TOKENS ==========
 const PRIMARY = "#0f1f3d";
@@ -147,6 +149,17 @@ const hasAccess = (userRole) => ALLOWED_ROLES.includes(userRole);
 
 // ========== STATUS CONFIG ==========
 const STATUS_CONFIG = {
+  Pending: {
+    bg: "#fff7ed",
+    color: "#b45309",
+    gradBg: "linear-gradient(135deg,#fff7ed,#fffbeb)",
+    border: "#fdba74",
+    dotColor: "#f59e0b",
+    icon: <PendingActions sx={{ fontSize: 15 }} />,
+    label: "Pending",
+    description: "Visit date and time are not set yet",
+    order: 1, progress: 5,
+  },
   "Not Assigned": {
     bg: "#f1f5f9",
     color: "#475569",
@@ -155,7 +168,7 @@ const STATUS_CONFIG = {
     dotColor: "#94a3b8",
     icon: <PendingActions sx={{ fontSize: 15 }} />,
     label: "Not Assigned",
-    description: "Visit not yet assigned or scheduled",
+    description: "Visit not yet assigned",
     order: 1, progress: 0,
   },
   Scheduled: {
@@ -170,15 +183,26 @@ const STATUS_CONFIG = {
     order: 2, progress: 25,
   },
   Completed: {
+    bg: "#fef3c7",
+    color: "#92400e",
+    gradBg: "linear-gradient(135deg,#fef3c7,#fffbeb)",
+    border: "#fde68a",
+    dotColor: "#f59e0b",
+    icon: <CheckCircleOutline sx={{ fontSize: 15 }} />,
+    label: "Completed",
+    description: "Visit successfully completed",
+    order: 3, progress: 100,
+  },
+  Approved: {
     bg: "#d1fae5",
     color: "#065f46",
     gradBg: "linear-gradient(135deg,#d1fae5,#ecfdf5)",
     border: "#a7f3d0",
     dotColor: "#10b981",
-    icon: <CheckCircleOutline sx={{ fontSize: 15 }} />,
-    label: "Completed",
-    description: "Visit successfully completed",
-    order: 3, progress: 100,
+    icon: <CheckCircle sx={{ fontSize: 15 }} />,
+    label: "Approved",
+    description: "Visit approved by manager",
+    order: 4, progress: 100,
   },
   Cancelled: {
     bg: "#fee2e2",
@@ -189,7 +213,7 @@ const STATUS_CONFIG = {
     icon: <Cancel sx={{ fontSize: 15 }} />,
     label: "Cancelled",
     description: "Visit cancelled or postponed",
-    order: 4, progress: 0,
+    order: 5, progress: 0,
   },
   "Follow Up": {
     bg: "#fef3c7",
@@ -200,7 +224,7 @@ const STATUS_CONFIG = {
     icon: <Phone sx={{ fontSize: 15 }} />,
     label: "Follow Up",
     description: "Follow up required",
-    order: 5, progress: 50,
+    order: 6, progress: 50,
   },
 };
 
@@ -209,25 +233,6 @@ const FOLLOW_UP_OPTIONS = [
   { value: "Message", label: "Message", icon: <Chat sx={{ fontSize: 15 }} /> },
   { value: "Note", label: "Note", icon: <Notes sx={{ fontSize: 15 }} /> },
 ];
-
-const LEAD_STATUS_CONFIG = {
-  Visit: {
-    bg: "linear-gradient(135deg,#ede9fe,#ddd6fe)", color: "#5b21b6", icon: <Person sx={{ fontSize: 15 }} />,
-    label: "Visit", description: "Visit scheduled or completed",
-  },
-  Registration: {
-    bg: "linear-gradient(135deg,#dcfce7,#bbf7d0)", color: "#14532d", icon: <HowToReg sx={{ fontSize: 15 }} />,
-    label: "Registration", description: "Lead registered after visit",
-  },
-  "Missed Leads": {
-    bg: "linear-gradient(135deg,#fee2e2,#fecaca)", color: "#7f1d1d", icon: <Warning sx={{ fontSize: 15 }} />,
-    label: "Missed", description: "Lead missed or lost",
-  },
-  Other: {
-    bg: "linear-gradient(135deg,#f0fdf4,#dcfce7)", color: "#166534", icon: <Info sx={{ fontSize: 15 }} />,
-    label: "Other", description: "Other visit type",
-  },
-};
 
 const ROLE_CONFIG = {
   Admin_panel: { label: "Admin Panel", icon: <AdminPanelSettings sx={{ fontSize: 15 }} /> },
@@ -291,25 +296,32 @@ const getStatusConfig = (status) =>
     label: status || "Unknown", description: "Unknown status", order: 99, progress: 0,
   };
 
-const getLeadStatusConfig = (status) =>
-  LEAD_STATUS_CONFIG[status] || {
-    bg: "linear-gradient(135deg,#f1f5f9,#e2e8f0)", color: "#475569",
-    icon: <Info sx={{ fontSize: 15 }} />,
-    label: status || "Unknown", description: "Unknown",
-  };
-
 const getRoleConfig = (role) =>
   ROLE_CONFIG[role] || { label: "Unknown", icon: <Person sx={{ fontSize: 15 }} /> };
 
 const formatDate = (dateString, formatStr = "dd MMM yyyy, hh:mm a") => {
   if (!dateString) return "Not set";
   try {
-    const date = parseISO(dateString);
+    const date = typeof dateString === "string" ? parseISO(dateString) : new Date(dateString);
     return isValid(date) ? format(date, formatStr) : "Invalid Date";
   } catch { return "Invalid Date"; }
 };
 
 const formatTime = (timeString) => timeString || "Not set";
+
+const getVisitDateValue = (visit) =>
+  visit?.visitDate || visit?.siteSurvey?.savedAt || visit?.siteSurvey?.createdAt || null;
+
+const getVisitDisplayDate = (visit) => {
+  const dateValue = getVisitDateValue(visit);
+  return dateValue ? formatDate(dateValue, "dd MMM yyyy") : "Not scheduled";
+};
+
+const getVisitDisplayTime = (visit) => {
+  if (visit?.visitTime) return formatTime(visit.visitTime);
+  const surveyTime = visit?.siteSurvey?.savedAt || visit?.siteSurvey?.createdAt || null;
+  return surveyTime ? formatDate(surveyTime, "hh:mm a") : "Not scheduled";
+};
 
 const parseVisitTime = (timeString) => {
   if (!timeString) return null;
@@ -390,34 +402,10 @@ const getVisitPhotoUrls = (visit) => {
     .filter((url, index, arr) => url && arr.indexOf(url) === index);
 };
 
-const hasSiteSurveyData = (visit) =>
-  Boolean(
-    visit?.siteSurvey &&
-      (visit.siteSurvey.savedAt ||
-        visit.siteSurvey.summary ||
-        visit.siteSurvey.locationName ||
-        visit.siteSurvey.latitude ||
-        visit.siteSurvey.longitude ||
-        visit.siteSurvey.photos?.length)
-  );
-
-const normalizeLeadStatus = (status) => {
-  const safeStatus = String(status || "").trim();
-  if (!safeStatus || safeStatus === "Other") return "Visit";
-  return safeStatus;
-};
+const hasSiteSurveyData = (visit) => hasVisitSiteSurvey(visit);
 
 const isSiteSurveySummaryText = (value) =>
   String(value || "").trim().toLowerCase().startsWith("site survey summary");
-
-const getCleanVisitNotes = (visit) => {
-  const rawNotes = String(visit?.visitNotes || visit?.remarks || "").trim();
-  if (!rawNotes) return "";
-  if (isSiteSurveySummaryText(rawNotes)) {
-    return String(visit?.siteSurvey?.remarks || "").trim();
-  }
-  return rawNotes;
-};
 
 const getAssignedPerson = (visit) => visit?.assignedUser || visit?.assignedManager || null;
 
@@ -473,19 +461,27 @@ const StatusPill = ({ status }) => {
   );
 };
 
-// ========== LEAD PILL ==========
-const LeadPill = ({ status }) => {
-  const cfg = getLeadStatusConfig(status);
+const VisitStatusBlock = ({ visit, alignItems = "flex-start" }) => {
+  const info = visit?.visitStatusInfo || buildVisitStatusInfo(visit);
+
   return (
-    <Box sx={{
-      display: "inline-flex", alignItems: "center", gap: "5px",
-      px: 1, py: 0.4, borderRadius: "20px",
-      background: cfg.bg, color: cfg.color,
-      fontSize: "11.5px", fontWeight: 600,
-    }}>
-      {React.cloneElement(cfg.icon, { sx: { fontSize: 13 } })}
-      {cfg.label}
-    </Box>
+    <Stack spacing={0.4} alignItems={alignItems}>
+      <StatusPill status={info.status} />
+      {info.helperText ? (
+        <Typography
+          variant="caption"
+          sx={{
+            color: info.isOverdue ? "#dc2626" : "#64748b",
+            fontWeight: info.isOverdue ? 700 : 600,
+            textDecoration: info.isOverdue ? "underline" : "none",
+            textUnderlineOffset: "0.18em",
+            lineHeight: 1.2,
+          }}
+        >
+          {info.helperText}
+        </Typography>
+      ) : null}
+    </Stack>
   );
 };
 
@@ -680,12 +676,10 @@ const MobileFilterDrawer = ({
 };
 
 // ========== MOBILE VISIT CARD ==========
-const MobileVisitCard = ({ visit, onView, onEdit }) => {
+const MobileVisitCard = ({ visit, onView, onOpenLead }) => {
   const [expanded, setExpanded] = useState(false);
   const visitStatusConfig = getStatusConfig(visit.visitStatus);
-  const leadStatusConfig = getLeadStatusConfig(normalizeLeadStatus(visit.status));
   const initials = getInitials(visit.firstName, visit.lastName);
-  const cleanVisitNotes = getCleanVisitNotes(visit);
 
   return (
     <Paper elevation={0} sx={{
@@ -735,12 +729,12 @@ const MobileVisitCard = ({ visit, onView, onEdit }) => {
         <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.5 }}>
           <CalendarToday sx={{ fontSize: 13, color: alpha(PRIMARY, 0.5) }} />
           <Typography variant="body2" fontWeight={500}>
-            {visit.visitDate ? formatDate(visit.visitDate, "dd MMM yyyy") : formatDate(visit.createdAt, "dd MMM yyyy")}
+            {getVisitDisplayDate(visit)}
           </Typography>
           <FiberManualRecord sx={{ fontSize: 4, color: "text.disabled" }} />
           <AccessTime sx={{ fontSize: 13, color: alpha(PRIMARY, 0.5) }} />
           <Typography variant="body2" fontWeight={500}>
-            {visit.visitTime ? formatTime(visit.visitTime) : formatDate(visit.createdAt, "hh:mm a")}
+            {getVisitDisplayTime(visit)}
           </Typography>
         </Stack>
 
@@ -752,32 +746,21 @@ const MobileVisitCard = ({ visit, onView, onEdit }) => {
         )}
 
         <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
-          <StatusPill status={visit.visitStatus} />
-          <LeadPill status={normalizeLeadStatus(visit.status)} />
+          <VisitStatusBlock visit={visit} />
         </Box>
 
         <Collapse in={expanded}>
           <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${alpha(PRIMARY, 0.08)}` }}>
-            {cleanVisitNotes && (
-              <Box sx={{ mb: 1.5, p: 1.5, background: GRAD_CARD, borderRadius: 2, border: `1px solid ${alpha(ACCENT, 0.15)}` }}>
-                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-                  Visit Notes
-                </Typography>
-                <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
-                  {cleanVisitNotes}
-                </Typography>
-              </Box>
-            )}
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
               <Button fullWidth size="small" variant="contained" startIcon={<Visibility sx={{ fontSize: 15 }} />}
                 onClick={() => onView(visit)}
                 sx={{ background: GRAD_MAIN, borderRadius: "10px", boxShadow: "0 2px 8px rgba(15,31,61,.2)", fontSize: "12px", "&:hover": { background: GRAD_DARK } }}>
                 View
               </Button>
-              <Button fullWidth size="small" variant="outlined" startIcon={<Edit sx={{ fontSize: 15 }} />}
-                onClick={() => onEdit(visit)}
+              <Button fullWidth size="small" variant="outlined" startIcon={<OpenInNew sx={{ fontSize: 15 }} />}
+                onClick={() => onOpenLead(visit)}
                 sx={{ borderColor: ACCENT, color: ACCENT, borderRadius: "10px", fontSize: "12px", "&:hover": { background: alpha(ACCENT, 0.05) } }}>
-                Edit
+                Lead Details
               </Button>
             </Stack>
           </Box>
@@ -793,15 +776,7 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [activeTab, setActiveTab] = useState(0);
   const userRoleConfig = useMemo(() => getRoleConfig(userRole), [userRole]);
-  const visitStatusConfig = useMemo(() => getStatusConfig(visit?.visitStatus), [visit?.visitStatus]);
-  const leadStatusConfig = useMemo(
-    () => getLeadStatusConfig(normalizeLeadStatus(visit?.status)),
-    [visit?.status]
-  );
-
   if (!visit) return null;
-  const notesLabel = "Visit Notes";
-  const visitNotes = getCleanVisitNotes(visit);
   const siteSurvey = hasSiteSurveyData(visit) ? visit.siteSurvey : null;
   const surveyGeneral = siteSurvey?.general || {};
   const visitCoordinates = getVisitCoordinates(visit);
@@ -851,18 +826,14 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
             <Stack>
               <Box sx={infoRowSx}>
                 <Typography variant="body2" color="text.secondary">Visit status</Typography>
-                <StatusPill status={visit.visitStatus} />
-              </Box>
-              <Box sx={infoRowSx}>
-                <Typography variant="body2" color="text.secondary">Lead status</Typography>
-                <LeadPill status={normalizeLeadStatus(visit.status)} />
+                <VisitStatusBlock visit={visit} alignItems="flex-end" />
               </Box>
               <Box sx={infoRowSx}>
                 <Typography variant="body2" color="text.secondary">Visit date</Typography>
                 <Typography variant="body2" fontWeight={500}>
-                  {visit.visitDate ? formatDate(visit.visitDate, "dd MMM yyyy") : formatDate(visit.createdAt, "dd MMM yyyy")}
+                  {getVisitDisplayDate(visit)}
                   {" · "}
-                  {visit.visitTime ? formatTime(visit.visitTime) : formatDate(visit.createdAt, "hh:mm a")}
+                  {getVisitDisplayTime(visit)}
                 </Typography>
               </Box>
             </Stack>
@@ -871,7 +842,7 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
       ),
     },
     {
-      label: "Location & Notes", icon: <LocationOn sx={{ fontSize: 18 }} />,
+      label: "Location", icon: <LocationOn sx={{ fontSize: 18 }} />,
       content: (
         <Stack spacing={2}>
           {visit.visitLocation && (
@@ -947,18 +918,6 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
                   />
                 ))}
               </Stack>
-            </Box>
-          )}
-          {visitNotes ? (
-            <Box sx={infoSectionSx}>
-              <Typography sx={infoSectionTitleSx}><Notes sx={{ fontSize: 16 }} /> {notesLabel}</Typography>
-              <Typography variant="body2" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{visitNotes}</Typography>
-            </Box>
-          ) : (
-            <Box sx={infoSectionSx}>
-              <Typography variant="body2" color="text.secondary" fontStyle="italic">
-                No notes or description provided.
-              </Typography>
             </Box>
           )}
         </Stack>
@@ -1147,284 +1106,6 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
 });
 ViewVisitModal.displayName = "ViewVisitModal";
 
-// ========== EDIT MODAL ==========
-const EditVisitModal = React.memo(({ open, onClose, visit, onSave, userRole, showSnackbar, updating }) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const { fetchAPI } = useAuth();
-
-  const [editForm, setEditForm] = useState({
-    visitStatus: "Not Assigned", visitDate: null, visitTime: null,
-    visitLocation: "", status: "Visit", visitNotes: "",
-    followUpAction: "", followUpNotes: "",
-    locationImage: null, locationImagePreview: null,
-  });
-  const [validationErrors, setValidationErrors] = useState({});
-
-  useEffect(() => {
-    if (open && visit) {
-      setEditForm({
-        visitStatus: visit.visitStatus || "Not Assigned",
-        visitDate: visit.visitDate && isValid(parseISO(visit.visitDate)) ? parseISO(visit.visitDate) : null,
-        visitTime: parseVisitTime(visit.visitTime),
-        visitLocation: visit.visitLocation || "",
-        status: normalizeLeadStatus(visit.status),
-        visitNotes: getCleanVisitNotes(visit),
-        followUpAction: visit.followUpAction || "",
-        followUpNotes: visit.followUpNotes || "",
-        locationImage: null, locationImagePreview: visit.locationImageUrl || null,
-      });
-      setValidationErrors({});
-    }
-  }, [open, visit]);
-
-  const handleLocationImageChange = useCallback((event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { showSnackbar("Image must be under 5MB", "error"); return; }
-    if (!["image/jpeg", "image/jpg", "image/png"].includes(file.type)) { showSnackbar("Only JPG and PNG allowed", "error"); return; }
-    setEditForm((prev) => ({ ...prev, locationImage: file, locationImagePreview: URL.createObjectURL(file) }));
-  }, [showSnackbar]);
-
-  const validateForm = useCallback(() => {
-    const errors = {};
-    if (!editForm.visitStatus) errors.visitStatus = "Visit status is required";
-    if (["Scheduled", "Follow Up"].includes(editForm.visitStatus) && !editForm.visitDate) errors.visitDate = "Visit date is required";
-    if (["Scheduled", "Follow Up"].includes(editForm.visitStatus) && !editForm.visitTime) errors.visitTime = "Visit time is required";
-    if (editForm.visitStatus === "Follow Up" && !editForm.followUpAction) errors.followUpAction = "Follow up type is required";
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [editForm]);
-
-  const handleSubmit = useCallback(async () => {
-    if (!validateForm()) { showSnackbar("Please fix the errors in the form", "error"); return; }
-    try {
-      let body, headers = { "Content-Type": "application/json" };
-      const payload = {
-        visitStatus: editForm.visitStatus,
-        ...(editForm.visitDate && { visitDate: format(editForm.visitDate, "yyyy-MM-dd") }),
-        ...(editForm.visitTime && { visitTime: formatVisitTimeForSave(editForm.visitTime) }),
-        ...(editForm.visitLocation && { visitLocation: editForm.visitLocation.trim() }),
-        status: editForm.status,
-        ...(editForm.visitNotes && { visitNotes: editForm.visitNotes.trim() }),
-        followUpAction: editForm.visitStatus === "Follow Up" ? editForm.followUpAction : "",
-        followUpNotes: editForm.visitStatus === "Follow Up" ? editForm.followUpNotes.trim() : "",
-        followUpDate: editForm.visitStatus === "Follow Up" && editForm.visitDate && editForm.visitTime
-          ? new Date(editForm.visitDate.getFullYear(), editForm.visitDate.getMonth(), editForm.visitDate.getDate(),
-              editForm.visitTime.getHours(), editForm.visitTime.getMinutes(), 0, 0).toISOString()
-          : null,
-      };
-      if (editForm.locationImage) {
-        const formData = new FormData();
-        Object.entries(payload).forEach(([k, v]) => formData.append(k, v));
-        formData.append("locationImage", editForm.locationImage);
-        body = formData; headers = {};
-      } else {
-        body = JSON.stringify(payload);
-      }
-      const response = await fetchAPI(`/lead/updateLead/${visit._id}`, { method: "PUT", headers, body });
-      if (response?.success) { showSnackbar("Visit updated successfully", "success"); onSave(response.result); onClose(); }
-      else throw new Error(response?.message || "Update failed");
-    } catch (error) {
-      console.error("Update error:", error);
-      showSnackbar(error.message || "Update failed", "error");
-    }
-  }, [editForm, validateForm, visit, fetchAPI, showSnackbar, onSave, onClose]);
-
-  const handleChange = useCallback((field) => (event) => {
-    setEditForm((prev) => ({ ...prev, [field]: event.target.value }));
-    if (validationErrors[field]) setValidationErrors((prev) => ({ ...prev, [field]: "" }));
-  }, [validationErrors]);
-
-  if (!visit) return null;
-  const notesLabel = "Visit Notes";
-  const notesPlaceholder = "Add any notes related to this visit";
-
-  const fieldSx = { "& .MuiOutlinedInput-root": { borderRadius: "10px" } };
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={isMobile}
-      PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px", margin: isMobile ? 0 : 3 } }}
-      TransitionComponent={isMobile ? Slide : Fade} transitionDuration={300}>
-      <DialogTitle sx={{ background: GRAD_CARD, borderBottom: `1px solid ${alpha(ACCENT, 0.15)}`, pb: 2, px: { xs: 2, sm: 3 } }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Box display="flex" alignItems="center" gap={1.5}>
-            <Box sx={{
-              width: 44, height: 44, borderRadius: "11px",
-              background: GRAD_BLUE, color: "#fff",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 4px 12px rgba(37,99,235,.3)",
-            }}>
-              <Edit sx={{ fontSize: 22 }} />
-            </Box>
-            <Box>
-              <Typography variant="h6" fontWeight={700} sx={{ fontSize: { xs: "1rem", sm: "1.1rem" } }}>Edit Visit</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                {visit.firstName} {visit.lastName}
-              </Typography>
-            </Box>
-          </Box>
-          <IconButton onClick={onClose} size="small"
-            sx={{ background: alpha(PRIMARY, 0.06), "&:hover": { background: alpha(PRIMARY, 0.12) } }}>
-            <Close />
-          </IconButton>
-        </Stack>
-      </DialogTitle>
-
-      <DialogContent sx={{ py: { xs: 2, sm: 3 }, px: { xs: 2, sm: 3 } }}>
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          <FormControl fullWidth size="small" error={!!validationErrors.visitStatus} sx={fieldSx}>
-            <InputLabel>Visit Status</InputLabel>
-            <Select value={editForm.visitStatus} label="Visit Status" onChange={handleChange("visitStatus")}>
-              {Object.keys(STATUS_CONFIG).map((s) => (
-                <MenuItem key={s} value={s}>
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    {getStatusConfig(s).icon}<span>{s}</span>
-                  </Stack>
-                </MenuItem>
-              ))}
-            </Select>
-            {validationErrors.visitStatus && <FormHelperText>{validationErrors.visitStatus}</FormHelperText>}
-          </FormControl>
-
-          <DatePicker label="Visit Date" value={editForm.visitDate}
-            onChange={(v) => setEditForm((p) => ({ ...p, visitDate: v }))}
-            slotProps={{ textField: { fullWidth: true, size: "small", sx: fieldSx, error: !!validationErrors.visitDate, helperText: validationErrors.visitDate } }} />
-
-          <TimePicker label="Visit Time" value={editForm.visitTime} ampm
-            onChange={(v) => { setEditForm((p) => ({ ...p, visitTime: v })); if (validationErrors.visitTime) setValidationErrors((p) => ({ ...p, visitTime: "" })); }}
-            slotProps={{ textField: { fullWidth: true, size: "small", sx: fieldSx, error: !!validationErrors.visitTime, helperText: validationErrors.visitTime } }} />
-
-          <TextField label="Visit Location" value={editForm.visitLocation} onChange={handleChange("visitLocation")}
-            multiline rows={isMobile ? 2 : 3} fullWidth size="small" placeholder="Enter visit location address" sx={fieldSx} />
-
-          <TextField label={notesLabel} value={editForm.visitNotes} onChange={handleChange("visitNotes")}
-            multiline rows={isMobile ? 2 : 3} fullWidth size="small" placeholder={notesPlaceholder} sx={fieldSx} />
-
-          {editForm.visitStatus === "Follow Up" && (
-            <>
-              <FormControl fullWidth size="small" error={!!validationErrors.followUpAction} sx={fieldSx}>
-                <InputLabel>Follow Up Type</InputLabel>
-                <Select value={editForm.followUpAction} label="Follow Up Type" onChange={handleChange("followUpAction")}>
-                  {FOLLOW_UP_OPTIONS.map((opt) => (
-                    <MenuItem key={opt.value} value={opt.value}>
-                      <Stack direction="row" alignItems="center" spacing={1.5}>{opt.icon}<span>{opt.label}</span></Stack>
-                    </MenuItem>
-                  ))}
-                </Select>
-                {validationErrors.followUpAction && <FormHelperText>{validationErrors.followUpAction}</FormHelperText>}
-              </FormControl>
-
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                {FOLLOW_UP_OPTIONS.map((opt) => {
-                  const isActive = editForm.followUpAction === opt.value;
-                  return (
-                    <Box key={opt.value} onClick={() => {
-                      setEditForm((p) => ({ ...p, followUpAction: opt.value }));
-                      if (validationErrors.followUpAction) setValidationErrors((p) => ({ ...p, followUpAction: "" }));
-                    }} sx={{
-                      display: "flex", alignItems: "center", gap: 0.75,
-                      px: 1.5, py: 0.75, borderRadius: "20px", cursor: "pointer",
-                      border: `1px solid ${isActive ? "transparent" : alpha(PRIMARY, 0.2)}`,
-                      background: isActive ? GRAD_BLUE : "transparent",
-                      color: isActive ? "#fff" : "text.secondary",
-                      fontSize: "13px", fontWeight: 500,
-                      boxShadow: isActive ? "0 2px 8px rgba(37,99,235,.25)" : "none",
-                      transition: "all .15s",
-                    }}>
-                      {React.cloneElement(opt.icon, { sx: { fontSize: 14, color: "inherit" } })}
-                      {opt.label}
-                    </Box>
-                  );
-                })}
-              </Stack>
-
-              <TextField label="Follow Up Details" value={editForm.followUpNotes} onChange={handleChange("followUpNotes")}
-                multiline rows={isMobile ? 2 : 3} fullWidth size="small" placeholder="Add follow up details" sx={fieldSx} />
-
-              <Alert severity="info" sx={{
-                background: "linear-gradient(135deg,#dbeafe,#eff6ff)",
-                border: `1px solid ${alpha(ACCENT, 0.2)}`, borderRadius: "10px",
-                color: "#1d4ed8", "& .MuiAlert-icon": { color: ACCENT },
-              }}>
-                Follow up reminder will use the visit date and visit time.
-              </Alert>
-            </>
-          )}
-
-          {editForm.visitStatus === "Completed" && (
-            <Box>
-              <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1, color: PRIMARY }}>
-                Location Image
-                <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>(JPG/PNG, max 5MB)</Typography>
-              </Typography>
-              {editForm.locationImagePreview ? (
-                <Box>
-                  <Box component="img" src={editForm.locationImagePreview} alt="Location"
-                    sx={{ width: "100%", maxHeight: 200, objectFit: "cover", borderRadius: 2, border: `1px solid ${alpha(ACCENT, 0.2)}`, display: "block" }} />
-                  <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                    <Button size="small" variant="outlined" component="label"
-                      sx={{ borderColor: ACCENT, color: ACCENT, flex: 1, borderRadius: "8px" }}>
-                      Change Image
-                      <input type="file" hidden accept="image/jpeg,image/jpg,image/png" onChange={handleLocationImageChange} />
-                    </Button>
-                    <Button size="small" variant="outlined"
-                      onClick={() => setEditForm((p) => ({ ...p, locationImage: null, locationImagePreview: null }))}
-                      sx={{ borderColor: "error.main", color: "error.main", flex: 1, borderRadius: "8px" }}>
-                      Remove
-                    </Button>
-                  </Stack>
-                </Box>
-              ) : (
-                <Box component="label" sx={{
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1,
-                  border: "2px dashed", borderColor: alpha(ACCENT, 0.3), borderRadius: 2,
-                  p: 3, cursor: "pointer", background: GRAD_CARD,
-                  "&:hover": { borderColor: ACCENT, background: alpha(ACCENT, 0.04) }, transition: "all .2s",
-                }}>
-                  <input type="file" hidden accept="image/jpeg,image/jpg,image/png" onChange={handleLocationImageChange} />
-                  <LocationOn sx={{ fontSize: 36, color: alpha(ACCENT, 0.5) }} />
-                  <Typography variant="body2" color="text.secondary">Click to upload location photo</Typography>
-                  <Typography variant="caption" color="text.disabled">JPG or PNG, max 5MB</Typography>
-                </Box>
-              )}
-            </Box>
-          )}
-
-          <FormControl fullWidth size="small" sx={fieldSx}>
-            <InputLabel>Lead Status</InputLabel>
-            <Select value={editForm.status} label="Lead Status" onChange={handleChange("status")}>
-              {Object.keys(LEAD_STATUS_CONFIG).map((s) => (
-                <MenuItem key={s} value={s}>
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    {getLeadStatusConfig(s).icon}<span>{s}</span>
-                  </Stack>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Stack>
-      </DialogContent>
-
-      <DialogActions sx={{
-        p: { xs: 2, sm: 3 }, pt: { xs: 1.5, sm: 2 }, borderTop: 1, borderColor: "divider",
-        gap: 1.5, flexDirection: { xs: "column", sm: "row" }, background: GRAD_CARD,
-      }}>
-        <Button onClick={onClose} variant="outlined" fullWidth={isMobile}
-          sx={{ borderColor: alpha(PRIMARY, 0.3), color: PRIMARY, borderRadius: "10px", "&:hover": { background: alpha(PRIMARY, 0.04) } }}>
-          Cancel
-        </Button>
-        <Button onClick={handleSubmit} variant="contained" fullWidth={isMobile} disabled={updating}
-          startIcon={updating ? <CircularProgress size={16} sx={{ color: "#fff" }} /> : <Save />}
-          sx={{ background: GRAD_MAIN, borderRadius: "10px", boxShadow: "0 2px 10px rgba(15,31,61,.25)", "&:hover": { background: GRAD_DARK } }}>
-          {updating ? "Saving..." : "Save Changes"}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-});
-EditVisitModal.displayName = "EditVisitModal";
-
 // ========== LOADING SKELETON ==========
 const LoadingSkeleton = () => {
   const theme = useTheme();
@@ -1492,10 +1173,8 @@ export default function TotalVisitsPage() {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(isMobile ? 10 : DEFAULT_ITEMS_PER_PAGE);
   const [viewModalOpen, setViewModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
   const [assignLeadModalOpen, setAssignLeadModalOpen] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
-  const [updating, setUpdating] = useState(false);
   const [viewMode, setViewMode] = useState(isMobile ? "card" : "table");
   const containerRef = useRef(null);
 
@@ -1513,26 +1192,44 @@ export default function TotalVisitsPage() {
       const leadQ = new URLSearchParams(params); leadQ.set("page","1"); leadQ.set("limit","100");
       const visitQ = new URLSearchParams(params); visitQ.set("page","1"); visitQ.set("limit","100"); visitQ.set("isLeadCreate","false");
 
-      const [response, visitResponse] = await Promise.all([
+      const [response, visitResponse, projectResponse] = await Promise.all([
         fetchAPI(`/lead/visitSummary?${leadQ.toString()}`),
         fetchAPI(`/visit?${visitQ.toString()}`),
+        fetchAPI("/lead/getAll?isProject=true&limit=500&sortBy=projectConvertedAt&sortOrder=desc"),
       ]);
 
       if (response?.success) {
+        const projectLeads = projectResponse?.result?.leads || [];
+        const projectById = new Map(
+          projectLeads
+            .filter((project) => project?._id)
+            .map((project) => [String(project._id), project]),
+        );
         const leadVisitsRaw = response.result?.visits || response.result || [];
-        const leadVisits = leadVisitsRaw.map((v) => ({
-          ...v,
-          visitPhotos: Array.isArray(v?.siteSurvey?.photos) ? v.siteSurvey.photos : [],
-          visitCoordinates:
-            v?.siteSurvey?.latitude != null && v?.siteSurvey?.longitude != null
-              ? { lat: Number(v.siteSurvey.latitude), lng: Number(v.siteSurvey.longitude) }
-              : null,
-          locationImageUrl: getPhotoUrl(v?.siteSurvey?.photos?.[0] || ""),
-        }));
+        const leadVisits = leadVisitsRaw.map((v) => {
+          const matchingProject = projectById.get(String(v?._id || ""));
+          const mergedVisit = {
+            ...v,
+            isProject: v?.isProject || Boolean(matchingProject?.isProject),
+            projectConvertedAt: v?.projectConvertedAt || matchingProject?.projectConvertedAt || null,
+            siteSurvey: v?.siteSurvey || matchingProject?.siteSurvey || null,
+          };
+
+          return decorateVisitForDisplay({
+            ...mergedVisit,
+            visitPhotos: Array.isArray(mergedVisit?.siteSurvey?.photos) ? mergedVisit.siteSurvey.photos : [],
+            visitCoordinates:
+              mergedVisit?.siteSurvey?.latitude != null && mergedVisit?.siteSurvey?.longitude != null
+                ? { lat: Number(mergedVisit.siteSurvey.latitude), lng: Number(mergedVisit.siteSurvey.longitude) }
+                : null,
+            locationImageUrl: getPhotoUrl(mergedVisit?.siteSurvey?.photos?.[0] || ""),
+          });
+        });
         const rawVisits = visitResponse?.result?.visits || [];
-        const otherVisits = rawVisits.map((v) => ({
+        const otherVisits = rawVisits.map((v) => decorateVisitForDisplay({
           _id: v._id, firstName: v.contactPerson || v.user?.firstName || "", lastName: v.contactPerson ? "" : (v.user?.lastName || ""),
           phone: v.phone || "", email: v.email || "", status: "Visit", visitType: "Other",
+          leadId: v.leadCreated?._id || null,
           visitStatus: v.status || "Completed", visitDate: v.visitDate || v.createdAt,
           visitTime: v.checkInTime || v.createdAt, visitLocation: v.locationName || "",
           visitNotes: isSiteSurveySummaryText(v.remarks) ? "" : (v.remarks || ""), createdAt: v.createdAt, updatedAt: v.updatedAt,
@@ -1566,28 +1263,87 @@ export default function TotalVisitsPage() {
               }
             : null,
         }));
+        const existingLeadIds = new Set([
+          ...leadVisits.map((visit) => String(visit?._id || "")),
+          ...otherVisits.map((visit) => String(visit?._id || "")),
+        ]);
+        const visitStageProjects = projectLeads
+          .filter((project) => getProjectStage(project) === "visit")
+          .filter((project) => !existingLeadIds.has(String(project?._id || "")))
+          .map((project) => decorateVisitForDisplay({
+            _id: project._id,
+            projectCode: project.projectCode || "",
+            firstName: project.firstName || "",
+            lastName: project.lastName || "",
+            phone: project.phone || "",
+            email: project.email || "",
+            isProject: project.isProject,
+            projectConvertedAt: project.projectConvertedAt,
+            status: project.status || "Visit",
+            visitType: "Lead",
+            leadId: project._id,
+            visitStatus: project.visitStatus || "Not Assigned",
+            visitDate: project.visitDate || project?.siteSurvey?.savedAt || null,
+            visitTime: project.visitTime || null,
+            visitLocation: project.visitLocation || project.city || project.address || "",
+            visitNotes: project.visitNotes || "",
+            siteSurvey: project.siteSurvey || null,
+            createdAt: project.createdAt,
+            updatedAt: project.updatedAt,
+            checkInTime: null,
+            checkOutTime: null,
+            timeSpentMinutes: 0,
+            travelTimeMinutes: 0,
+            visitCoordinates: null,
+            visitPhotos: Array.isArray(project?.siteSurvey?.photos) ? project.siteSurvey.photos : [],
+            locationImageUrl: getPhotoUrl(project?.siteSurvey?.photos?.[0] || ""),
+            address: project.address || "",
+            assignedUser: project.assignedUser
+              ? {
+                  _id: project.assignedUser._id,
+                  firstName: project.assignedUser.firstName,
+                  lastName: project.assignedUser.lastName,
+                  name: project.assignedUser.name,
+                  companyName: project.assignedUser.companyName,
+                  email: project.assignedUser.email,
+                  role: project.assignedUser.role,
+                }
+              : null,
+            assignedManager: project.assignedManager
+              ? {
+                  _id: project.assignedManager._id,
+                  firstName: project.assignedManager.firstName,
+                  lastName: project.assignedManager.lastName,
+                  name: project.assignedManager.name,
+                  companyName: project.assignedManager.companyName,
+                  email: project.assignedManager.email,
+                role: project.assignedManager.role,
+              }
+            : null,
+          }));
 
-        const visits = [...leadVisits, ...otherVisits].sort(
-          (a, b) => new Date(b.createdAt || b.visitDate || 0) - new Date(a.createdAt || a.visitDate || 0)
+        const visits = [...leadVisits, ...visitStageProjects, ...otherVisits].sort(
+          (a, b) => new Date(getVisitDateValue(b) || b.createdAt || 0) - new Date(getVisitDateValue(a) || a.createdAt || 0)
         );
 
         const totalVisits = visits.length;
-        const completedVisits = visits.filter((v) => (v.visitStatus || "").toLowerCase() === "completed").length;
+        const completedVisits = visits.filter((v) => ["completed", "approved"].includes((v.visitStatus || "").toLowerCase())).length;
         const conversionRate = totalVisits > 0 ? Math.round((completedVisits / totalVisits) * 100) : 0;
         const todayStart = startOfDay(new Date()); const todayEnd = endOfDay(new Date());
 
         const overdueVisits = visits.filter((v) => {
-          if (!v.visitDate) return false;
-          try {
-            const d = parseISO(v.visitDate); if (!isValid(d)) return false;
-            const ns = (v.visitStatus || "").toLowerCase();
-            return d < todayStart && ns !== "completed" && ns !== "cancelled";
-          } catch { return false; }
+          const statusInfo = v.visitStatusInfo || buildVisitStatusInfo(v);
+          return Boolean(statusInfo.isOverdue);
         }).length;
 
         const todayVisits = visits.filter((v) => {
           if (!v.visitDate) return false;
-          try { const d = parseISO(v.visitDate); return isValid(d) && d >= todayStart && d <= todayEnd; } catch { return false; }
+          try {
+            const d = parseISO(v.visitDate);
+            return isValid(d) && d >= todayStart && d <= todayEnd && (v.visitStatus || "").toLowerCase() === "scheduled";
+          } catch {
+            return false;
+          }
         }).length;
 
         const awaitingApproval = visits.filter((v) => (v.visitStatus || "").toLowerCase() === "completed").length;
@@ -1615,17 +1371,17 @@ export default function TotalVisitsPage() {
         filtered = filtered.filter((v) =>
           (v.firstName?.toLowerCase() || "").includes(q) || (v.lastName?.toLowerCase() || "").includes(q) ||
           (v.email?.toLowerCase() || "").includes(q) || (v.phone || "").includes(q) ||
-          (v.visitLocation?.toLowerCase() || "").includes(q) || (v.visitNotes?.toLowerCase() || "").includes(q)
+          (v.visitLocation?.toLowerCase() || "").includes(q)
         );
       }
       if (statusFilter !== "All") filtered = filtered.filter((v) => v.visitStatus === statusFilter);
       if (dateFilter.startDate && isValid(dateFilter.startDate)) {
         const start = startOfDay(new Date(dateFilter.startDate));
-        filtered = filtered.filter((v) => { try { const d = parseISO(v.visitDate); return isValid(d) && d >= start; } catch { return false; } });
+        filtered = filtered.filter((v) => { try { const d = new Date(getVisitDateValue(v)); return isValid(d) && d >= start; } catch { return false; } });
       }
       if (dateFilter.endDate && isValid(dateFilter.endDate)) {
         const end = endOfDay(new Date(dateFilter.endDate));
-        filtered = filtered.filter((v) => { try { const d = parseISO(v.visitDate); return isValid(d) && d <= end; } catch { return false; } });
+        filtered = filtered.filter((v) => { try { const d = new Date(getVisitDateValue(v)); return isValid(d) && d <= end; } catch { return false; } });
       }
       const active = Object.keys(selectedStatuses).filter((s) => selectedStatuses[s]);
       if (active.length < Object.keys(STATUS_CONFIG).length) {
@@ -1634,7 +1390,7 @@ export default function TotalVisitsPage() {
       if (sortConfig.key) {
         filtered.sort((a, b) => {
           let av = a[sortConfig.key], bv = b[sortConfig.key];
-          if (sortConfig.key === "visitDate") { av = av ? parseISO(av) : new Date(0); bv = bv ? parseISO(bv) : new Date(0); }
+          if (sortConfig.key === "visitDate") { av = new Date(getVisitDateValue(a) || 0); bv = new Date(getVisitDateValue(b) || 0); }
           else if (sortConfig.key === "firstName") { av = `${a.firstName || ""} ${a.lastName || ""}`.toLowerCase(); bv = `${b.firstName || ""} ${b.lastName || ""}`.toLowerCase(); }
           else if (sortConfig.key === "visitStatus") { av = STATUS_CONFIG[av]?.order || 0; bv = STATUS_CONFIG[bv]?.order || 0; }
           if (av < bv) return sortConfig.direction === "asc" ? -1 : 1;
@@ -1682,8 +1438,14 @@ export default function TotalVisitsPage() {
   useEffect(() => { setViewMode(isMobile ? "card" : "table"); }, [isMobile]);
 
   const handleViewClick = useCallback((visit) => { if (!visit?._id) { showSnackbar("Invalid visit data", "error"); return; } setSelectedVisit(visit); setViewModalOpen(true); }, [showSnackbar]);
-  const handleEditClick = useCallback((visit) => { if (!visit?._id) { showSnackbar("Invalid visit data", "error"); return; } setSelectedVisit(visit); setEditModalOpen(true); }, [showSnackbar]);
-  const handleVisitUpdate = useCallback(async () => { try { await fetchVisitsData(); } catch (err) { showSnackbar("Failed to refresh data", "error"); } }, [fetchVisitsData, showSnackbar]);
+  const handleEditClick = useCallback((visit) => {
+    const leadId = visit?.leadId || (visit?.visitType !== "Other" ? visit?._id : null);
+    if (!leadId) {
+      showSnackbar("No linked lead found for this visit", "error");
+      return;
+    }
+    navigate(`/all-leads/${leadId}`, { state: { initialTab: "siteVisits" } });
+  }, [navigate, showSnackbar]);
   const handleAssignClick = useCallback(
     (visit) => {
       if (!visit?._id) {
@@ -1761,7 +1523,6 @@ export default function TotalVisitsPage() {
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <ViewVisitModal open={viewModalOpen} onClose={() => setViewModalOpen(false)} visit={selectedVisit} userRole={userRole} showSnackbar={showSnackbar} />
-      <EditVisitModal open={editModalOpen} onClose={() => setEditModalOpen(false)} visit={selectedVisit} onSave={handleVisitUpdate} userRole={userRole} showSnackbar={showSnackbar} updating={updating} />
       <LeadAssignDialog
         open={assignLeadModalOpen}
         onClose={() => setAssignLeadModalOpen(false)}
@@ -2067,9 +1828,7 @@ export default function TotalVisitsPage() {
                     <SortableHeader label="Customer" sortKey="firstName" />
                     <SortableHeader label="Date & Time" sortKey="visitDate" />
                     <TableCell sx={{ background: "linear-gradient(180deg,#f8faff,#f0f6ff)", fontWeight: 700, fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em", color: "text.secondary", py: 1.75 }}>Location</TableCell>
-                    <TableCell sx={{ background: "linear-gradient(180deg,#f8faff,#f0f6ff)", fontWeight: 700, fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em", color: "text.secondary", py: 1.75 }}>Notes</TableCell>
                     <SortableHeader label="Status" sortKey="visitStatus" />
-                    <TableCell sx={{ background: "linear-gradient(180deg,#f8faff,#f0f6ff)", fontWeight: 700, fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em", color: "text.secondary", py: 1.75 }}>Lead</TableCell>
                     <TableCell sx={{ background: "linear-gradient(180deg,#f8faff,#f0f6ff)", fontWeight: 700, fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em", color: "text.secondary", py: 1.75 }}>Assigned To</TableCell>
                     <TableCell sx={{ background: "linear-gradient(180deg,#f8faff,#f0f6ff)", fontWeight: 700, fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em", color: "text.secondary", py: 1.75, pr: 3 }}>Actions</TableCell>
                   </TableRow>
@@ -2097,10 +1856,10 @@ export default function TotalVisitsPage() {
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" fontWeight={500} sx={{ color: PRIMARY }}>
-                          {visit.visitDate ? formatDate(visit.visitDate, "dd MMM yyyy") : formatDate(visit.createdAt, "dd MMM yyyy")}
+                          {getVisitDisplayDate(visit)}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {visit.visitTime ? formatTime(visit.visitTime) : formatDate(visit.createdAt, "hh:mm a")}
+                          {getVisitDisplayTime(visit)}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -2108,13 +1867,7 @@ export default function TotalVisitsPage() {
                           {visit.visitLocation || "—"}
                         </Typography>
                       </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {visit.visitNotes || visit.remarks || "—"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell><StatusPill status={visit.visitStatus} /></TableCell>
-                      <TableCell><LeadPill status={visit.status} /></TableCell>
+                      <TableCell><VisitStatusBlock visit={visit} /></TableCell>
                       <TableCell>
                         {visit.assignedUser || visit.assignedManager ? (
                           <Box>
@@ -2174,14 +1927,14 @@ export default function TotalVisitsPage() {
                               <Visibility sx={{ fontSize: 15 }} />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Edit Visit">
+                          <Tooltip title="Open Lead Details">
                             <IconButton size="small" onClick={() => handleEditClick(visit)} sx={{
                               background: "linear-gradient(135deg,#eff6ff,#dbeafe)", color: ACCENT,
                               border: `1px solid ${alpha(ACCENT, 0.25)}`,
                               width: 32, height: 32, borderRadius: "8px",
                               transition: "all .15s", "&:hover": { background: alpha(ACCENT, 0.12) },
                             }}>
-                              <Edit sx={{ fontSize: 15 }} />
+                              <OpenInNew sx={{ fontSize: 15 }} />
                             </IconButton>
                           </Tooltip>
                         </Stack>
@@ -2189,7 +1942,7 @@ export default function TotalVisitsPage() {
                     </TableRow>
                   )) : (
                     <TableRow>
-                      <TableCell colSpan={8}>
+                      <TableCell colSpan={6}>
                         <EmptyState onClearFilters={handleClearFilters} hasFilters={activeFilterCount > 0} />
                       </TableCell>
                     </TableRow>
@@ -2202,7 +1955,7 @@ export default function TotalVisitsPage() {
             <Box sx={{ p: { xs: 1.5, sm: 2 }, bgcolor: "#fff" }}>
               {loading && allVisits.length > 0 && <LinearProgress sx={{ mb: 2, borderRadius: 2 }} />}
               {paginatedVisits.length > 0
-                ? paginatedVisits.map((visit) => <MobileVisitCard key={visit._id} visit={visit} onView={handleViewClick} onEdit={handleEditClick} />)
+                ? paginatedVisits.map((visit) => <MobileVisitCard key={visit._id} visit={visit} onView={handleViewClick} onOpenLead={handleEditClick} />)
                 : <EmptyState onClearFilters={handleClearFilters} hasFilters={activeFilterCount > 0} />
               }
             </Box>

@@ -2085,7 +2085,7 @@ const EditRegistrationModal = ({
     pincode: "",
     solarRequirement: "",
     dateOfRegistration: null,
-    registrationStatus: "In progress",
+    registrationStatus: "inProgress",
     registrationNotes: "",
     status: "Registration",
   });
@@ -2967,7 +2967,7 @@ export default function RegistrationPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   // State Management
-  const [period, setPeriod] = useState("Today");
+  const [period, setPeriod] = useState("All Time");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [snackbar, setSnackbar] = useState({
@@ -3080,7 +3080,7 @@ export default function RegistrationPage() {
           (reg) => reg.registrationStatus?.toLowerCase() === "completed",
         ).length;
         const inProgressRegistrations = filteredRegs.filter(
-          (reg) => reg.registrationStatus?.toLowerCase() === "in_progress",
+          (reg) => reg.registrationStatus?.toLowerCase() === "inprogress",
         ).length;
         const approvedRegistrations = filteredRegs.filter(
           (reg) => reg.registrationStatus?.toLowerCase() === "approved",

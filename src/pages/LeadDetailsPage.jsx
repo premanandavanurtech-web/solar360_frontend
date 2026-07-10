@@ -67,6 +67,12 @@ import {
   setCurrentQuotation,
   updateQuotationStatus,
 } from "../utils/quotationStorage";
+import {
+  buildVisitStatusInfo,
+  hasVisitSiteSurvey,
+  resolveVisitStatus,
+} from "../utils/visitStatus";
+import ConvertProjectDialog from "../components/ConvertProjectDialog";
 import { EditLeadModal } from "./LeadOverview";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
@@ -119,6 +125,7 @@ const DEAL_PIPELINE_STAGES = [
   { key: "contacted", label: "Contacted", icon: <Phone />, sub: "Initial contact" },
   { key: "qualified", label: "Qualified", icon: <AssignmentTurnedIn />, sub: "Needs confirmed" },
   { key: "site_visit_scheduled", label: "Site Visit", icon: <AccessTime />, sub: "Visit booked" },
+  { key: "site_survey", label: "Site Survey", icon: <CameraAltOutlined />, sub: "Survey complete" },
   { key: "proposal_sent", label: "Proposal Sent", icon: <DescriptionOutlined />, sub: "Quote shared" },
   { key: "project_converted", label: "Project Converted", icon: <Workspaces />, sub: "Active project" },
 ];
@@ -165,17 +172,89 @@ const getSiteSurveyRecord = (lead) => {
   return lead.siteSurvey;
 };
 
+const normalizeActivityType = (type, activity = {}) => {
+  const normalized = String(type || "").trim().toLowerCase();
+  const text = String(
+    activity?.message ??
+    activity?.notes ??
+    activity?.followUpNotes ??
+    activity?.comment ??
+    activity?.description ??
+    ""
+  ).trim().toLowerCase();
+  const readableText = text.replace(/^[^\w]+/, "").trim();
+  if (["log call", "call", "called", "call log", "phone call"].includes(normalized)) return "Log call";
+  if (readableText.startsWith("call log:") || readableText.startsWith("called") || readableText.startsWith("phone call")) return "Log call";
+  if (normalized === "note" || normalized === "comment") return "Comment";
+  if (normalized === "message" || normalized === "email") return "Email";
+  return type || "Comment";
+};
+
+const normalizeActivityMessage = (activity) => {
+  const message = String(
+    activity?.message ??
+    activity?.notes ??
+    activity?.followUpNotes ??
+    activity?.comment ??
+    activity?.description ??
+    ""
+  ).trim();
+  return message
+    .replace(/^call log:\s*/i, "")
+    .replace(/^[^\w]*called\s*[·-]\s*[^,\n]+,\s*[^,\n]+\s*/i, "")
+    .trim();
+};
+
+const isCallActivity = (entry) => normalizeActivityType(entry?.type, entry) === "Log call";
+
+const normalizeLeadActivities = (activities) =>
+  Array.isArray(activities)
+    ? activities
+        .filter((activity) => activity && typeof activity === "object")
+        .map((activity, index) => ({
+          ...activity,
+          id: activity.id || activity._id || `activity-${index}`,
+          type: normalizeActivityType(activity.type || activity.activityType || activity.followUpAction, activity),
+          message: normalizeActivityMessage(activity),
+          createdAt: activity.createdAt || activity.updatedAt || null,
+        }))
+    : [];
+
+const getActivityDedupKey = (activity) => {
+  const scheduledAt = activity?.scheduledAt ? new Date(activity.scheduledAt).getTime() : "";
+  const createdAt = activity?.createdAt || activity?.updatedAt;
+  const createdTime = createdAt ? new Date(createdAt).getTime() : NaN;
+  const createdBucket = Number.isFinite(createdTime) ? Math.floor(createdTime / 60000) : "";
+  return [
+    normalizeActivityType(activity?.type || activity?.activityType || activity?.followUpAction, activity).toLowerCase(),
+    normalizeActivityMessage(activity).toLowerCase(),
+    String(activity?.subject || "").trim().toLowerCase(),
+    String(activity?.location || "").trim().toLowerCase(),
+    scheduledAt,
+    String(activity?.assigneeId || "").trim(),
+    String(activity?.actorName || "").trim().toLowerCase(),
+    createdBucket,
+  ].join("|");
+};
+
+const mergeLeadActivities = (...groups) => {
+  const seen = new Set();
+  return normalizeLeadActivities(groups.flat()).filter((activity) => {
+    const key = getActivityDedupKey(activity);
+
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 const hasSiteSurveyRecord = (lead) => {
-  const survey = getSiteSurveyRecord(lead);
-  return Boolean(
-    survey &&
-      (survey.savedAt ||
-        survey.summary ||
-        survey.locationName ||
-        survey.latitude ||
-        survey.longitude ||
-        survey.photos?.length)
-  );
+  return hasVisitSiteSurvey(lead);
+};
+
+const isNotAssignedLabel = (value) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return !normalized || normalized === "not assigned";
 };
 
 const formatSurveyValue = (value) => {
@@ -1004,6 +1083,7 @@ const buildSiteVisitEntries = (lead, customActivities = [], assignedPerson = nul
       status: "Scheduled",
       assigneeName: entry.assigneeName || getPersonDisplayName(assignedPerson) || "Not assigned",
       source: "custom",
+      siteSurvey: null,
     }));
 
   const backendSiteVisitEntry = lead?.visitDate ? {
@@ -1011,56 +1091,206 @@ const buildSiteVisitEntries = (lead, customActivities = [], assignedPerson = nul
     scheduledAt: lead.visitDate,
     location: lead.visitLocation || [lead.address, lead.city].filter(Boolean).join(", "),
     notes: lead.visitNotes || "",
-    status: lead.visitStatus || "Scheduled",
+    status: resolveVisitStatus(lead),
     assigneeName: assignedPerson ? getPersonDisplayName(assignedPerson) : "Not assigned",
     source: "lead",
+    siteSurvey: getSiteSurveyRecord(lead),
   } : null;
 
   const siteVisitEntries = [...customSiteVisitEntries];
   if (backendSiteVisitEntry) {
-    const hasMatchingCustomEntry = customSiteVisitEntries.some((entry) =>
+    const matchingCustomIndex = customSiteVisitEntries.findIndex((entry) =>
       entry.scheduledAt === backendSiteVisitEntry.scheduledAt &&
       String(entry.location || "") === String(backendSiteVisitEntry.location || ""),
     );
-    if (!hasMatchingCustomEntry) {
+    if (matchingCustomIndex !== -1) {
+      siteVisitEntries[matchingCustomIndex] = {
+        ...siteVisitEntries[matchingCustomIndex],
+        status: backendSiteVisitEntry.status,
+        notes: backendSiteVisitEntry.notes || siteVisitEntries[matchingCustomIndex].notes,
+        siteSurvey: backendSiteVisitEntry.siteSurvey,
+      };
+    } else {
       siteVisitEntries.push(backendSiteVisitEntry);
     }
   }
 
-  return siteVisitEntries.sort((a, b) => new Date(a.scheduledAt || 0) - new Date(b.scheduledAt || 0));
+  return siteVisitEntries
+    .map((entry) => {
+      const visitStatusInfo = buildVisitStatusInfo({
+        visitStatus: entry.status,
+        visitDate: entry.scheduledAt,
+        siteSurvey: entry.siteSurvey,
+      });
+
+      return {
+        ...entry,
+        status: visitStatusInfo.status,
+        visitStatusInfo,
+      };
+    })
+    .sort((a, b) => new Date(a.scheduledAt || 0) - new Date(b.scheduledAt || 0));
 };
 
 const getDealPipelineStageIndex = (lead, quotationEntries = []) => {
   if (!lead) return 0;
-  if (lead.isProject) return 5;
+  if (lead.isProject) return 6;
 
   const status = String(lead.status || "").toLowerCase();
-  const visitStatus = String(lead.visitStatus || "").toLowerCase();
   const hasContacted = Boolean(
     String(lead.followUpAction || "").trim() ||
-    String(lead.followUpNotes || "").trim()
+    String(lead.followUpNotes || "").trim() ||
+    ["contacted", "qualified", "visit", "site visit", "registration", "bank loan apply", "document submission", "bank at pending", "disbursement", "installation completion"].includes(status)
   );
   const hasQualified =
+    status === "qualified" ||
     hasLeadDocuments(lead) ||
-    ["registration", "bank loan apply", "document submission", "bank at pending", "disbursement", "installation completion"].includes(status);
+    ["visit", "site visit", "registration", "bank loan apply", "document submission", "bank at pending", "disbursement", "installation completion"].includes(status);
   const hasVisitStage =
     status === "visit" ||
+    status === "site visit" ||
     Boolean(lead.visitDate);
+  const hasSiteSurvey = hasSiteSurveyRecord(lead);
   const hasProposalSent = Array.isArray(quotationEntries) && quotationEntries.length > 0;
   const hasPostProposalStage = ["bank at pending", "disbursement", "installation completion"].includes(status);
 
   if (hasPostProposalStage) {
-    return 4;
+    return 5;
   }
 
-  if (hasProposalSent) return 4;
+  if (hasProposalSent) return 5;
+  if (hasSiteSurvey) return 4;
   if (hasVisitStage) return 3;
   if (hasQualified) return 2;
   if (hasContacted) return 1;
   return 0;
 };
 
-const PipelineStepper = ({ currentIndex, stages }) => {
+const PipelineActionBanner = ({ card }) => {
+  if (!card) return null;
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        mb: 2.25,
+        p: { xs: 1.35, md: 1.65 },
+        borderRadius: TOKEN.radiusSm,
+        border: `1px solid ${alpha("#f59e0b", 0.55)}`,
+        bgcolor: "#fff7ed",
+        boxShadow: `0 12px 24px ${alpha("#f97316", 0.08)}`,
+      }}
+    >
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ xs: "stretch", md: "center" }} justifyContent="space-between">
+        <Stack direction="row" spacing={1.35} alignItems="center" sx={{ minWidth: 0 }}>
+          <Box
+            sx={{
+              width: 44,
+              height: 44,
+              borderRadius: TOKEN.radiusSm,
+              display: "grid",
+              placeItems: "center",
+              flexShrink: 0,
+              color: "#fff",
+              bgcolor: "#d97706",
+              boxShadow: `0 10px 18px ${alpha("#d97706", 0.18)}`,
+            }}
+          >
+            {React.cloneElement(card.icon || <ArrowForward />, { sx: { fontSize: 20 } })}
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              sx={{
+                fontSize: "0.68rem",
+                fontWeight: 900,
+                letterSpacing: "0.12em",
+                color: "#b45309",
+                textTransform: "uppercase",
+                lineHeight: 1.3,
+              }}
+            >
+              {card.eyebrow}
+            </Typography>
+            <Typography sx={{ mt: 0.25, fontSize: { xs: "0.95rem", md: "1.05rem" }, fontWeight: 900, color: TOKEN.text, lineHeight: 1.25 }}>
+              {card.title}
+            </Typography>
+            <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 0.2 }}>
+              <Typography sx={{ fontSize: "0.78rem", color: TOKEN.textSub, lineHeight: 1.35 }}>
+                {card.detail}
+              </Typography>
+              {card.needsAssignment && (
+                <Box
+                  sx={{
+                    px: 0.9,
+                    py: 0.25,
+                    borderRadius: 999,
+                    bgcolor: alpha("#dc2626", 0.08),
+                    border: `1px solid ${alpha("#dc2626", 0.3)}`,
+                  }}
+                >
+                  <Typography sx={{ fontSize: "0.68rem", fontWeight: 900, color: "#b91c1c", lineHeight: 1.25 }}>
+                    Assign the lead
+                  </Typography>
+                </Box>
+              )}
+            </Stack>
+          </Box>
+        </Stack>
+
+        {card.showContactActions && (
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ flexShrink: 0 }}>
+            <Button
+              variant="outlined"
+              startIcon={<Phone sx={{ fontSize: 15 }} />}
+              disabled={!card.phone}
+              onClick={() => { window.location.href = `tel:${card.phone}`; }}
+              sx={{
+                height: 38,
+                borderRadius: TOKEN.radiusSm,
+                px: 1.65,
+                bgcolor: "#fff",
+                color: TOKEN.text,
+                borderColor: TOKEN.borderMid,
+                fontWeight: 800,
+                fontSize: "0.78rem",
+                textTransform: "none",
+                "&:hover": { bgcolor: "#fff", borderColor: alpha("#d97706", 0.55) },
+              }}
+            >
+              Call now
+            </Button>
+            <Button
+              variant="contained"
+              disableElevation
+              startIcon={<WhatsApp sx={{ fontSize: 15 }} />}
+              disabled={!card.phone}
+              onClick={() => {
+                const phone = String(card.phone || "").replace(/\D/g, "");
+                if (phone) window.open(`https://wa.me/${phone}`, "_blank", "noopener,noreferrer");
+              }}
+              sx={{
+                height: 38,
+                borderRadius: TOKEN.radiusSm,
+                px: 1.65,
+                bgcolor: "#c2410c",
+                color: "#fff",
+                fontWeight: 900,
+                fontSize: "0.78rem",
+                textTransform: "none",
+                boxShadow: `0 10px 18px ${alpha("#c2410c", 0.18)}`,
+                "&:hover": { bgcolor: "#9a3412", boxShadow: `0 12px 22px ${alpha("#c2410c", 0.24)}` },
+              }}
+            >
+              Send WhatsApp
+            </Button>
+          </Stack>
+        )}
+      </Stack>
+    </Paper>
+  );
+};
+
+const PipelineStepper = ({ currentIndex, stages, actionCard }) => {
   const safeIdx = currentIndex < 0 ? 0 : currentIndex;
   const progressPct = stages.length > 1 ? Math.round((safeIdx / (stages.length - 1)) * 100) : 0;
 
@@ -1077,16 +1307,19 @@ const PipelineStepper = ({ currentIndex, stages }) => {
         </Box>
       </Stack>
 
+      {actionCard && <PipelineActionBanner card={actionCard} />}
+
       <Box sx={{ overflowX: "auto", overflowY: "visible", pb: 0.5, mx: -0.25, px: 0.25, scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
         <Stack direction="row" alignItems="flex-start" sx={{ minWidth: stages.length * 104, py: "6px" }}>
           {stages.map((stage, idx) => {
             const isDone = idx < safeIdx;
             const isActive = idx === safeIdx;
+            const showActionCard = actionCard?.stageKey === stage.key;
 
             return (
               <React.Fragment key={stage.key}>
-                <Tooltip title={stage.label} placement="top" arrow>
-                  <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", width: { xs: 68, sm: 80 }, flexShrink: 0 }}>
+                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", width: { xs: 68, sm: 80 }, flexShrink: 0 }}>
+                  <Tooltip title={stage.label} placement="top" arrow>
                     <Box sx={{
                       width: 32,
                       height: 32,
@@ -1105,23 +1338,24 @@ const PipelineStepper = ({ currentIndex, stages }) => {
                         ? <CheckCircle sx={{ fontSize: 16, color: "#fff" }} />
                         : React.cloneElement(stage.icon, { sx: { fontSize: 15 } })}
                     </Box>
+                  </Tooltip>
 
-                    <Typography sx={{
-                      fontSize: "0.68rem",
-                      fontWeight: isActive || isDone ? 600 : 400,
-                      color: isActive ? TOKEN.primary : isDone ? TOKEN.text : TOKEN.textMuted,
-                      textAlign: "center",
-                      lineHeight: 1.3,
-                      maxWidth: { xs: 64, sm: 76 },
-                    }}>
-                      {stage.label}
-                    </Typography>
+                  <Typography sx={{
+                    fontSize: "0.68rem",
+                    fontWeight: isActive || isDone || showActionCard ? 600 : 400,
+                    color: isActive || showActionCard ? TOKEN.primary : isDone ? TOKEN.text : TOKEN.textMuted,
+                    textAlign: "center",
+                    lineHeight: 1.3,
+                    maxWidth: showActionCard ? { xs: 188, sm: 210 } : { xs: 64, sm: 76 },
+                  }}>
+                    {stage.label}
+                  </Typography>
 
-                    <Typography sx={{ fontSize: "0.6rem", color: isActive ? alpha(TOKEN.primary, 0.7) : TOKEN.textMuted, fontWeight: isActive ? 500 : 400, textAlign: "center", mt: "-4px", lineHeight: 1.2 }}>
-                      {isActive ? "Currently here" : isDone ? stage.sub : "—"}
-                    </Typography>
-                  </Box>
-                </Tooltip>
+                  <Typography sx={{ fontSize: "0.6rem", color: isActive || showActionCard ? alpha(TOKEN.primary, 0.7) : TOKEN.textMuted, fontWeight: isActive || showActionCard ? 500 : 400, textAlign: "center", mt: "-4px", lineHeight: 1.2 }}>
+                    {showActionCard ? "Next action" : isActive ? "Currently here" : isDone ? stage.sub : "—"}
+                  </Typography>
+
+                </Box>
 
                 {idx < stages.length - 1 && (
                   <Box sx={{
@@ -1206,6 +1440,8 @@ export default function LeadDetailsPage() {
     location: "",
   });
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [projectDialogSubmitting, setProjectDialogSubmitting] = useState(false);
   const [pendingUploadSlot, setPendingUploadSlot] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [previewImageZoomed, setPreviewImageZoomed] = useState(false);
@@ -1225,6 +1461,7 @@ export default function LeadDetailsPage() {
   const [snackbar,     setSnackbar]    = useState({ open: false, message: "", severity: "info" });
   const userRole = localStorage.getItem("userRole") || "TEAM";
   const fileInputRef = React.useRef(null);
+  const lastSyncedLeadIdRef = React.useRef("");
 
   const fetchLeadDetails = useCallback(async () => {
     if (!leadId) { setError("Lead ID is missing."); setLoading(false); return; }
@@ -1271,15 +1508,92 @@ export default function LeadDetailsPage() {
     [leadDetails],
   );
   const activityStorageKey = useMemo(() => (leadId ? `lead-activity-${leadId}` : ""), [leadId]);
+  const activityDraftKey = useMemo(() => (leadId ? `lead-activity-draft-${leadId}` : ""), [leadId]);
   const dealPipelineStageIndex = useMemo(
     () => getDealPipelineStageIndex(leadDetails, quotationEntries),
     [leadDetails, quotationEntries]
   );
   const assignedPerson = leadDetails?.assignedUser || leadDetails?.assignedManager || null;
+  const resolvedLeadVisitStatus = useMemo(() => resolveVisitStatus(leadDetails), [leadDetails]);
   const siteVisitEntries = useMemo(
     () => buildSiteVisitEntries(leadDetails, customActivities, assignedPerson),
     [assignedPerson, customActivities, leadDetails]
   );
+  const pipelineActionCard = useMemo(() => {
+    if (!leadDetails || leadDetails.isProject) return null;
+
+    const status = String(leadDetails.status || "").toLowerCase();
+    const hasContacted = Boolean(
+      String(leadDetails.followUpAction || "").trim() ||
+      String(leadDetails.followUpNotes || "").trim() ||
+      ["contacted", "qualified", "visit", "site visit", "registration", "bank loan apply", "document submission", "bank at pending", "disbursement", "installation completion"].includes(status)
+    );
+    const hasQualified = Boolean(
+      status === "qualified" ||
+      hasLeadDocuments(leadDetails) ||
+      ["visit", "site visit", "registration", "bank loan apply", "document submission", "bank at pending", "disbursement", "installation completion"].includes(status)
+    );
+    const hasVisitStage = Boolean(
+      status === "visit" ||
+      status === "site visit" ||
+      leadDetails.visitDate ||
+      siteVisitEntries.length
+    );
+    const needsAssignment = !assignedPerson;
+    const sourceName = leadDetails.source || "Manual";
+    const assignmentText = needsAssignment ? "still unassigned" : "assigned";
+    const baseCard = {
+      needsAssignment,
+      phone: leadDetails.phone || "",
+    };
+
+    if (!hasContacted) {
+      return {
+        ...baseCard,
+        stageKey: "contacted",
+        icon: <Phone />,
+        eyebrow: "Next action - Contacted",
+        title: "Contact the customer",
+        detail: `Came in via ${sourceName} - ${assignmentText}`,
+        showContactActions: true,
+      };
+    }
+
+    if (!hasQualified) {
+      return {
+        ...baseCard,
+        stageKey: "qualified",
+        icon: <AssignmentTurnedIn />,
+        eyebrow: "Next action - Qualified",
+        title: "Qualify the lead",
+        detail: "Confirm the customer requirement before booking a site visit.",
+      };
+    }
+
+    if (!hasVisitStage) {
+      return {
+        ...baseCard,
+        stageKey: "site_visit_scheduled",
+        icon: <AccessTime />,
+        eyebrow: "Next action - Site Visit",
+        title: "Schedule site visit",
+        detail: "Book the inspector visit for this customer.",
+      };
+    }
+
+    if (!hasSiteSurvey) {
+      return {
+        ...baseCard,
+        stageKey: "site_survey",
+        icon: <CameraAltOutlined />,
+        eyebrow: "Next action - Site Survey",
+        title: "Complete site survey",
+        detail: "Project creation is blocked until the site survey is complete.",
+      };
+    }
+
+    return null;
+  }, [assignedPerson, hasSiteSurvey, leadDetails, siteVisitEntries.length]);
   const leadScore    = useMemo(() => getLeadScore(leadDetails),    [leadDetails]);
   const scoreBucket  = useMemo(() => getScoreBucket(leadScore),    [leadScore]);
   const statusStyles = useMemo(() => getStatusStyles(leadDetails?.status), [leadDetails?.status]);
@@ -1311,24 +1625,144 @@ export default function LeadDetailsPage() {
   );
 
   useEffect(() => {
-    if (!activityStorageKey) return;
+    if (!leadDetails?._id) {
+      setCustomActivities([]);
+      lastSyncedLeadIdRef.current = "";
+      return;
+    }
+
+    const isSameLead = lastSyncedLeadIdRef.current === leadDetails._id;
+    lastSyncedLeadIdRef.current = leadDetails._id;
+
+    const backendActivities = normalizeLeadActivities(leadDetails.leadActivities);
+    const followUpNotes = String(leadDetails.followUpNotes || "").trim();
+    const followUpAction = String(leadDetails.followUpAction || "").trim().toLowerCase();
+    const followUpTimestamp = leadDetails.updatedAt || leadDetails.createdAt || new Date().toISOString();
+
+    if (backendActivities.length) {
+      setCustomActivities((prev) => (isSameLead ? mergeLeadActivities(backendActivities, prev) : mergeLeadActivities(backendActivities)));
+      if (activityStorageKey) localStorage.removeItem(activityStorageKey);
+      return;
+    }
+
+    const fallbackFollowUpActivity = followUpNotes ? [{
+      id: `lead-followup-${leadDetails._id}`,
+      type: followUpAction === "call" ? "Log call" : "Comment",
+      message: followUpNotes.replace(/^call log:\s*/i, ""),
+      subject: "",
+      location: "",
+      scheduledAt: leadDetails.followUpDate || null,
+      actorName: getPersonDisplayName(leadDetails.updatedBy || leadDetails.createdBy || null),
+      actorRole: leadDetails.updatedRole || "",
+      createdAt: followUpTimestamp,
+      updatedAt: followUpTimestamp,
+      source: "custom",
+    }] : [];
+
+    if (fallbackFollowUpActivity.length) {
+      setCustomActivities((prev) => (isSameLead ? mergeLeadActivities(fallbackFollowUpActivity, prev) : mergeLeadActivities(fallbackFollowUpActivity)));
+      if (activityStorageKey) localStorage.removeItem(activityStorageKey);
+      return;
+    }
+
+    if (!activityStorageKey) {
+      setCustomActivities([]);
+      return;
+    }
+
     try {
-      const stored = localStorage.getItem(activityStorageKey);
-      setCustomActivities(stored ? JSON.parse(stored) : []);
+      const stored = normalizeLeadActivities(JSON.parse(localStorage.getItem(activityStorageKey) || "[]"));
+      setCustomActivities((prev) => (isSameLead ? mergeLeadActivities(stored, prev) : mergeLeadActivities(stored)));
+      if (stored.length) {
+        fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ leadActivities: stored }),
+        })
+          .then((res) => {
+            if (res?.success !== false) localStorage.removeItem(activityStorageKey);
+          })
+          .catch(() => {});
+      }
     } catch {
       setCustomActivities([]);
     }
-  }, [activityStorageKey]);
+  }, [
+    activityStorageKey,
+    fetchAPI,
+    leadDetails?._id,
+    leadDetails?.leadActivities,
+    leadDetails?.followUpAction,
+    leadDetails?.followUpNotes,
+    leadDetails?.updatedAt,
+    leadDetails?.createdAt,
+    leadDetails?.updatedBy,
+    leadDetails?.createdBy,
+  ]);
 
-  const persistCustomActivities = useCallback((updater) => {
-    setCustomActivities((prev) => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      if (activityStorageKey) {
-        localStorage.setItem(activityStorageKey, JSON.stringify(next));
-      }
-      return next;
+  useEffect(() => {
+    if (!activityDraftKey) return;
+
+    try {
+      const rawDraft = localStorage.getItem(activityDraftKey);
+      if (!rawDraft) return;
+
+      const parsedDraft = JSON.parse(rawDraft);
+      if (!parsedDraft || typeof parsedDraft !== "object") return;
+
+      setActivityForm((prev) => ({
+        ...prev,
+        message: typeof parsedDraft.message === "string" ? parsedDraft.message : "",
+        subject: typeof parsedDraft.subject === "string" ? parsedDraft.subject : "",
+        scheduledAt: typeof parsedDraft.scheduledAt === "string" ? parsedDraft.scheduledAt : "",
+        location: typeof parsedDraft.location === "string" ? parsedDraft.location : "",
+      }));
+    } catch {
+      // Ignore malformed draft data and keep the current in-memory form.
+    }
+  }, [activityDraftKey]);
+
+  useEffect(() => {
+    if (!activityDraftKey) return;
+
+    const draft = {
+      message: activityForm.message,
+      subject: activityForm.subject,
+      scheduledAt: activityForm.scheduledAt,
+      location: activityForm.location,
+    };
+    const hasDraft = Object.values(draft).some((value) => String(value || "").trim());
+
+    if (!hasDraft) {
+      localStorage.removeItem(activityDraftKey);
+      return;
+    }
+
+    localStorage.setItem(activityDraftKey, JSON.stringify(draft));
+  }, [activityDraftKey, activityForm]);
+
+  const persistCustomActivities = useCallback(async (updater) => {
+    if (!leadDetails?._id) return [];
+
+    const next = mergeLeadActivities(
+      typeof updater === "function" ? updater(customActivities) : updater
+    );
+    setCustomActivities(next);
+
+    const response = await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadActivities: next }),
     });
-  }, [activityStorageKey]);
+
+    if (response?.success === false) {
+      throw new Error(response.message || "Failed to save activity.");
+    }
+
+    if (activityStorageKey) localStorage.removeItem(activityStorageKey);
+    if (response?.result) setLeadDetails(response.result);
+    return next;
+  }, [activityStorageKey, customActivities, fetchAPI, leadDetails?._id]);
 
   const actorName = useMemo(() => {
     const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim();
@@ -1368,7 +1802,7 @@ export default function LeadDetailsPage() {
 
   const tabCounts = useMemo(() => ({
     activity: timelineEntries.length + customActivities.length,
-    comments: customActivities.filter((item) => item.type === "Comment" || item.type === "Log call").length,
+    comments: customActivities.filter((item) => item.type === "Comment" || isCallActivity(item)).length,
     documents: uploadedDocumentCount,
     siteVisits: siteVisitEntries.length,
     siteSurvey: hasSiteSurvey ? 1 : 0,
@@ -1393,12 +1827,12 @@ export default function LeadDetailsPage() {
   }, []);
   const openReminderDialog = useCallback(() => {
     setActivityMode("Reminder");
-    setActivityForm({
-      message: "",
+    setActivityForm((prev) => ({
+      ...prev,
       subject: "",
       scheduledAt: "",
       location: "",
-    });
+    }));
     setReminderDialogOpen(true);
   }, []);
   const closeReminderDialog = useCallback(() => {
@@ -1469,7 +1903,6 @@ export default function LeadDetailsPage() {
     setActivityMode("Site visit");
     setActivityForm((prev) => ({
       ...prev,
-      message: "",
       subject: "",
       scheduledAt: "",
       location: [leadDetails?.address, leadDetails?.city].filter(Boolean).join(", "),
@@ -1484,8 +1917,13 @@ export default function LeadDetailsPage() {
     setSiteVisitDialogOpen(false);
     setActivityMode("Comment");
     setSiteVisitUserError("");
-    resetActivityForm();
-  }, [resetActivityForm]);
+    setActivityForm((prev) => ({
+      ...prev,
+      subject: "",
+      scheduledAt: "",
+      location: "",
+    }));
+  }, []);
   const openLeadEmail = useCallback(() => {
     const recipient = String(leadDetails?.email || "").trim();
     if (!recipient) {
@@ -1519,7 +1957,7 @@ export default function LeadDetailsPage() {
   }, [siteVisitAssigneeId, siteVisitAssigneeOptions, siteVisitDialogOpen]);
 
   const handleActivitySubmit = useCallback(async () => {
-    if (!leadDetails?._id) return;
+    if (!leadDetails?._id || savingActivity) return;
 
     const message = activityForm.message.trim();
     const subject = activityForm.subject.trim();
@@ -1560,16 +1998,7 @@ export default function LeadDetailsPage() {
     };
 
     const payload = {};
-    if (activityMode === "Comment") {
-      payload.followUpAction = "Note";
-      payload.followUpNotes = message;
-    } else if (activityMode === "Log call") {
-      payload.followUpAction = "Call";
-      payload.followUpNotes = `Call log: ${message}`;
-    } else if (activityMode === "Email") {
-      payload.followUpAction = "Message";
-      payload.followUpNotes = `Email${subject ? `: ${subject}` : ""}${message ? ` — ${message}` : ""}`;
-    } else if (activityMode === "Reminder") {
+    if (activityMode === "Reminder") {
       payload.followUpAction = "Note";
       payload.followUpDate = scheduledAt.toISOString();
       payload.followUpNotes = message;
@@ -1579,6 +2008,11 @@ export default function LeadDetailsPage() {
       payload.visitDate = scheduledAt.toISOString();
       payload.visitLocation = derivedVisitLocation || null;
       payload.visitNotes = message || siteVisitSummary;
+    }
+
+    const nextActivities = mergeLeadActivities([customEntry, ...customActivities]);
+    if (activityMode === "Comment" || activityMode === "Log call" || activityMode === "Email") {
+      payload.leadActivities = nextActivities;
     }
 
     try {
@@ -1601,18 +2035,24 @@ export default function LeadDetailsPage() {
           body: JSON.stringify(assignPayload),
         });
       }
-      await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
+      const response = await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      persistCustomActivities((prev) => [customEntry, ...prev]);
+      if (activityMode === "Comment" || activityMode === "Log call" || activityMode === "Email") {
+        setCustomActivities(nextActivities);
+        if (response?.result) setLeadDetails(response.result);
+      } else {
+        await persistCustomActivities((prev) => [customEntry, ...prev]);
+      }
       resetActivityForm();
       setReminderDialogOpen(false);
       setSiteVisitDialogOpen(false);
       if (activityMode === "Site visit") {
         setActivityMode("Comment");
       }
+      if (activityDraftKey) localStorage.removeItem(activityDraftKey);
       await fetchLeadDetails();
       setSnackbar({ open: true, message: `${activityMode} saved successfully.`, severity: "success" });
     } catch (error) {
@@ -1620,7 +2060,7 @@ export default function LeadDetailsPage() {
     } finally {
       setSavingActivity(false);
     }
-  }, [activityForm, activityMode, actorName, assignedPerson?._id, fetchAPI, fetchLeadDetails, leadDetails?._id, leadDetails?.address, leadDetails?.city, persistCustomActivities, resetActivityForm, selectedSiteVisitAssignee, siteVisitAssigneeId, user?.role, userRole]);
+  }, [activityDraftKey, activityForm, activityMode, actorName, assignedPerson?._id, customActivities, fetchAPI, fetchLeadDetails, leadDetails?._id, leadDetails?.address, leadDetails?.city, persistCustomActivities, resetActivityForm, savingActivity, selectedSiteVisitAssignee, siteVisitAssigneeId, user?.role, userRole]);
   const handleCompleteReminder = useCallback(async (reminder) => {
     if (!leadDetails?._id || !reminder) return;
 
@@ -1644,7 +2084,7 @@ export default function LeadDetailsPage() {
       }
 
       if (reminder.source === "custom") {
-        persistCustomActivities((prev) => prev.filter((item) => item.id !== reminder.id));
+        await persistCustomActivities((prev) => prev.filter((item) => item.id !== reminder.id));
       }
 
       await fetchLeadDetails();
@@ -1664,22 +2104,32 @@ export default function LeadDetailsPage() {
   const closeProjectMenu = useCallback(() => {
     setMenuAnchor(null);
   }, []);
-  const handleConvertToProject = useCallback(async () => {
+  const closeProjectDialog = useCallback(() => {
+    if (projectDialogSubmitting) return;
+    setProjectDialogOpen(false);
+  }, [projectDialogSubmitting]);
+
+  const completeProjectConversion = useCallback(async (quotation = null) => {
     if (!leadDetails?._id) {
       setSnackbar({ open: true, message: "Lead is not ready.", severity: "error" });
       return;
     }
 
-    if (leadDetails.isProject) {
-      navigate("/projects", { state: { highlightProjectId: leadDetails._id } });
+    if (!hasSiteSurvey) {
+      setTab("siteSurvey");
+      setSnackbar({ open: true, message: "Complete the site survey before creating a project.", severity: "error" });
       return;
     }
 
     try {
+      setProjectDialogSubmitting(true);
       const response = await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
         method: "PUT",
         body: JSON.stringify({ isProject: true }),
       });
+      if (response?.success === false) {
+        throw new Error(response.message || "Failed to convert lead to project.");
+      }
 
       const updatedLead = response?.result || response?.lead || response || leadDetails;
       setLeadDetails((prev) => ({
@@ -1687,16 +2137,51 @@ export default function LeadDetailsPage() {
         ...updatedLead,
         isProject: true,
       }));
+      if (quotation) {
+        setCurrentQuotation(quotation);
+      }
+      setProjectDialogOpen(false);
       setSnackbar({ open: true, message: "Lead converted to project.", severity: "success" });
-      navigate("/total-visits", { state: { highlightLeadId: leadDetails._id } });
+      navigate("/projects", {
+        state: {
+          stageFilter: "all",
+          highlightProjectId: leadDetails._id,
+          highlightLeadId: leadDetails._id,
+          quotationId: quotation?.id || null,
+          quotationData: quotation || null,
+          message: "Lead converted to project",
+        },
+      });
     } catch (error) {
       setSnackbar({
         open: true,
         message: error.message || "Failed to convert lead to project.",
         severity: "error",
       });
+    } finally {
+      setProjectDialogSubmitting(false);
     }
-  }, [fetchAPI, leadDetails, navigate]);
+  }, [fetchAPI, hasSiteSurvey, leadDetails, navigate]);
+
+  const handleConvertToProject = useCallback(() => {
+    if (!leadDetails?._id) {
+      setSnackbar({ open: true, message: "Lead is not ready.", severity: "error" });
+      return;
+    }
+
+    if (leadDetails.isProject) {
+      navigate("/projects", { state: { stageFilter: "all", highlightProjectId: leadDetails._id } });
+      return;
+    }
+
+    if (!hasSiteSurvey) {
+      setTab("siteSurvey");
+      setSnackbar({ open: true, message: "Complete the site survey before creating a project.", severity: "error" });
+      return;
+    }
+
+    setProjectDialogOpen(true);
+  }, [hasSiteSurvey, leadDetails, navigate]);
   const handleProjectAction = useCallback((actionKey) => {
     closeProjectMenu();
 
@@ -2066,6 +2551,7 @@ export default function LeadDetailsPage() {
 
       const getEntryMeta = (entry) => {
         if (entry.source === "custom") {
+          if (isCallActivity(entry)) return { label: "CALL", color: "#e11d48", bg: alpha("#e11d48", 0.08), dot: "#fb7185" };
           if (entry.type === "Reminder") return { label: "REMINDER", color: "#d97706", bg: alpha("#d97706", 0.08), dot: "#fbbf24" };
           if (entry.type === "Site visit") return { label: "SITE VISIT", color: "#0f9f6e", bg: alpha("#0f9f6e", 0.08), dot: "#4ade80" };
           if (entry.type === "Email") return { label: "EMAIL", color: "#7c3aed", bg: alpha("#7c3aed", 0.08), dot: "#a78bfa" };
@@ -2120,8 +2606,9 @@ export default function LeadDetailsPage() {
 
       const getEntryDisplayText = (entry) => {
         if (entry.source === "custom") {
-          if (entry.type === "Log call") {
-            return `📞 Called · ${formatDate(entry.updatedAt, "dd MMM, hh:mm a")}`;
+          if (isCallActivity(entry)) {
+            const callHeader = `📞 Called · ${formatDate(entry.updatedAt, "dd MMM, hh:mm a")}`;
+            return entry.message ? `${callHeader}\n${entry.message}` : callHeader;
           }
           if (entry.type === "Reminder") {
             return entry.message || "Reminder";
@@ -2145,7 +2632,7 @@ export default function LeadDetailsPage() {
 
       const dayGroups = Object.entries(groupedEntries);
       const latestCallEntry = customActivities
-        .filter((entry) => entry.type === "Log call")
+        .filter(isCallActivity)
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] || null;
       const activeCallTimestamp = latestCallEntry?.createdAt || new Date().toISOString();
 
@@ -2300,7 +2787,7 @@ export default function LeadDetailsPage() {
                             />
                           </Stack>
 
-                          <Typography variant="body1" sx={{ color: TOKEN.text, lineHeight: 1.65 }}>
+                          <Typography variant="body1" sx={{ color: TOKEN.text, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
                             {getEntryDisplayText(entry)}
                           </Typography>
                           {entry.scheduledAt ? (
@@ -2328,7 +2815,7 @@ export default function LeadDetailsPage() {
 
     if (tab === "comments") {
       const commentEntries = customActivities
-        .filter((entry) => entry.type === "Comment" || entry.type === "Log call")
+        .filter((entry) => entry.type === "Comment" || isCallActivity(entry))
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       const latestEntry = commentEntries[0] || null;
 
@@ -2338,9 +2825,9 @@ export default function LeadDetailsPage() {
             {latestEntry ? (
               <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${TOKEN.border}` }}>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Phone sx={{ fontSize: 18, color: latestEntry.type === "Log call" ? "#e11d48" : TOKEN.primary }} />
+                  <Phone sx={{ fontSize: 18, color: isCallActivity(latestEntry) ? "#e11d48" : TOKEN.primary }} />
                   <Typography variant="body1" sx={{ color: TOKEN.text, fontWeight: 700 }}>
-                    {latestEntry.type === "Log call" ? "Called" : "Commented"} · {formatDate(latestEntry.createdAt, "dd MMM, hh:mm a")}
+                    {isCallActivity(latestEntry) ? "Called" : "Commented"} · {formatDate(latestEntry.createdAt, "dd MMM, hh:mm a")}
                   </Typography>
                 </Stack>
               </Box>
@@ -2401,12 +2888,12 @@ export default function LeadDetailsPage() {
                       · {formatDate(entry.createdAt, "dd MMM, hh:mm a")}
                     </Typography>
                     <Chip
-                      label={entry.type === "Log call" ? "CALL" : "COMMENT"}
+                      label={isCallActivity(entry) ? "CALL" : "COMMENT"}
                       size="small"
                       sx={{
                         height: 22,
-                        bgcolor: entry.type === "Log call" ? alpha("#e11d48", 0.08) : alpha(TOKEN.primary, 0.08),
-                        color: entry.type === "Log call" ? "#e11d48" : TOKEN.primary,
+                        bgcolor: isCallActivity(entry) ? alpha("#e11d48", 0.08) : alpha(TOKEN.primary, 0.08),
+                        color: isCallActivity(entry) ? "#e11d48" : TOKEN.primary,
                         fontWeight: 700,
                         borderRadius: 999,
                         fontSize: "0.72rem",
@@ -2775,7 +3262,7 @@ export default function LeadDetailsPage() {
   </Box>
 );
     if (tab === "siteVisits") {
-      const scheduledCount = siteVisitEntries.filter((entry) => String(entry.status || "").toLowerCase() === "scheduled").length;
+      const scheduledCount = siteVisitEntries.filter((entry) => String(entry.visitStatusInfo?.status || entry.status || "").toLowerCase() === "scheduled").length;
 
       return (
         <Stack spacing={2.5}>
@@ -2819,54 +3306,121 @@ export default function LeadDetailsPage() {
             <Box sx={{ px: 3, pb: 3 }}>
               {siteVisitEntries.length > 0 ? (
                 <Stack spacing={1.5}>
-                  {siteVisitEntries.map((entry) => (
-                    <Paper
-                      key={entry.id}
-                      elevation={0}
-                      sx={{
-                        p: 2.5,
-                        borderRadius: 3,
-                        border: `1px solid ${TOKEN.border}`,
-                        bgcolor: "#fff",
-                      }}
-                    >
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }}>
-                        <Stack spacing={1} sx={{ minWidth: 0 }}>
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <AccessTime sx={{ fontSize: 17, color: TOKEN.textSub }} />
-                            <Typography variant="h6" sx={{ color: TOKEN.text, fontWeight: 800, fontSize: "1.05rem" }}>
-                              {entry.scheduledAt ? formatDate(entry.scheduledAt, "dd MMM yyyy") : "Date not set"}
+                  {siteVisitEntries.map((entry) => {
+                    const statusInfo = entry.visitStatusInfo || buildVisitStatusInfo({
+                      visitStatus: entry.status,
+                      visitDate: entry.scheduledAt,
+                      siteSurvey: entry.siteSurvey,
+                    });
+                    const inspectorNotAssigned = isNotAssignedLabel(entry.assigneeName);
+
+                    const chipStyles = statusInfo.isOverdue
+                      ? {
+                          bgcolor: alpha("#ef4444", 0.08),
+                          color: "#dc2626",
+                          border: `1px solid ${alpha("#ef4444", 0.22)}`,
+                        }
+                      : statusInfo.status === "Completed"
+                        ? {
+                            bgcolor: alpha("#10b981", 0.10),
+                            color: "#047857",
+                            border: `1px solid ${alpha("#10b981", 0.22)}`,
+                          }
+                        : statusInfo.status === "Pending"
+                          ? {
+                              bgcolor: alpha("#f59e0b", 0.10),
+                              color: "#b45309",
+                              border: `1px solid ${alpha("#f59e0b", 0.22)}`,
+                            }
+                          : {
+                              bgcolor: alpha("#2563eb", 0.08),
+                              color: "#2563eb",
+                              border: `1px solid ${alpha("#2563eb", 0.18)}`,
+                            };
+
+                    return (
+                      <Paper
+                        key={entry.id}
+                        elevation={0}
+                        sx={{
+                          p: 2.5,
+                          borderRadius: 3,
+                          border: `1px solid ${TOKEN.border}`,
+                          bgcolor: "#fff",
+                        }}
+                      >
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }}>
+                          <Stack spacing={1} sx={{ minWidth: 0 }}>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <AccessTime sx={{ fontSize: 17, color: TOKEN.textSub }} />
+                              <Typography variant="h6" sx={{ color: TOKEN.text, fontWeight: 800, fontSize: "1.05rem" }}>
+                                {entry.scheduledAt ? formatDate(entry.scheduledAt, "dd MMM yyyy") : "Date not set"}
+                              </Typography>
+                            </Stack>
+                            <Typography variant="body1" sx={{ color: TOKEN.textSub, lineHeight: 1.6 }}>
+                              On-Site Estimate · Inspector:{" "}
+                              {inspectorNotAssigned ? (
+                                <Box
+                                  component="span"
+                                  sx={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    px: 0.9,
+                                    py: 0.25,
+                                    borderRadius: 1,
+                                    bgcolor: alpha("#ef4444", 0.1),
+                                    color: "#b91c1c",
+                                    border: `1px solid ${alpha("#ef4444", 0.35)}`,
+                                    fontWeight: 800,
+                                    lineHeight: 1.4,
+                                  }}
+                                >
+                                  Assign the lead
+                                </Box>
+                              ) : (
+                                <Box component="span" sx={{ color: TOKEN.text, fontWeight: 700 }}>
+                                  {entry.assigneeName}
+                                </Box>
+                              )}
+                              {entry.location ? ` · ${entry.location}` : ""}
                             </Typography>
+                            {entry.notes ? (
+                              <Typography variant="body2" sx={{ color: TOKEN.textMuted }}>
+                                {entry.notes}
+                              </Typography>
+                            ) : null}
                           </Stack>
-                          <Typography variant="body1" sx={{ color: TOKEN.textSub, lineHeight: 1.6 }}>
-                            On-Site Estimate · Inspector:{" "}
-                            <Box component="span" sx={{ color: TOKEN.text, fontWeight: 700 }}>
-                              {entry.assigneeName || "Not assigned"}
-                            </Box>
-                            {entry.location ? ` · ${entry.location}` : ""}
-                          </Typography>
-                          {entry.notes ? (
-                            <Typography variant="body2" sx={{ color: TOKEN.textMuted }}>
-                              {entry.notes}
-                            </Typography>
-                          ) : null}
+                          <Stack spacing={0.6} alignItems={{ xs: "flex-start", sm: "flex-end" }}>
+                            <Chip
+                              label={statusInfo.status || "Scheduled"}
+                              size="small"
+                              sx={{
+                                height: 28,
+                                borderRadius: 999,
+                                fontWeight: 700,
+                                fontSize: "0.82rem",
+                                ...chipStyles,
+                                "& .MuiChip-label": { px: 1.25 },
+                              }}
+                            />
+                            {statusInfo.helperText ? (
+                              <Typography
+                                sx={{
+                                  fontSize: "0.72rem",
+                                  color: statusInfo.isOverdue ? "#dc2626" : TOKEN.textMuted,
+                                  fontWeight: statusInfo.isOverdue ? 700 : 600,
+                                  textDecoration: statusInfo.isOverdue ? "underline" : "none",
+                                  textUnderlineOffset: "0.18em",
+                                }}
+                              >
+                                {statusInfo.helperText}
+                              </Typography>
+                            ) : null}
+                          </Stack>
                         </Stack>
-                        <Chip
-                          label={entry.status || "Scheduled"}
-                          size="small"
-                          sx={{
-                            height: 28,
-                            borderRadius: 999,
-                            bgcolor: alpha("#d97706", 0.08),
-                            color: "#d97706",
-                            fontWeight: 700,
-                            fontSize: "0.82rem",
-                            "& .MuiChip-label": { px: 1.25 },
-                          }}
-                        />
-                      </Stack>
-                    </Paper>
-                  ))}
+                      </Paper>
+                    );
+                  })}
                 </Stack>
               ) : (
                 <Paper {...card({ p: 3.5, textAlign: "center" })}>
@@ -3656,7 +4210,7 @@ export default function LeadDetailsPage() {
           </Stack>
         </Box>
 
-        <PipelineStepper currentIndex={dealPipelineStageIndex} stages={DEAL_PIPELINE_STAGES} />
+        <PipelineStepper currentIndex={dealPipelineStageIndex} stages={DEAL_PIPELINE_STAGES} actionCard={pipelineActionCard} />
       </Paper>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "260px minmax(0,1fr)" }, gap: 2 }}>
@@ -3737,7 +4291,21 @@ export default function LeadDetailsPage() {
                 </Box>
               </Stack>
             ) : (
-              <Box sx={{ px: 2, py: 1.5 }}><Typography sx={{ fontSize: "0.82rem", color: TOKEN.textMuted }}>No salesperson assigned.</Typography></Box>
+              <Box sx={{ px: 2, py: 1.5 }}>
+                <Box
+                  sx={{
+                    px: 1.25,
+                    py: 1,
+                    borderRadius: TOKEN.radiusSm,
+                    bgcolor: alpha("#ef4444", 0.08),
+                    border: `1px solid ${alpha("#ef4444", 0.28)}`,
+                  }}
+                >
+                  <Typography sx={{ fontSize: "0.82rem", color: "#b91c1c", fontWeight: 800 }}>
+                    Assign the lead
+                  </Typography>
+                </Box>
+              </Box>
             )}
           </Paper>
 
@@ -3747,7 +4315,7 @@ export default function LeadDetailsPage() {
               <Typography sx={{ fontSize: "0.65rem", fontWeight: 600, color: TOKEN.textMuted, letterSpacing: "0.08em", textTransform: "uppercase" }}>Tags</Typography>
             </Box>
             <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ px: 2, py: 1.25 }}>
-              {[leadDetails.status, leadDetails.city, leadDetails.visitStatus].filter(Boolean).map((tag) => (
+              {[leadDetails.status, leadDetails.city, resolvedLeadVisitStatus].filter(Boolean).map((tag) => (
                 <Chip key={tag} label={tag} size="small" variant="outlined" sx={{ borderColor: TOKEN.border, color: TOKEN.textSub, fontWeight: 500, fontSize: "0.7rem", height: 22, borderRadius: TOKEN.radiusSm }} />
               ))}
               <Button size="small" startIcon={<Add sx={{ fontSize: 11 }} />} onClick={() => showInfo("Tags are not connected yet.")}
@@ -3867,6 +4435,17 @@ export default function LeadDetailsPage() {
         accept=".jpg,.jpeg,.png,.pdf"
         style={{ display: "none" }}
         onChange={handleDirectFileSelection}
+      />
+
+      <ConvertProjectDialog
+        open={projectDialogOpen}
+        lead={leadDetails}
+        quotations={quotationEntries}
+        submitting={projectDialogSubmitting}
+        onClose={closeProjectDialog}
+        onCreateQuotation={openQuotationBuilder}
+        onCreateWithoutQuotation={() => completeProjectConversion()}
+        onContinueWithQuotation={completeProjectConversion}
       />
 
       <WorkOrderDialog
