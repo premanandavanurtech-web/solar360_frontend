@@ -136,6 +136,7 @@ import {
   Dashboard,
   ExpandLess,
   FiberManualRecord,
+  Add,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -1402,6 +1403,17 @@ export default function MissedLeadsPage() {
   const [selectedLead, setSelectedLead] = useState(null);
   const [leadDetails, setLeadDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [creatingMislead, setCreatingMislead] = useState(false);
+  const [createErrors, setCreateErrors] = useState({});
+  const [createForm, setCreateForm] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    email: "",
+    source: "Manual",
+    notes: "",
+  });
 
   // Refs
   const containerRef = useRef(null);
@@ -1489,6 +1501,82 @@ export default function MissedLeadsPage() {
       reopenable: reopenable,
     });
   };
+
+  const handleCreateFieldChange = useCallback((field, value) => {
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+    setCreateErrors((prev) => ({ ...prev, [field]: "" }));
+  }, []);
+
+  const resetCreateForm = useCallback(() => {
+    setCreateForm({
+      firstName: "",
+      lastName: "",
+      phone: "",
+      email: "",
+      source: "Manual",
+      notes: "",
+    });
+    setCreateErrors({});
+  }, []);
+
+  const closeCreateDialog = useCallback(() => {
+    if (creatingMislead) return;
+    setCreateDialogOpen(false);
+    resetCreateForm();
+  }, [creatingMislead, resetCreateForm]);
+
+  const createMislead = useCallback(async () => {
+    const errors = {};
+    const firstName = createForm.firstName.trim();
+    const phone = createForm.phone.trim();
+    const email = createForm.email.trim();
+
+    if (!firstName) {
+      errors.firstName = "First name is required";
+    }
+    if (phone && !/^[0-9]{7,15}$/.test(phone)) {
+      errors.phone = "Phone must be 7 to 15 digits";
+    }
+    if (email && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) {
+      errors.email = "Enter a valid email address";
+    }
+
+    setCreateErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setCreatingMislead(true);
+    try {
+      const payload = {
+        firstName,
+        lastName: createForm.lastName.trim(),
+        phone,
+        email,
+        source: createForm.source.trim() || "Manual",
+        status: "Missed Leads",
+        notes: createForm.notes.trim(),
+        visitNotes: createForm.notes.trim(),
+      };
+
+      const response = await fetchAPI("/lead/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.message || "Failed to create missed lead");
+      }
+
+      showSnackbar("Missed lead created successfully");
+      setCreateDialogOpen(false);
+      resetCreateForm();
+      fetchMissedLeads();
+    } catch (err) {
+      showSnackbar(err.message || "Failed to create missed lead", "error");
+    } finally {
+      setCreatingMislead(false);
+    }
+  }, [createForm, fetchAPI, fetchMissedLeads, resetCreateForm, showSnackbar]);
 
   // Apply Filters
   const applyFilters = useCallback(() => {
@@ -2396,6 +2484,19 @@ export default function MissedLeadsPage() {
             </Box>
 
             <Box sx={{ display: "flex", gap: 1 }}>
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={() => setCreateDialogOpen(true)}
+                size={isMobile ? "small" : "medium"}
+                sx={{
+                  bgcolor: "rgba(255,255,255,0.2)",
+                  color: "#fff",
+                  "&:hover": { bgcolor: "rgba(255,255,255,0.3)" },
+                }}
+              >
+                Create New Mislead
+              </Button>
               {isMobile && (
                 <Button
                   variant="contained"
@@ -3355,6 +3456,85 @@ export default function MissedLeadsPage() {
           </Fab>
         </Zoom>
       )}
+
+      <Dialog open={createDialogOpen} onClose={closeCreateDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Create New Mislead</DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={2} sx={{ pt: 0.5 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="First Name *"
+                value={createForm.firstName}
+                onChange={(event) => handleCreateFieldChange("firstName", event.target.value)}
+                error={!!createErrors.firstName}
+                helperText={createErrors.firstName}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Last Name"
+                value={createForm.lastName}
+                onChange={(event) => handleCreateFieldChange("lastName", event.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Phone"
+                value={createForm.phone}
+                onChange={(event) => handleCreateFieldChange("phone", event.target.value.replace(/\D/g, ""))}
+                error={!!createErrors.phone}
+                helperText={createErrors.phone}
+                inputProps={{ maxLength: 15 }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Email"
+                value={createForm.email}
+                onChange={(event) => handleCreateFieldChange("email", event.target.value)}
+                error={!!createErrors.email}
+                helperText={createErrors.email}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Source"
+                value={createForm.source}
+                onChange={(event) => handleCreateFieldChange("source", event.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                multiline
+                minRows={3}
+                size="small"
+                label="Notes"
+                value={createForm.notes}
+                onChange={(event) => handleCreateFieldChange("notes", event.target.value)}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeCreateDialog} disabled={creatingMislead}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={createMislead} disabled={creatingMislead}>
+            {creatingMislead ? "Creating..." : "Create"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </LocalizationProvider>
   );

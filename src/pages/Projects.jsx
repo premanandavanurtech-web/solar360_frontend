@@ -191,6 +191,9 @@ const isStuck = (p) => {
   return Math.floor((Date.now() - new Date(ref).getTime()) / 86400000) > 5 && getProjectStage(p) !== "handover";
 };
 
+const getProjectName = (project) =>
+  project?.projectType || project?.leadType || project?.requirementType || "Project type not selected";
+
 const stageIndex = (key) => PROJECT_STAGES.findIndex((s) => s.key === key);
 
 // ── Compact metric card ────────────────────────────────────────
@@ -393,6 +396,9 @@ const RegistrationProjectRow = ({ project, highlight, onView, onEdit, onUpload, 
             <Typography variant="subtitle1" fontWeight={800} color={NAVY} noWrap>
               {project.projectCode || "Project"}
             </Typography>
+            <Typography variant="caption" fontWeight={800} color="#8b5cf6" noWrap sx={{ display: "block", mt: 0.2 }}>
+              {getProjectName(project)}
+            </Typography>
             <Typography variant="h6" fontWeight={700} color={NAVY_LT} sx={{ lineHeight: 1.15 }}>
               {[project.firstName, project.lastName].filter(Boolean).join(" ") || "—"}
             </Typography>
@@ -520,6 +526,9 @@ const ProjectCard = ({ project, onOpen, onCall, onEdit }) => {
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography variant="subtitle2" fontWeight={800} noWrap color={NAVY}>
             {project.projectCode || "Project"}
+          </Typography>
+          <Typography variant="caption" fontWeight={800} color={stage.color} noWrap sx={{ display: "block", mt: 0.2 }}>
+            {getProjectName(project)}
           </Typography>
           <Typography variant="caption" color="text.secondary" noWrap>
             {[project.firstName, project.lastName].filter(Boolean).join(" ") || "—"}
@@ -695,7 +704,7 @@ function Projects() {
       if (activityFilter === "stuck" && !isStuck(p)) return false;
       if (activityFilter === "week" && !(p.installationDate && isThisWeek(new Date(p.installationDate)))) return false;
       if (!q) return true;
-      return [p.projectCode, p.firstName, p.lastName, p.phone, p.email, p.city, p.address]
+      return [p.projectCode, getProjectName(p), p.projectType, p.firstName, p.lastName, p.phone, p.email, p.city, p.address]
         .filter(Boolean).join(" ").toLowerCase().includes(q);
     });
   }, [enriched, searchTerm, selectedStage, amountRange, activityFilter]);
@@ -1421,11 +1430,16 @@ function Projects() {
                             >
                               {getInitials(project)}
                             </Avatar>
-                            <Box>
+                            <Box sx={{ minWidth: 0 }}>
                               <Stack direction="row" spacing={0.75} alignItems="center">
-                                <Typography variant="subtitle2" fontWeight={800} color={NAVY}>
-                                  {project.projectCode || "Project"}
-                                </Typography>
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography variant="subtitle2" fontWeight={800} color={NAVY} noWrap>
+                                    {project.projectCode || "Project"}
+                                  </Typography>
+                                  <Typography variant="caption" fontWeight={800} color={stage.color} noWrap sx={{ display: "block", mt: 0.15 }}>
+                                    {getProjectName(project)}
+                                  </Typography>
+                                </Box>
                                 {highlight && <Chip label="New" size="small" color="success" sx={{ height: 18, fontSize: 10 }} />}
                                 {stuck && (
                                   <Tooltip title="No activity for 5+ days">

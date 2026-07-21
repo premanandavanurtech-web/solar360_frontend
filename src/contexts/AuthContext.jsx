@@ -10,7 +10,11 @@ import { buildApiUrl } from "../utils/apiConfig";
 
 const AuthContext = createContext({});
 
-const normalizeRole = (role) => (role === "Head_office" ? "Admin_panel" : role);
+const normalizeRole = (role) => {
+  const value = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const map = { head_office: "ADMIN", admin_panel: "ADMIN", admin: "ADMIN", project_head: "PROJECT_HEAD", manager: "MANAGER", supervisor: "SUPERVISOR", installer: "INSTALLER", team: "INSTALLER", zsm: "PROJECT_HEAD", incharge: "SUPERVISOR" };
+  return map[value] || role;
+};
 
 
 export const useAuth = () => {
@@ -251,9 +255,9 @@ export const AuthProvider = ({ children }) => {
   );
 
   const getUserRole = useCallback(() => normalizeRole(user?.role) || null, [user]);
-  const isTeamMember = useCallback(() => normalizeRole(user?.role) === "TEAM", [user]);
+  const isTeamMember = useCallback(() => normalizeRole(user?.role) === "INSTALLER", [user]);
   const isManager = useCallback(
-    () => ["ZSM", "Incharge", "Admin_panel"].includes(normalizeRole(user?.role)),
+    () => ["ADMIN", "PROJECT_HEAD", "MANAGER", "SUPERVISOR"].includes(normalizeRole(user?.role)),
     [user],
   );
 

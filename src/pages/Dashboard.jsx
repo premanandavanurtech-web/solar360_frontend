@@ -102,6 +102,27 @@ const getInitials = (name) => {
     .substring(0, 2);
 };
 
+const normalizeRole = (role) => {
+  const value = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const map = {
+    head_office: "ADMIN",
+    admin_panel: "ADMIN",
+    admin: "ADMIN",
+    super_admin: "ADMIN",
+    zsm: "PROJECT_HEAD",
+    project_head: "PROJECT_HEAD",
+    manager: "MANAGER",
+    incharge: "SUPERVISOR",
+    supervisor: "SUPERVISOR",
+    team: "INSTALLER",
+    installer: "INSTALLER",
+  };
+  return map[value] || role;
+};
+
+const ADMIN_DASHBOARD_ROLES = ["ADMIN", "PROJECT_HEAD", "MANAGER"];
+const TEAM_OVERVIEW_ROLES = ["ADMIN", "PROJECT_HEAD", "MANAGER", "SUPERVISOR"];
+
 // Period options with icons
 const PERIOD_OPTIONS = [
   { value: "today", label: "Today", icon: <Today fontSize="small" /> },
@@ -815,7 +836,7 @@ export default function UnifiedDashboard() {
       }
 
       const { overview } = dashboardData;
-      const userRole = user?.role;
+      const userRole = normalizeRole(user?.role);
 
       const baseStats = [
         {
@@ -852,7 +873,7 @@ export default function UnifiedDashboard() {
 
       let roleSpecificStats = [];
 
-      if (userRole === "Admin_panel" || userRole === "ZSM") {
+      if (ADMIN_DASHBOARD_ROLES.includes(userRole)) {
         roleSpecificStats = [
           {
             title: "Bank Loans",
@@ -905,7 +926,7 @@ export default function UnifiedDashboard() {
             navigateTo: "/team-members",
           },
         ];
-      } else if (userRole === "Incharge") {
+      } else if (userRole === "SUPERVISOR") {
         roleSpecificStats = [
           {
             title: "My Team",
@@ -938,7 +959,7 @@ export default function UnifiedDashboard() {
             navigateTo: "/performance",
           },
         ];
-      } else if (userRole === "TEAM") {
+      } else if (userRole === "INSTALLER") {
         roleSpecificStats = [
           {
             title: "My Leads",
@@ -1493,7 +1514,7 @@ export default function UnifiedDashboard() {
           )}
 
           {/* Team Section */}
-          {activeSection === 'team' && (user?.role === "Admin_panel" || user?.role === "ZSM" || user?.role === "Incharge") && (
+          {activeSection === 'team' && TEAM_OVERVIEW_ROLES.includes(normalizeRole(user?.role)) && (
             <Stack spacing={2}>
               {/* Team Members */}
               {getTeamMembers.length > 0 && (
@@ -1978,8 +1999,8 @@ export default function UnifiedDashboard() {
           </Card>
         </Grid>
 
-        {/* Team Overview - For Admin_panel, ZSM, Incharge */}
-        {(user?.role === "Admin_panel" || user?.role === "ZSM" || user?.role === "Incharge") && getTeamMembers.length > 0 && (
+        {/* Team Overview - For admin, project head, manager, supervisor */}
+        {TEAM_OVERVIEW_ROLES.includes(normalizeRole(user?.role)) && getTeamMembers.length > 0 && (
           <Grid item xs={12}>
             <Card sx={{ borderRadius: { xs: 2.5, sm: 3, md: 3 }, boxShadow: "0 14px 30px rgba(39,76,167,0.08)", border: "1px solid #edf2f7" }}>
               <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>

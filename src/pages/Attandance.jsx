@@ -50,7 +50,7 @@ const SUCCESS   = "#22c55e";
 const DANGER    = "#ef4444";
 const WARNING   = "#f59e0b";
 
-const MANAGER_ROLES = ["Admin_panel", "ZSM", "Incharge"];
+const MANAGER_ROLES = ["ADMIN", "PROJECT_HEAD", "MANAGER", "SUPERVISOR"];
 
 // Office start time for "late" detection (9:00 AM)
 const OFFICE_START_HOUR   = 9;
@@ -703,9 +703,9 @@ export default function Attendance() {
   const timer = useWorkTimer();
 
   const userRole      = getUserRole();
-  const isTeam        = userRole === "TEAM";
+  const isTeam        = userRole === "INSTALLER";
   const canManage     = MANAGER_ROLES.includes(userRole);
-  const canDelete     = userRole === "Admin_panel";
+  const canDelete     = userRole === "ADMIN";
   const isManagerRole = MANAGER_ROLES.includes(userRole);
 
   const showPunchControls = !isAdminView && !isManagerRole;

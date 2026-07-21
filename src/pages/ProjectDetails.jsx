@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   alpha,
@@ -45,16 +45,19 @@ import {
   InfoOutlined,
   Link as LinkIcon,
   LocationOn,
-  MoreVert,
   PhotoCameraOutlined,
   Payments,
   CurrencyRupee,
+  ContentCopy,
   Save,
   Summarize,
-  SupportAgent,
   TaskAlt,
   TrendingUp,
   Workspaces,
+  InsertDriveFileOutlined,
+  OpenInNew,
+  PictureAsPdfOutlined,
+  WhatsApp,
 } from "@mui/icons-material";
 import { format, parseISO } from "date-fns";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -63,17 +66,31 @@ import { toBackendAssetUrl } from "../utils/backendAssetUrl";
 import { getProjectStage } from "../utils/projectStage";
 
 // ---- Design tokens ---------------------------------------------------
-// A single restrained palette: one ink, one brand accent, and semantic
-// status colors used only where they carry meaning (done / active / pending).
-const INK = "#101828";       // primary text & headings
-const INK_2 = "#1E2A44";     // secondary dark surface (panels)
-const SURFACE = "#F8FAFC";   // page background
-const BORDER = "#E2E8F0";    // hairlines
-const MUTED = "#64748B";     // secondary text
-const BRAND = "#2554C7";     // the one accent: interactive + "active" state
-const SUCCESS = "#15803D";   // completed
-const WARNING = "#B45309";   // attention / subsidy
-const NEUTRAL = "#94A3B8";   // pending / inactive
+// A refined, professional palette: a deep navy ink, a single confident
+// indigo accent used for every interactive/active state, and semantic
+// status colors reserved for meaning (done / active / pending / warning).
+const INK = "#0B1220";        // primary text & headings
+const INK_2 = "#111A2E";      // secondary dark surface (hero panel)
+const SURFACE = "#F5F7FA";    // page background
+const PANEL = "#FFFFFF";      // card surface
+const BORDER = "#E4E8F0";     // hairlines
+const BORDER_SOFT = "#EDF0F5";
+const MUTED = "#5B6472";      // secondary text
+const MUTED_2 = "#8A93A3";    // tertiary / placeholder text
+const BRAND = "#3450DB";      // the one accent: interactive + "active" state
+const BRAND_DARK = "#2A3FB8";
+const SUCCESS = "#12805C";    // completed
+const WARNING = "#B4650F";    // attention / subsidy
+const NEUTRAL = "#9AA4B2";    // pending / inactive
+const DANGER = "#C0392B";
+
+// Consistent elevation system used across every card/panel so the page
+// reads as one considered surface, not a stack of ad-hoc boxes.
+const SHADOW_SM = "0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 1px rgba(15, 23, 42, 0.03)";
+const SHADOW_MD = "0 6px 20px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04)";
+const SHADOW_LG = "0 20px 48px rgba(11, 18, 32, 0.14)";
+const RADIUS = "14px";
+const RADIUS_SM = "10px";
 
 const PROJECT_STAGES = [
   { key: "lead_converted", label: "Lead Converted", icon: Workspaces },
@@ -94,6 +111,15 @@ const WORKFLOW_TABS = [
   ...ACTION_STAGES,
 ];
 
+const STRICT_WORKFLOW_STAGES = [
+  "registration",
+  "document",
+  "payment",
+  "loan_pending",
+  "disbursement",
+  "installation",
+];
+
 const SOLAR_REQUIREMENT_TYPES = [
   "PMSG On Grid",
   "PMSG Residential(1-10k)",
@@ -110,6 +136,12 @@ const REGISTRATION_STATUS_OPTIONS = [
 const LEAD_STATUS_OPTIONS = ["Registration", "Document Submission", "Missed Leads"];
 
 const PAYMENT_TYPE_OPTIONS = ["Bank Loan", "Cash", "Online Transfer", "Cheque"];
+const PAYMENT_STATUS_OPTIONS = [
+  { value: "pending", label: "Pending" },
+  { value: "completed", label: "Completed" },
+  { value: "failed", label: "Failed" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 const LOAN_STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
@@ -181,19 +213,32 @@ const BANK_LIST = [
   "Other",
 ];
 
+const IMAGE_DOCUMENT_REGEX = /\.(jpg|jpeg|png|gif|bmp|webp)(\?.*)?$/i;
+const PDF_DOCUMENT_REGEX = /\.pdf(\?.*)?$/i;
+const CLOUDINARY_IMAGE_DOCUMENT_REGEX = /res\.cloudinary\.com\/.+\/image\/upload\//i;
+const CLOUDINARY_PDF_DOCUMENT_REGEX = /res\.cloudinary\.com\/.+\/(?:image|raw)\/upload\/.+\.pdf(\?.*)?$/i;
+const MAX_DOCUMENT_FILE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_DOCUMENT_FILE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/jpg",
+  "application/pdf",
+];
+
 const DOCUMENT_REQUIREMENTS = [
-  { key: "aadhaar", label: "Aadhaar Card", fields: ["aadhaar"] },
-  { key: "panCard", label: "PAN Card", fields: ["panCard"] },
-  { key: "electricityBill", label: "Electricity Bill", fields: ["electricityBill"] },
-  { key: "propertyTaxReceipt", label: "Property Tax Receipt", fields: ["propertyTaxReceipt"] },
-  { key: "passportPhoto", label: "Passport Size Photo", fields: ["passportPhoto", "photo"] },
-  { key: "cancelledCheque", label: "Cancelled Cheque", fields: ["cancelledCheque"] },
-  { key: "bankStatement", label: "Bank Statement", fields: ["bankStatement", "passbook"] },
-  { key: "propertyOwnershipProof", label: "Property Ownership Proof", fields: ["propertyOwnershipProof"] },
-  { key: "noc", label: "NOC from Society/Bank", fields: ["noc"] },
-  { key: "signedWorkOrder", label: "Signed Work Order", fields: ["signedWorkOrder"] },
-  { key: "signedVendorAgreement", label: "Signed Vendor Agreement", fields: ["signedVendorAgreement"] },
-  { key: "registrationDocument", label: "Registration Document", fields: ["registrationDocument", "uploadDocument"] },
+  { key: "aadhaar", label: "Aadhaar Card", aliases: ["aadhaar", "adhar"], accent: "#22c55e" },
+  { key: "panCard", label: "PAN Card", aliases: ["pan", "pan card"], accent: "#8b5cf6" },
+  { key: "electricityBill", label: "Electricity Bill", aliases: ["electricity bill", "light bill", "power bill"], accent: "#f59e0b" },
+  { key: "propertyTaxReceipt", label: "Property Tax Receipt", aliases: ["property tax", "tax receipt"], accent: "#14b8a6" },
+  { key: "passportPhoto", label: "Passport Size Photo", aliases: ["passport photo", "passport size", "photo"], accent: "#06b6d4" },
+  { key: "cancelledCheque", label: "Cancelled Cheque", aliases: ["cancelled cheque", "canceled cheque", "cheque"], accent: "#6366f1" },
+  { key: "bankStatement", label: "Bank Statement", aliases: ["bank statement", "passbook", "bank passbook"], accent: "#3b82f6" },
+  { key: "propertyOwnershipProof", label: "Property Ownership Proof", aliases: ["ownership proof", "property ownership", "sale deed", "property paper"], accent: "#f97316" },
+  { key: "noc", label: "NOC from Society/Bank", aliases: ["noc", "society", "bank noc"], accent: "#0ea5e9" },
+  { key: "signedWorkOrder", label: "Signed Work Order", aliases: ["work order"], accent: "#7c3aed" },
+  { key: "signedVendorAgreement", label: "Signed Vendor Agreement", aliases: ["vendor agreement"], accent: "#10b981" },
+  { key: "registrationDocument", label: "Registration Document", aliases: ["registration document", "registration"], accent: "#f59e0b" },
+  { key: "other", label: "Other", aliases: ["other"], accent: "#94a3b8" },
 ];
 
 const STAGE_ROUTES = {
@@ -203,16 +248,6 @@ const STAGE_ROUTES = {
   loan_pending: "/bank-at-pending",
   installation: "/installation-completion",
   disbursement: "/disbursement",
-};
-
-const NEXT_ACTIONS = {
-  lead_converted: "Project created from lead",
-  registration: "Registration is active",
-  document: "Document submission is active",
-  payment: "Payment process is active",
-  loan_pending: "Loan pending action is active",
-  installation: "Installation is active",
-  disbursement: "Disbursement is active",
 };
 
 // State-based color: this is what makes the pipeline read as one coherent
@@ -232,11 +267,11 @@ const normalizeProjectStage = (projectOrStage) => {
 };
 
 const formatDate = (value, pattern = "dd MMM yyyy") => {
-  if (!value) return "Not set";
+  if (!value) return "Not available";
   try {
     return format(typeof value === "string" ? parseISO(value) : new Date(value), pattern);
   } catch {
-    return "Not set";
+    return "Not available";
   }
 };
 
@@ -247,16 +282,106 @@ const formatMoney = (value) =>
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
 
+const hasValue = (value) => value !== undefined && value !== null && value !== "";
+
+const formatOptionalMoney = (value) => (hasValue(value) ? formatMoney(value) : "Not available");
+
 const getCustomerName = (project) =>
-  [project?.firstName, project?.lastName].filter(Boolean).join(" ") || project?.customerName || "Project";
+  [project?.firstName, project?.lastName].filter(Boolean).join(" ") || project?.customerName || "Unnamed project";
 
 const getSystemSize = (project) =>
-  project?.solarRequirement || project?.systemSize || project?.capacity || project?.plantCapacity || "0.00";
+  project?.solarRequirement || project?.systemSize || project?.capacity || project?.plantCapacity || "";
 
 const getProjectValue = (project) =>
-  project?.projectValue || project?.totalProjectCost || project?.quotationAmount || project?.loanAmount || project?.disbursementAmount || 0;
+  project?.projectValue || project?.totalProjectCost || project?.quotationAmount || project?.loanAmount || project?.disbursementAmount;
 
-const stageIndex = (key) => PROJECT_STAGES.findIndex((stage) => stage.key === key);
+const getProjectTitle = (project) => {
+  const parts = [
+    getCustomerName(project),
+    getSystemSize(project),
+    project?.projectType || project?.leadType || project?.requirementType,
+  ].filter(Boolean);
+  return parts.join(" · ");
+};
+
+const getProjectSubtitle = (project) => {
+  const parts = [project?.city || project?.address, project?.phone].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "No location or phone available";
+};
+
+const getNextActionLabel = (project, stage) =>
+  project?.nextAction ||
+  project?.nextActionTitle ||
+  project?.nextFollowUpAction ||
+  project?.nextFollowUpNote ||
+  (stage?.key === "lead_converted" ? "No workflow action available" : `Update ${stage?.label || "current stage"}`);
+
+const isCompletedStatus = (value) => {
+  const normalized = String(value || "").toLowerCase().replace(/[_-]/g, " ");
+  return ["done", "complete", "completed", "approved", "verified", "paid", "success", "submitted"].some((item) =>
+    normalized.includes(item)
+  );
+};
+
+const isStrictWorkflowStageComplete = (project, stageKey) => {
+  if (!project) return false;
+
+  if (stageKey === "registration") {
+    return isCompletedStatus(project.registrationStatus);
+  }
+  if (stageKey === "document") {
+    return isCompletedStatus(project.documentStatus) || getUploadedDocuments(project).length > 0;
+  }
+  if (stageKey === "payment") {
+    return (
+      isCompletedStatus(project.paymentStatus) ||
+      isCompletedStatus(project.loanStatus) ||
+      (hasValue(project.loanAmount) && hasValue(project.bank) && hasValue(project.branchName))
+    );
+  }
+  if (stageKey === "loan_pending") {
+    if (project.paymentType === "Cash") return true;
+    return isCompletedStatus(project.bankAtPendingStatus);
+  }
+  if (stageKey === "disbursement") {
+    return isCompletedStatus(project.disbursementStatus) || (hasValue(project.disbursementAmount) && hasValue(project.disbursementDate));
+  }
+  if (stageKey === "installation") {
+    return isCompletedStatus(project.installationStatus) || hasValue(project.installationDate);
+  }
+
+  return false;
+};
+
+const getStrictWorkflowLock = (project, stageKey) => {
+  if (stageKey === "summary" || !STRICT_WORKFLOW_STAGES.includes(stageKey)) {
+    return { locked: false, message: "" };
+  }
+
+  const stagePosition = STRICT_WORKFLOW_STAGES.indexOf(stageKey);
+  for (let index = 0; index < stagePosition; index += 1) {
+    const previousKey = STRICT_WORKFLOW_STAGES[index];
+    if (project?.paymentType === "Cash" && previousKey === "loan_pending") {
+      continue;
+    }
+    if (!isStrictWorkflowStageComplete(project, previousKey)) {
+      const previousStage = getStageMeta(previousKey);
+      return {
+        locked: true,
+        blockerKey: previousKey,
+        message: `Complete ${previousStage.label} before opening ${getStageMeta(stageKey).label}.`,
+      };
+    }
+  }
+
+  return { locked: false, message: "" };
+};
+
+const getFirstAvailableWorkflowStage = (project) => {
+  const firstIncomplete = STRICT_WORKFLOW_STAGES.find((stageKey) => !isStrictWorkflowStageComplete(project, stageKey));
+  return firstIncomplete || STRICT_WORKFLOW_STAGES[STRICT_WORKFLOW_STAGES.length - 1];
+};
+
 const getStageMeta = (key) => PROJECT_STAGES.find((stage) => stage.key === key) || PROJECT_STAGES[0];
 
 const formatInputDate = (value) => {
@@ -269,24 +394,120 @@ const formatInputDate = (value) => {
 };
 
 const formatStatusLabel = (value) => {
-  const normalized = String(value || "pending")
+  const normalized = String(value || "")
     .replace(/_/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .trim();
-  return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "Pending";
+  return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "Not available";
 };
 
-const getDocumentUrl = (project, requirement) => {
-  for (const field of requirement.fields) {
-    const value = project?.[field];
-    if (typeof value === "string" && value) return value;
-    if (value?.url) return value.url;
+const isPdfDocumentUrl = (url) =>
+  Boolean(url && (PDF_DOCUMENT_REGEX.test(url) || CLOUDINARY_PDF_DOCUMENT_REGEX.test(url)));
+
+const isImageDocumentUrl = (url) =>
+  Boolean(
+    url &&
+      !isPdfDocumentUrl(url) &&
+      (IMAGE_DOCUMENT_REGEX.test(url) || CLOUDINARY_IMAGE_DOCUMENT_REGEX.test(url))
+  );
+
+const getFileNameFromUrl = (url) => {
+  if (!url) return "";
+  try {
+    return decodeURIComponent(url.split("?")[0].split("/").pop() || "");
+  } catch {
+    return url.split("?")[0].split("/").pop() || "";
   }
-  return "";
+};
+
+const getFileExtension = (file) => {
+  if (file?.name?.includes(".")) return file.name.slice(file.name.lastIndexOf("."));
+  if (file?.type === "application/pdf") return ".pdf";
+  if (file?.type === "image/png") return ".png";
+  return ".jpg";
+};
+
+const createSlotFileName = (label, file) => {
+  const base = label.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "");
+  return `${base || "document"}${getFileExtension(file)}`;
+};
+
+const normalizeDocumentText = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const pickMatchingDocument = (pool, aliases, usedIndexes) => {
+  const normalizedAliases = aliases.map(normalizeDocumentText);
+  const index = pool.findIndex((doc, docIndex) => {
+    if (usedIndexes.has(docIndex)) return false;
+    const haystack = normalizeDocumentText(doc.name || getFileNameFromUrl(doc.url));
+    return normalizedAliases.some((alias) => haystack.includes(alias));
+  });
+
+  if (index === -1) return null;
+  usedIndexes.add(index);
+  return pool[index];
+};
+
+const getDocumentSlots = (project) => {
+  const pooledDocuments = [];
+  if (project?.uploadDocument?.url) {
+    pooledDocuments.push({
+      name: "Registration Document",
+      url: project.uploadDocument.url,
+      source: "uploadDocument",
+    });
+  }
+  (project?.otherDocuments || []).forEach((doc) => {
+    if (doc?.url) {
+      pooledDocuments.push({
+        ...doc,
+        name: doc.name || getFileNameFromUrl(doc.url),
+        source: "otherDocuments",
+      });
+    }
+  });
+
+  const usedIndexes = new Set();
+
+  return DOCUMENT_REQUIREMENTS.map((slot) => {
+    let matchedDocument = null;
+
+    if (slot.key === "aadhaar" && project?.aadhaar?.url) {
+      matchedDocument = { name: "Aadhaar Card", url: project.aadhaar.url, source: "aadhaar" };
+    } else if (slot.key === "panCard" && project?.panCard?.url) {
+      matchedDocument = { name: "PAN Card", url: project.panCard.url, source: "panCard" };
+    } else if (slot.key === "bankStatement" && project?.passbook?.url) {
+      matchedDocument = { name: "Bank Passbook", url: project.passbook.url, source: "passbook" };
+    } else if (slot.key === "other") {
+      const remainingIndex = pooledDocuments.findIndex((_, docIndex) => !usedIndexes.has(docIndex));
+      if (remainingIndex !== -1) {
+        usedIndexes.add(remainingIndex);
+        matchedDocument = pooledDocuments[remainingIndex];
+      }
+    } else {
+      matchedDocument = pickMatchingDocument(pooledDocuments, slot.aliases, usedIndexes);
+    }
+
+    const url = matchedDocument?.url || "";
+
+    return {
+      ...slot,
+      url,
+      previewUrl: isImageDocumentUrl(url) ? toBackendAssetUrl(url) : "",
+      fileName: matchedDocument?.name || getFileNameFromUrl(url),
+      source: matchedDocument?.source || null,
+      uploaded: Boolean(url),
+      isImage: isImageDocumentUrl(url),
+      isPdf: isPdfDocumentUrl(url),
+    };
+  });
 };
 
 const getUploadedDocuments = (project) =>
-  DOCUMENT_REQUIREMENTS.filter((requirement) => getDocumentUrl(project, requirement));
+  getDocumentSlots(project).filter((requirement) => requirement.uploaded);
 
 const getPersonName = (person) => {
   if (!person) return "";
@@ -343,6 +564,12 @@ const getSurveyPhotoUrls = (siteSurvey) =>
     .map(getPhotoUrl)
     .filter((url, index, arr) => url && arr.indexOf(url) === index);
 
+const getSiteSurveyNotes = (siteSurvey) => {
+  const notes = siteSurvey?.remarks || siteSurvey?.notes || siteSurvey?.comment || "";
+  const normalized = String(notes || "").trim();
+  return normalized.toLowerCase().startsWith("site survey summary") ? "" : normalized;
+};
+
 const SITE_SURVEY_FIELDS = [
   ["roofType", "Roof Type"],
   ["roofMaterial", "Roof Material"],
@@ -390,7 +617,7 @@ const getTimelineTitle = (entry = {}) => {
   );
 
   if (statusChange?.oldValue || statusChange?.newValue) {
-    return `Status changed from '${formatStatusLabel(statusChange.oldValue || "Pending")}' to '${formatStatusLabel(statusChange.newValue || "Pending")}'`;
+    return `Status changed from '${formatStatusLabel(statusChange.oldValue)}' to '${formatStatusLabel(statusChange.newValue)}'`;
   }
 
   return entry.notes || `${entry.stage || "Project"} updated`;
@@ -423,50 +650,25 @@ const getActivityGroupLabel = (value) => {
 };
 
 const buildProjectActivityEntries = (project) => {
-  const customerName = getCustomerName(project).toUpperCase();
   const entries = [];
+  const timelineSources = [
+    ...(Array.isArray(project?.stageTimeline) ? project.stageTimeline : []),
+    ...(Array.isArray(project?.activityTimeline) ? project.activityTimeline : []),
+    ...(Array.isArray(project?.activities) ? project.activities : []),
+    ...(Array.isArray(project?.auditLogs) ? project.auditLogs : []),
+  ];
 
-  (project?.stageTimeline || []).forEach((entry, index) => {
+  timelineSources.forEach((entry, index) => {
     const category = getTimelineCategory(entry);
+    const date = entry.updatedAt || entry.createdAt || entry.date || entry.timestamp;
     entries.push({
-      id: `timeline-${entry.updatedAt || index}`,
-      title: getTimelineTitle(entry),
+      id: entry._id || entry.id || `timeline-${date || index}`,
+      title: entry.title || entry.message || getTimelineTitle(entry),
       tag: getTimelineTag(entry, category),
       category,
-      actor: getPersonName(entry.updatedBy) || entry.updatedRole || customerName,
-      date: entry.updatedAt || project?.updatedAt || project?.createdAt,
+      actor: getPersonName(entry.updatedBy || entry.user || entry.actor) || entry.updatedRole || entry.role || "",
+      date,
     });
-  });
-
-  if (hasSiteSurveyData(project)) {
-    entries.push({
-      id: "site-survey",
-      title: "Site survey completed",
-      tag: "SITE_SURVEY",
-      category: "status",
-      actor: customerName,
-      date: project.siteSurvey.savedAt || project.visitDate || project.updatedAt || project.createdAt,
-    });
-  }
-
-  getUploadedDocuments(project).forEach((requirement) => {
-    entries.push({
-      id: `document-${requirement.key}`,
-      title: `${requirement.label} uploaded`,
-      tag: "DOCUMENT_UPLOADED",
-      category: "documents",
-      actor: customerName,
-      date: project?.updatedAt || project?.createdAt,
-    });
-  });
-
-  entries.push({
-    id: "created",
-    title: "created",
-    tag: "CREATED",
-    category: "status",
-    actor: customerName,
-    date: project?.projectConvertedAt || project?.createdAt,
   });
 
   return entries
@@ -483,17 +685,20 @@ const MetricCard = ({ icon, label, value, color }) => (
     elevation={0}
     sx={{
       height: "100%",
-      borderRadius: "10px",
+      borderRadius: RADIUS,
       border: `1px solid ${BORDER}`,
-      bgcolor: "#fff",
+      bgcolor: PANEL,
+      boxShadow: SHADOW_SM,
+      transition: "box-shadow 0.2s ease, transform 0.2s ease",
+      "&:hover": { boxShadow: SHADOW_MD, transform: "translateY(-2px)" },
     }}
   >
-    <Stack spacing={1.25} sx={{ p: 2 }}>
+    <Stack spacing={1.5} sx={{ p: 2.5 }}>
       <Box
         sx={{
-          width: 40,
-          height: 40,
-          borderRadius: "10px",
+          width: 42,
+          height: 42,
+          borderRadius: "11px",
           bgcolor: alpha(color, 0.1),
           color,
           display: "flex",
@@ -504,10 +709,10 @@ const MetricCard = ({ icon, label, value, color }) => (
         {icon}
       </Box>
       <Box>
-        <Typography variant="h6" fontWeight={800} color={INK} lineHeight={1.15}>
+        <Typography variant="h6" fontWeight={800} color={INK} lineHeight={1.15} letterSpacing="-0.01em">
           {value}
         </Typography>
-        <Typography variant="caption" fontWeight={700} sx={{ color: MUTED, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        <Typography variant="caption" fontWeight={700} sx={{ color: MUTED, textTransform: "uppercase", letterSpacing: "0.06em" }}>
           {label}
         </Typography>
       </Box>
@@ -519,6 +724,7 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
   const siteSurvey = getSiteSurvey(project);
   const surveyGeneral = siteSurvey?.general || {};
   const photoUrls = getSurveyPhotoUrls(siteSurvey);
+  const siteSurveyNotes = getSiteSurveyNotes(siteSurvey);
 
   if (!siteSurvey) return null;
 
@@ -530,63 +736,65 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
       maxWidth="lg"
       PaperProps={{
         sx: {
-          borderRadius: "12px",
+          borderRadius: RADIUS,
           overflow: "hidden",
-          boxShadow: "0 24px 80px rgba(15, 23, 42, 0.22)",
+          boxShadow: SHADOW_LG,
         },
       }}
     >
-      <DialogTitle sx={{ px: 3, py: 2, borderBottom: `1px solid ${BORDER}` }}>
+      <DialogTitle sx={{ px: 3, py: 2.25, borderBottom: `1px solid ${BORDER}`, bgcolor: SURFACE }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
           <Stack direction="row" alignItems="center" spacing={1.25}>
-            <FactCheck sx={{ fontSize: 18, color: "#c45a28" }} />
-            <Typography variant="subtitle1" fontWeight={900} color={INK}>
+            <Box sx={{ width: 34, height: 34, borderRadius: "9px", bgcolor: alpha(WARNING, 0.12), color: WARNING, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <FactCheck sx={{ fontSize: 18 }} />
+            </Box>
+            <Typography variant="subtitle1" fontWeight={800} color={INK} letterSpacing="-0.01em">
               Site Survey Details
             </Typography>
             <Chip
               label={siteSurvey.status || "Completed"}
               size="small"
-              sx={{ height: 22, bgcolor: alpha(SUCCESS, 0.12), color: SUCCESS, fontSize: 11, fontWeight: 900 }}
+              sx={{ height: 23, bgcolor: alpha(SUCCESS, 0.12), color: SUCCESS, fontSize: 11, fontWeight: 800 }}
             />
           </Stack>
-          <IconButton size="small" onClick={onClose}>
+          <IconButton size="small" onClick={onClose} sx={{ color: MUTED }}>
             <Clear sx={{ fontSize: 20 }} />
           </IconButton>
         </Stack>
       </DialogTitle>
 
       <DialogContent sx={{ p: 3 }}>
-        <Grid container spacing={2} sx={{ p: 2, mb: 2.5, borderRadius: "8px", border: `1px solid ${BORDER}`, bgcolor: "#F8FAFC" }}>
+        <Grid container spacing={2} sx={{ p: 2, mb: 2.5, borderRadius: RADIUS_SM, border: `1px solid ${BORDER}`, bgcolor: SURFACE }}>
           <Grid item xs={12} md={4}>
-            <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase" }}>
+            <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Visit Date
             </Typography>
-            <Typography variant="body2" fontWeight={900} color={INK}>
+            <Typography variant="body2" fontWeight={800} color={INK}>
               {formatDate(siteSurvey.savedAt || project?.visitDate, "dd MMM yyyy")}
             </Typography>
           </Grid>
           <Grid item xs={12} md={4}>
-            <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase" }}>
+            <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Inspector
             </Typography>
-            <Typography variant="body2" fontWeight={900} color={INK}>
+            <Typography variant="body2" fontWeight={800} color={INK}>
               {getPersonName(project?.assignedUser || project?.assignedManager) || "Not assigned"}
             </Typography>
           </Grid>
           <Grid item xs={12} md={4}>
-            <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase" }}>
+            <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Customer
             </Typography>
-            <Typography variant="body2" fontWeight={900} color={INK}>
+            <Typography variant="body2" fontWeight={800} color={INK}>
               {getCustomerName(project)}
             </Typography>
           </Grid>
         </Grid>
 
-        <Typography variant="caption" fontWeight={900} color={INK} sx={{ display: "block", mb: 1.25 }}>
-          GENERAL
+        <Typography variant="caption" fontWeight={800} color={INK} sx={{ display: "block", mb: 1.25, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          General
         </Typography>
-        <Divider sx={{ mb: 1.5 }} />
+        <Divider sx={{ mb: 1.5, borderColor: BORDER }} />
 
         <Grid container spacing={1.5}>
           {SITE_SURVEY_FIELDS.map(([key, label]) => (
@@ -597,9 +805,9 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
                 sx={{
                   minHeight: 74,
                   p: 1.5,
-                  borderRadius: "8px",
+                  borderRadius: RADIUS_SM,
                   border: `1px solid ${BORDER}`,
-                  bgcolor: "#fff",
+                  bgcolor: PANEL,
                 }}
               >
                 <Box
@@ -607,25 +815,25 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
                     width: 34,
                     height: 34,
                     flexShrink: 0,
-                    borderRadius: "8px",
-                    bgcolor: alpha("#c45a28", 0.1),
-                    color: "#c45a28",
+                    borderRadius: "9px",
+                    bgcolor: alpha(WARNING, 0.1),
+                    color: WARNING,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
                   {["availableRoofArea", "usableRoofArea", "distanceFromRoofToDb"].includes(key) ? (
-                    <Typography variant="caption" fontWeight={900}>#</Typography>
+                    <Typography variant="caption" fontWeight={800}>#</Typography>
                   ) : (
                     <Edit sx={{ fontSize: 15 }} />
                   )}
                 </Box>
                 <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase", lineHeight: 1.2 }}>
+                  <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", lineHeight: 1.2, letterSpacing: "0.03em" }}>
                     {label}
                   </Typography>
-                  <Typography variant="body2" fontWeight={900} color={INK} sx={{ mt: 0.45, wordBreak: "break-word" }}>
+                  <Typography variant="body2" fontWeight={800} color={INK} sx={{ mt: 0.45, wordBreak: "break-word" }}>
                     {formatSurveyValue(surveyGeneral[key])}
                   </Typography>
                 </Box>
@@ -633,30 +841,30 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
             </Grid>
           ))}
           <Grid item xs={12} sm={6} md={3}>
-            <Stack direction="row" spacing={1.5} sx={{ minHeight: 74, p: 1.5, borderRadius: "8px", border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
-              <Box sx={{ width: 34, height: 34, flexShrink: 0, borderRadius: "8px", bgcolor: alpha("#c45a28", 0.1), color: "#c45a28", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Typography variant="caption" fontWeight={900}>#</Typography>
+            <Stack direction="row" spacing={1.5} sx={{ minHeight: 74, p: 1.5, borderRadius: RADIUS_SM, border: `1px solid ${BORDER}`, bgcolor: PANEL }}>
+              <Box sx={{ width: 34, height: 34, flexShrink: 0, borderRadius: "9px", bgcolor: alpha(WARNING, 0.1), color: WARNING, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Typography variant="caption" fontWeight={800}>#</Typography>
               </Box>
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase", lineHeight: 1.2 }}>
+                <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", lineHeight: 1.2, letterSpacing: "0.03em" }}>
                   GPS Longitude
                 </Typography>
-                <Typography variant="body2" fontWeight={900} color={INK} sx={{ mt: 0.45 }}>
+                <Typography variant="body2" fontWeight={800} color={INK} sx={{ mt: 0.45 }}>
                   {formatSurveyValue(siteSurvey.longitude)}
                 </Typography>
               </Box>
             </Stack>
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
-            <Stack direction="row" spacing={1.5} sx={{ minHeight: 74, p: 1.5, borderRadius: "8px", border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
-              <Box sx={{ width: 34, height: 34, flexShrink: 0, borderRadius: "8px", bgcolor: alpha("#c45a28", 0.1), color: "#c45a28", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Typography variant="caption" fontWeight={900}>#</Typography>
+            <Stack direction="row" spacing={1.5} sx={{ minHeight: 74, p: 1.5, borderRadius: RADIUS_SM, border: `1px solid ${BORDER}`, bgcolor: PANEL }}>
+              <Box sx={{ width: 34, height: 34, flexShrink: 0, borderRadius: "9px", bgcolor: alpha(WARNING, 0.1), color: WARNING, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Typography variant="caption" fontWeight={800}>#</Typography>
               </Box>
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase", lineHeight: 1.2 }}>
+                <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", lineHeight: 1.2, letterSpacing: "0.03em" }}>
                   GPS Latitude
                 </Typography>
-                <Typography variant="body2" fontWeight={900} color={INK} sx={{ mt: 0.45 }}>
+                <Typography variant="body2" fontWeight={800} color={INK} sx={{ mt: 0.45 }}>
                   {formatSurveyValue(siteSurvey.latitude)}
                 </Typography>
               </Box>
@@ -666,8 +874,8 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
 
         {photoUrls.length > 0 && (
           <Box sx={{ mt: 2.5 }}>
-            <Typography variant="caption" fontWeight={900} color={INK} sx={{ display: "block", mb: 1.25 }}>
-              PHOTOS
+            <Typography variant="caption" fontWeight={800} color={INK} sx={{ display: "block", mb: 1.25, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Photos
             </Typography>
             <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
               {photoUrls.map((photoUrl, index) => (
@@ -680,10 +888,12 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
                   sx={{
                     width: 112,
                     height: 88,
-                    borderRadius: "8px",
+                    borderRadius: RADIUS_SM,
                     objectFit: "cover",
                     cursor: "pointer",
                     border: `1px solid ${BORDER}`,
+                    transition: "transform 0.15s ease",
+                    "&:hover": { transform: "scale(1.03)" },
                   }}
                 />
               ))}
@@ -691,13 +901,13 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
           </Box>
         )}
 
-        {(siteSurvey.remarks || siteSurvey.summary) && (
-          <Box sx={{ mt: 2.5, p: 1.5, borderRadius: "8px", border: `1px solid ${BORDER}`, bgcolor: "#F8FAFC" }}>
-            <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase" }}>
+        {siteSurveyNotes && (
+          <Box sx={{ mt: 2.5, p: 1.75, borderRadius: RADIUS_SM, border: `1px solid ${BORDER}`, bgcolor: SURFACE }}>
+            <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Notes
             </Typography>
-            <Typography variant="body2" sx={{ mt: 0.75, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-              {siteSurvey.remarks || siteSurvey.summary}
+            <Typography variant="body2" sx={{ mt: 0.75, whiteSpace: "pre-wrap", wordBreak: "break-word", color: INK }}>
+              {siteSurveyNotes}
             </Typography>
           </Box>
         )}
@@ -709,11 +919,11 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
           variant="contained"
           startIcon={<LinkIcon sx={{ fontSize: 15 }} />}
           onClick={onOpenEditor}
-          sx={{ mr: "auto", borderRadius: "8px", bgcolor: "#E5E7EB", color: INK, boxShadow: "none", fontWeight: 800, "&:hover": { bgcolor: "#D1D5DB", boxShadow: "none" } }}
+          sx={{ mr: "auto", borderRadius: RADIUS_SM, bgcolor: "#EEF1F6", color: INK, boxShadow: "none", fontWeight: 800, textTransform: "none", "&:hover": { bgcolor: "#E3E7EF", boxShadow: "none" } }}
         >
           Open full editor
         </Button>
-        <Button size="small" variant="outlined" onClick={onClose} sx={{ borderRadius: "8px", borderColor: BORDER, color: INK }}>
+        <Button size="small" variant="outlined" onClick={onClose} sx={{ borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, textTransform: "none", fontWeight: 700 }}>
           Close
         </Button>
       </DialogActions>
@@ -741,7 +951,7 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
     [filteredActivityEntries]
   );
   const installerName = getPersonName(project?.siteInstaller || project?.assignedInstaller || project?.installationUser);
-  const statusLabel = formatStatusLabel(project?.status || project?.registrationStatus || "pending");
+  const statusLabel = formatStatusLabel(project?.status || project?.registrationStatus);
   const activityFilters = [
     { key: "all", label: "All" },
     { key: "status", label: "Status" },
@@ -751,12 +961,12 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
   ];
 
   return (
-    <Stack spacing={2}>
-      <Paper elevation={0} sx={{ p: 3, borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff", boxShadow: "0 8px 26px rgba(15, 23, 42, 0.06)" }}>
+    <Stack spacing={2.5}>
+      <Paper elevation={0} sx={{ p: 3, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
         <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={2} sx={{ mb: 3 }}>
           <Stack direction="row" spacing={1.25} alignItems="center">
-            <InfoOutlined sx={{ fontSize: 22, color: INK }} />
-            <Typography variant="h6" fontWeight={900} color={INK}>
+            <InfoOutlined sx={{ fontSize: 20, color: BRAND }} />
+            <Typography variant="h6" fontWeight={800} color={INK} letterSpacing="-0.01em">
               Project Details
             </Typography>
           </Stack>
@@ -767,7 +977,7 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
                 startIcon={<FactCheck sx={{ fontSize: 17 }} />}
                 onClick={() => setSurveyOpen(true)}
                 disabled={!siteSurveyReady}
-                sx={{ borderRadius: "10px", borderColor: BORDER, color: INK, fontWeight: 900, textTransform: "none" }}
+                sx={{ borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none", "&:hover": { borderColor: alpha(BRAND, 0.4), bgcolor: alpha(BRAND, 0.04) } }}
               >
                 Site Survey
               </Button>
@@ -780,20 +990,20 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
             <Stack spacing={3}>
               <Box>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.8 }}>
-                  <Typography variant="body2" fontWeight={900} sx={{ color: MUTED }}>#</Typography>
-                  <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <Typography variant="body2" fontWeight={800} sx={{ color: MUTED_2 }}>#</Typography>
+                  <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                     Project Code
                   </Typography>
                 </Stack>
-                <Typography variant="subtitle1" fontWeight={900} color={INK}>
+                <Typography variant="subtitle1" fontWeight={800} color={INK}>
                   {project?.projectCode || project?.leadId || project?._id?.slice(-8) || "Not set"}
                 </Typography>
               </Box>
 
               <Box>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.8 }}>
-                  <TaskAlt sx={{ fontSize: 17, color: MUTED }} />
-                  <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <TaskAlt sx={{ fontSize: 17, color: MUTED_2 }} />
+                  <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                     Status
                   </Typography>
                 </Stack>
@@ -801,12 +1011,12 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
                   <Chip
                     label={statusLabel}
                     size="small"
-                    sx={{ height: 28, borderRadius: "4px", bgcolor: alpha("#339AF0", 0.13), color: "#2683D8", fontSize: 15, fontWeight: 800 }}
+                    sx={{ height: 28, borderRadius: "6px", bgcolor: alpha(BRAND, 0.1), color: BRAND, fontSize: 13, fontWeight: 800 }}
                   />
                   <IconButton
                     size="small"
                     onClick={() => onGoToStage?.(normalizeProjectStage(project))}
-                    sx={{ width: 30, height: 30, border: `1px solid ${alpha(INK, 0.35)}`, borderRadius: "8px", color: INK }}
+                    sx={{ width: 30, height: 30, border: `1px solid ${BORDER}`, borderRadius: RADIUS_SM, color: INK, "&:hover": { borderColor: alpha(BRAND, 0.4), bgcolor: alpha(BRAND, 0.04) } }}
                   >
                     <Edit sx={{ fontSize: 15 }} />
                   </IconButton>
@@ -815,12 +1025,12 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
 
               <Box>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.8 }}>
-                  <CalendarMonth sx={{ fontSize: 17, color: MUTED }} />
-                  <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <CalendarMonth sx={{ fontSize: 17, color: MUTED_2 }} />
+                  <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                     Created
                   </Typography>
                 </Stack>
-                <Typography variant="subtitle1" fontWeight={900} color={INK}>
+                <Typography variant="subtitle1" fontWeight={800} color={INK}>
                   {formatDate(project?.projectConvertedAt || project?.createdAt)}
                 </Typography>
               </Box>
@@ -830,21 +1040,21 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
           <Grid item xs={12} md={6}>
             <Box>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.8 }}>
-                <Build sx={{ fontSize: 17, color: MUTED }} />
-                <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <Build sx={{ fontSize: 17, color: MUTED_2 }} />
+                <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Site Installer
                 </Typography>
               </Stack>
               <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap>
-                <Typography variant="subtitle1" fontWeight={800} sx={{ color: installerName ? INK : MUTED }}>
+                <Typography variant="subtitle1" fontWeight={700} sx={{ color: installerName ? INK : MUTED_2 }}>
                   {installerName || "Not assigned"}
                 </Typography>
                 {!installerName && (
                   <Button
                     size="small"
                     onClick={() => onGoToStage?.("installation")}
-                    startIcon={<Typography component="span" fontWeight={900}>+</Typography>}
-                    sx={{ minWidth: 0, px: 1.25, py: 0.5, borderRadius: "2px", bgcolor: alpha("#c45a28", 0.1), color: "#9f461d", fontWeight: 900 }}
+                    startIcon={<Typography component="span" fontWeight={800}>+</Typography>}
+                    sx={{ minWidth: 0, px: 1.25, py: 0.5, borderRadius: "6px", bgcolor: alpha(WARNING, 0.1), color: WARNING, fontWeight: 800, textTransform: "none" }}
                   >
                     Assign
                   </Button>
@@ -855,11 +1065,11 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
         </Grid>
       </Paper>
 
-      <Paper elevation={0} sx={{ p: 3, borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff", boxShadow: "0 8px 26px rgba(15, 23, 42, 0.06)" }}>
+      <Paper elevation={0} sx={{ p: 3, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
         <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }} spacing={2} sx={{ mb: 2.5 }}>
           <Stack direction="row" spacing={1.25} alignItems="center">
-            <AccessTime sx={{ fontSize: 22, color: INK }} />
-            <Typography variant="h6" fontWeight={900} color={INK}>
+            <AccessTime sx={{ fontSize: 20, color: BRAND }} />
+            <Typography variant="h6" fontWeight={800} color={INK} letterSpacing="-0.01em">
               Activity Timeline
             </Typography>
           </Stack>
@@ -875,10 +1085,10 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
                     minWidth: 0,
                     px: 2,
                     borderRadius: "999px",
-                    color: active ? INK : "#475569",
-                    bgcolor: active ? alpha(BRAND, 0.08) : "#EEF2F7",
+                    color: active ? BRAND : "#475569",
+                    bgcolor: active ? alpha(BRAND, 0.08) : "#F1F4F9",
                     border: `1px solid ${active ? alpha(BRAND, 0.3) : "transparent"}`,
-                    fontWeight: 900,
+                    fontWeight: 800,
                     textTransform: "none",
                   }}
                 >
@@ -894,24 +1104,24 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
             {Object.entries(groupedEntries).map(([groupLabel, entries]) => (
               <Box key={groupLabel}>
                 <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1.5 }}>
-                  <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, minWidth: 92 }}>
+                  <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, minWidth: 92, letterSpacing: "0.04em" }}>
                     {groupLabel}
                   </Typography>
-                  <Divider sx={{ flex: 1 }} />
+                  <Divider sx={{ flex: 1, borderColor: BORDER }} />
                 </Stack>
                 <Stack spacing={2}>
                   {entries.map((entry) => (
                     <Stack key={entry.id} direction="row" spacing={2} alignItems="flex-start">
                       <Box
                         sx={{
-                          width: 42,
-                          height: 42,
+                          width: 40,
+                          height: 40,
                           borderRadius: "50%",
-                          bgcolor: "#EEF2F7",
+                          bgcolor: alpha(BRAND, 0.08),
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          color: INK,
+                          color: BRAND,
                           flexShrink: 0,
                         }}
                       >
@@ -919,17 +1129,17 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
                       </Box>
                       <Box sx={{ minWidth: 0 }}>
                         <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap>
-                          <Typography variant="subtitle2" fontWeight={900} color={INK} sx={{ wordBreak: "break-word" }}>
+                          <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ wordBreak: "break-word" }}>
                             {entry.title}
                           </Typography>
                           <Chip
                             label={entry.tag}
                             size="small"
-                            sx={{ height: 21, bgcolor: "#E5EAF0", color: "#475569", fontSize: 11, fontWeight: 900 }}
+                            sx={{ height: 21, bgcolor: "#EEF1F6", color: "#475569", fontSize: 10.5, fontWeight: 800 }}
                           />
                         </Stack>
                         <Typography variant="body2" sx={{ color: MUTED, mt: 0.4 }}>
-                          {entry.actor || "System"} - {formatDate(entry.date, "dd MMM, hh:mm a")}
+                          {entry.actor || "System"} · {formatDate(entry.date, "dd MMM, hh:mm a")}
                         </Typography>
                       </Box>
                     </Stack>
@@ -939,7 +1149,7 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
             ))}
           </Stack>
         ) : (
-          <Typography variant="body2" sx={{ color: MUTED, py: 3, textAlign: "center" }}>
+          <Typography variant="body2" sx={{ color: MUTED_2, py: 3, textAlign: "center" }}>
             No activity available.
           </Typography>
         )}
@@ -955,6 +1165,12 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
   );
 };
 
+const workspaceHeaderIcon = (Icon) => (
+  <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: alpha(BRAND, 0.1), color: BRAND, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <Icon sx={{ fontSize: 18 }} />
+  </Box>
+);
+
 const RegistrationWorkspace = ({
   project,
   formData,
@@ -965,14 +1181,12 @@ const RegistrationWorkspace = ({
   onCancel,
   onSave,
 }) => (
-  <Paper elevation={0} sx={{ p: 2.25, borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
-    <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2 }}>
-      <Stack direction="row" spacing={1.25} alignItems="center">
-        <Box sx={{ width: 34, height: 34, borderRadius: "9px", bgcolor: alpha(BRAND, 0.1), color: BRAND, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <FactCheck sx={{ fontSize: 18 }} />
-        </Box>
+  <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+    <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2.5 }}>
+      <Stack direction="row" spacing={1.5} alignItems="center">
+        {workspaceHeaderIcon(FactCheck)}
         <Box>
-          <Typography variant="subtitle2" fontWeight={900} color={INK}>
+          <Typography variant="subtitle2" fontWeight={800} color={INK}>
             Registration Workspace
           </Typography>
           <Typography variant="caption" sx={{ color: MUTED }}>
@@ -985,13 +1199,13 @@ const RegistrationWorkspace = ({
         variant="outlined"
         startIcon={<Clear sx={{ fontSize: 16 }} />}
         onClick={onClear}
-        sx={{ alignSelf: { xs: "flex-start", sm: "center" }, borderRadius: "8px", borderColor: BORDER, color: INK, fontWeight: 800 }}
+        sx={{ alignSelf: { xs: "flex-start", sm: "center" }, borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none" }}
       >
         Clear Form
       </Button>
     </Stack>
 
-    <Grid container spacing={1.5}>
+    <Grid container spacing={2}>
       <Grid item xs={12}>
         <TextField
           fullWidth
@@ -1106,7 +1320,7 @@ const RegistrationWorkspace = ({
             fullWidth
             variant="outlined"
             onClick={onCancel}
-            sx={{ borderRadius: "8px", borderColor: BORDER, color: INK, fontWeight: 800 }}
+            sx={{ borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none" }}
           >
             Cancel
           </Button>
@@ -1116,7 +1330,7 @@ const RegistrationWorkspace = ({
             startIcon={<Save sx={{ fontSize: 16 }} />}
             onClick={onSave}
             disabled={saving || !project?._id}
-            sx={{ borderRadius: "8px", bgcolor: BRAND, fontWeight: 900, "&:hover": { bgcolor: "#1d4ed8" } }}
+            sx={{ borderRadius: RADIUS_SM, bgcolor: BRAND, fontWeight: 800, textTransform: "none", boxShadow: "none", "&:hover": { bgcolor: BRAND_DARK, boxShadow: "none" } }}
           >
             {saving ? "Saving..." : "Save Changes"}
           </Button>
@@ -1126,20 +1340,36 @@ const RegistrationWorkspace = ({
   </Paper>
 );
 
-const DocumentWorkspace = ({ project, onUpload, onCreateLink }) => {
-  const uploadedDocs = getUploadedDocuments(project);
-  const requiredCount = Math.max(1, DOCUMENT_REQUIREMENTS.length - uploadedDocs.length);
-  const progress = Math.min(100, Math.round((uploadedDocs.length / DOCUMENT_REQUIREMENTS.length) * 100));
+const DocumentWorkspace = ({
+  project,
+  documentSlots,
+  documentUploadLinks,
+  previewDoc,
+  previewImageZoomed,
+  uploadingSlotKey,
+  onCreateLink,
+  onCopyLink,
+  onShareLink,
+  onUpload,
+  onPreview,
+  onClosePreview,
+  onTogglePreviewZoom,
+  onOpenDocument,
+  onDownloadDocument,
+  onVerify,
+  onReject,
+  onDelete,
+}) => {
+  const uploadedCount = documentSlots.filter((slot) => slot.uploaded).length;
+  const progress = uploadedCount > 0 ? 100 : 0;
 
   return (
-    <Paper elevation={0} sx={{ p: 2.25, borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
-      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2 }}>
-        <Stack direction="row" spacing={1.25} alignItems="center">
-          <Box sx={{ width: 34, height: 34, borderRadius: "50%", bgcolor: alpha(BRAND, 0.1), color: BRAND, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <DescriptionOutlined sx={{ fontSize: 18 }} />
-          </Box>
+    <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2.5 }}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          {workspaceHeaderIcon(DescriptionOutlined)}
           <Box>
-            <Typography variant="subtitle2" fontWeight={900} color={INK}>
+            <Typography variant="subtitle2" fontWeight={800} color={INK}>
               Documents
             </Typography>
             <Typography variant="caption" sx={{ color: MUTED }}>
@@ -1152,26 +1382,56 @@ const DocumentWorkspace = ({ project, onUpload, onCreateLink }) => {
           variant="outlined"
           startIcon={<LinkIcon sx={{ fontSize: 16 }} />}
           onClick={onCreateLink}
-          sx={{ alignSelf: { xs: "flex-start", sm: "center" }, borderRadius: "999px", borderColor: alpha(BRAND, 0.35), color: BRAND, fontWeight: 900 }}
+          sx={{ alignSelf: { xs: "flex-start", sm: "center" }, borderRadius: "999px", borderColor: alpha(BRAND, 0.35), color: BRAND, fontWeight: 800, textTransform: "none" }}
         >
           Create upload link
         </Button>
       </Stack>
 
-      <Stack spacing={0.75} sx={{ mb: 1.75 }}>
+      {documentUploadLinks.length > 0 && (
+        <Stack spacing={1} sx={{ mb: 2 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <LinkIcon sx={{ fontSize: 14, color: MUTED }} />
+            <Typography variant="caption" sx={{ color: MUTED, fontWeight: 800 }}>
+              Active Upload Links
+            </Typography>
+          </Stack>
+          {documentUploadLinks.map((link) => (
+            <Paper key={link} elevation={0} sx={{ px: 1, py: 0.85, borderRadius: 2, border: `1px solid ${BORDER}`, bgcolor: "#f8fafc" }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <LinkIcon sx={{ fontSize: 14, color: BRAND, flexShrink: 0 }} />
+                <Typography
+                  variant="caption"
+                  sx={{ flex: 1, minWidth: 0, color: "#d94675", fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                >
+                  {link}
+                </Typography>
+                <IconButton size="small" onClick={() => onCopyLink(link)} sx={{ width: 32, height: 32, borderRadius: 2, bgcolor: "#eaf3ff", color: BRAND }}>
+                  <ContentCopy sx={{ fontSize: 15 }} />
+                </IconButton>
+                <IconButton size="small" onClick={() => onShareLink(link)} sx={{ width: 32, height: 32, borderRadius: 2, bgcolor: "#eafaf1", color: "#16a34a" }}>
+                  <WhatsApp sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Stack>
+            </Paper>
+          ))}
+        </Stack>
+      )}
+
+      <Stack spacing={0.75} sx={{ mb: 2 }}>
         <Stack direction="row" justifyContent="space-between" spacing={1}>
-          <Typography variant="caption" fontWeight={900} sx={{ color: MUTED }}>
+          <Typography variant="caption" fontWeight={800} sx={{ color: MUTED }}>
             Upload progress
           </Typography>
-          <Typography variant="caption" fontWeight={900} sx={{ color: SUCCESS }}>
-            {requiredCount} file required
+          <Typography variant="caption" fontWeight={800} sx={{ color: SUCCESS }}>
+            {uploadedCount > 0 ? "Step completed" : "1 file required"}
           </Typography>
         </Stack>
         <LinearProgress
           variant="determinate"
           value={progress}
           sx={{
-            height: 5,
+            height: 6,
             borderRadius: 999,
             bgcolor: alpha(NEUTRAL, 0.18),
             "& .MuiLinearProgress-bar": { bgcolor: SUCCESS, borderRadius: 999 },
@@ -1184,70 +1444,202 @@ const DocumentWorkspace = ({ project, onUpload, onCreateLink }) => {
         label="GPS active - photos will be location-stamped"
         size="small"
         sx={{
-          mb: 2,
+          mb: 2.5,
           bgcolor: alpha(SUCCESS, 0.1),
           color: SUCCESS,
-          fontWeight: 900,
+          fontWeight: 800,
           "& .MuiChip-icon": { color: `${SUCCESS} !important` },
         }}
       />
 
       <Grid container spacing={1.5}>
-        {DOCUMENT_REQUIREMENTS.map((requirement) => {
-          const fileUrl = getDocumentUrl(project, requirement);
-          const uploaded = Boolean(fileUrl);
+        {documentSlots.map((slot) => {
+          const uploaded = slot.uploaded;
+          const normalizedStatus = String(project?.documentStatus || "").toLowerCase();
+          const isVerified = uploaded && ["verified", "approved", "completed", "submitted"].includes(normalizedStatus);
+          const isRejected = uploaded && normalizedStatus === "rejected";
+          const isPending = uploaded && !isVerified && !isRejected;
+          const displayUrl = toBackendAssetUrl(slot.url);
 
           return (
-            <Grid item xs={12} sm={6} lg={3} key={requirement.key}>
+            <Grid item xs={12} sm={6} lg={3} key={slot.key}>
               <Card
                 elevation={0}
+                onClick={() => uploaded ? onPreview(slot) : onUpload(slot.key)}
                 sx={{
                   height: "100%",
-                  borderRadius: "10px",
-                  border: `1px solid ${BORDER}`,
-                  bgcolor: "#fff",
+                  borderRadius: RADIUS_SM,
+                  border: isVerified ? `1.5px solid ${SUCCESS}` : isRejected ? `1.5px solid ${DANGER}` : `1px solid ${BORDER}`,
+                  bgcolor: PANEL,
                   overflow: "hidden",
+                  transition: "box-shadow 0.2s ease",
+                  cursor: "pointer",
+                  "&:hover": { boxShadow: SHADOW_MD },
                 }}
               >
                 <Stack
                   alignItems="center"
                   justifyContent="center"
                   spacing={0.75}
-                  sx={{ minHeight: 108, bgcolor: alpha(NEUTRAL, 0.08), color: NEUTRAL }}
+                  sx={{
+                    minHeight: 108,
+                    bgcolor: uploaded ? alpha(SUCCESS, 0.06) : alpha(NEUTRAL, 0.08),
+                    color: uploaded ? SUCCESS : NEUTRAL,
+                    position: "relative",
+                    overflow: "hidden",
+                    ...(slot.previewUrl ? { backgroundImage: `url(${slot.previewUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {}),
+                  }}
                 >
-                  <PhotoCameraOutlined sx={{ fontSize: 28 }} />
-                  <Typography variant="caption" fontWeight={700}>
-                    {uploaded ? "File uploaded" : "No file uploaded"}
-                  </Typography>
+                  {!slot.previewUrl && (
+                    <>
+                      {slot.isPdf ? <PictureAsPdfOutlined sx={{ fontSize: 28 }} /> : uploaded ? <InsertDriveFileOutlined sx={{ fontSize: 28 }} /> : <PhotoCameraOutlined sx={{ fontSize: 28 }} />}
+                      <Typography variant="caption" fontWeight={700}>
+                        {uploaded ? "File uploaded" : "No file uploaded"}
+                      </Typography>
+                    </>
+                  )}
+                  {isVerified && (
+                    <Box sx={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%", bgcolor: SUCCESS, display: "grid", placeItems: "center" }}>
+                      <CheckCircle sx={{ fontSize: 15, color: "#fff" }} />
+                    </Box>
+                  )}
                 </Stack>
                 <Stack spacing={1.25} sx={{ p: 1.5 }}>
-                  <Typography variant="subtitle2" fontWeight={900} color={INK} sx={{ lineHeight: 1.2 }}>
-                    {requirement.label}
+                  <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ lineHeight: 1.2 }}>
+                    {slot.label}
                   </Typography>
-                  <Divider />
-                  <Button
-                    fullWidth
-                    size="small"
-                    variant="outlined"
-                    startIcon={<CloudUpload sx={{ fontSize: 16 }} />}
-                    onClick={() => onUpload(requirement.key)}
-                    sx={{
-                      borderRadius: "999px",
-                      borderStyle: "dashed",
-                      borderColor: alpha(BRAND, 0.35),
-                      color: BRAND,
-                      fontWeight: 900,
-                      bgcolor: alpha(BRAND, 0.02),
-                    }}
-                  >
-                    {uploaded ? "Replace document" : "Upload document"}
-                  </Button>
+                  {slot.fileName && (
+                    <Typography variant="caption" sx={{ color: MUTED_2 }} noWrap>
+                      {slot.fileName}
+                    </Typography>
+                  )}
+                  {uploaded && (
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: "wrap", gap: 0.5 }}>
+                      <Chip
+                        size="small"
+                        icon={isVerified ? <CheckCircle sx={{ fontSize: 12 }} /> : <AccessTime sx={{ fontSize: 12 }} />}
+                        label={isVerified ? "Verified" : isRejected ? "Rejected" : "Pending"}
+                        sx={{
+                          height: 22,
+                          borderRadius: 99,
+                          fontSize: "0.68rem",
+                          fontWeight: 800,
+                          bgcolor: isVerified ? "#dcfce7" : isRejected ? "#fff1f2" : "#fef9c3",
+                          color: isVerified ? SUCCESS : isRejected ? DANGER : "#854d0e",
+                          "& .MuiChip-icon": { color: isVerified ? SUCCESS : isRejected ? DANGER : "#854d0e" },
+                        }}
+                      />
+                      <Typography variant="caption" sx={{ color: MUTED_2, fontWeight: 700 }}>
+                        {project?.companyName || "SAHOO CONSTRUCTION"}
+                      </Typography>
+                    </Stack>
+                  )}
+                  <Divider sx={{ borderColor: BORDER }} />
+                  {uploaded ? (
+                    <>
+                      <Stack direction="row" alignItems="center" spacing={0.75}>
+                        {isPending && (
+                          <Button size="small" startIcon={<CheckCircle sx={{ fontSize: 13 }} />} onClick={(event) => { event.stopPropagation(); onVerify(slot); }} sx={{ flex: 1, fontSize: "0.7rem", fontWeight: 800, py: 0.8, borderRadius: 1.5, bgcolor: "#f0fdf4", color: SUCCESS, border: "1px solid #bbf7d0" }}>
+                            Verify
+                          </Button>
+                        )}
+                        <Button size="small" startIcon={<Clear sx={{ fontSize: 13 }} />} onClick={(event) => { event.stopPropagation(); onReject(slot); }} sx={{ flex: 1, fontSize: "0.7rem", fontWeight: 800, py: 0.8, borderRadius: 1.5, bgcolor: "#fff1f2", color: DANGER, border: "1px solid #fecdd3" }}>
+                          Reject
+                        </Button>
+                        <IconButton size="small" onClick={(event) => { event.stopPropagation(); onDownloadDocument(displayUrl, slot.fileName || slot.label); }} sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: SURFACE, border: `0.5px solid ${BORDER}` }}>
+                          <Download sx={{ fontSize: 14, color: MUTED }} />
+                        </IconButton>
+                      </Stack>
+                      <Stack direction="row" justifyContent="space-around" sx={{ pt: 0.5 }}>
+                        <Button size="small" startIcon={<Clear sx={{ fontSize: 13 }} />} onClick={(event) => { event.stopPropagation(); onDelete(slot); }} sx={{ fontSize: "0.7rem", color: DANGER, fontWeight: 700 }}>
+                          Delete
+                        </Button>
+                        <Button size="small" startIcon={<CloudUpload sx={{ fontSize: 13 }} />} onClick={(event) => { event.stopPropagation(); onUpload(slot.key); }} sx={{ fontSize: "0.7rem", color: MUTED, fontWeight: 700 }}>
+                          Re-upload
+                        </Button>
+                      </Stack>
+                    </>
+                  ) : (
+                    <Button
+                      fullWidth
+                      size="small"
+                      variant="outlined"
+                      startIcon={<CloudUpload sx={{ fontSize: 16 }} />}
+                      disabled={uploadingSlotKey === slot.key}
+                      onClick={(event) => { event.stopPropagation(); onUpload(slot.key); }}
+                      sx={{
+                        borderRadius: "999px",
+                        borderStyle: "dashed",
+                        borderColor: alpha(BRAND, 0.35),
+                        color: BRAND,
+                        fontWeight: 800,
+                        textTransform: "none",
+                        bgcolor: alpha(BRAND, 0.02),
+                      }}
+                    >
+                      {uploadingSlotKey === slot.key ? "Uploading..." : "Upload document"}
+                    </Button>
+                  )}
                 </Stack>
               </Card>
             </Grid>
           );
         })}
       </Grid>
+
+      <Dialog open={Boolean(previewDoc)} onClose={onClosePreview} maxWidth={previewDoc?.isImage ? "lg" : "sm"} fullWidth PaperProps={{ sx: { borderRadius: 3, border: `0.5px solid ${BORDER}`, overflow: "hidden" } }}>
+        {previewDoc && (
+          <>
+            <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", py: 1.75, px: 2.5, borderBottom: `0.5px solid ${BORDER}` }}>
+              <Typography variant="body2" sx={{ fontWeight: 800, color: INK, fontSize: "0.85rem" }} noWrap>
+                {previewDoc.label}{previewDoc.fileName ? ` - ${previewDoc.fileName}` : ""}
+              </Typography>
+              <IconButton size="small" onClick={onClosePreview} sx={{ width: 28, height: 28, borderRadius: 1.5, border: `0.5px solid ${BORDER}`, bgcolor: SURFACE }}>
+                <Clear sx={{ fontSize: 15 }} />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent sx={{ p: 0 }}>
+              {previewDoc.isImage && previewDoc.url ? (
+                <Box sx={{ maxHeight: previewImageZoomed ? "78vh" : "68vh", overflow: "auto", bgcolor: "#0b1220", display: "flex", alignItems: "center", justifyContent: "center", p: previewImageZoomed ? 2 : 0 }}>
+                  <Box
+                    component="img"
+                    src={toBackendAssetUrl(previewDoc.url)}
+                    alt={previewDoc.label}
+                    onClick={onTogglePreviewZoom}
+                    sx={{
+                      width: "100%",
+                      display: "block",
+                      maxHeight: previewImageZoomed ? "none" : "68vh",
+                      objectFit: "contain",
+                      cursor: previewImageZoomed ? "zoom-out" : "zoom-in",
+                      transform: previewImageZoomed ? "scale(1.6)" : "scale(1)",
+                      transformOrigin: "center center",
+                      transition: "transform 0.18s ease",
+                    }}
+                  />
+                </Box>
+              ) : (
+                <Box sx={{ height: 280, bgcolor: SURFACE, display: "grid", placeItems: "center" }}>
+                  <Stack alignItems="center" spacing={1}>
+                    {previewDoc.isPdf ? <PictureAsPdfOutlined sx={{ fontSize: 48, color: MUTED_2 }} /> : <InsertDriveFileOutlined sx={{ fontSize: 48, color: MUTED_2 }} />}
+                    <Typography variant="caption" sx={{ color: MUTED_2 }}>Preview not available</Typography>
+                  </Stack>
+                </Box>
+              )}
+            </DialogContent>
+            <DialogActions sx={{ px: 2.5, py: 1.75, borderTop: `0.5px solid ${BORDER}`, gap: 1 }}>
+              {previewDoc.isImage ? (
+                <Typography variant="caption" sx={{ color: MUTED_2, flex: 1 }}>
+                  Click image to {previewImageZoomed ? "zoom out" : "zoom in"}
+                </Typography>
+              ) : <Box sx={{ flex: 1 }} />}
+              <Button onClick={onClosePreview} sx={{ borderRadius: 2, border: `0.5px solid ${BORDER}`, color: MUTED, fontSize: "0.8rem", fontWeight: 700 }}>Close</Button>
+              <Button startIcon={<Download sx={{ fontSize: 14 }} />} onClick={() => onDownloadDocument(toBackendAssetUrl(previewDoc.url), previewDoc.fileName)} sx={{ borderRadius: 2, border: `0.5px solid ${BORDER}`, bgcolor: SURFACE, color: INK, fontSize: "0.8rem", fontWeight: 700 }}>Download</Button>
+              <Button variant="contained" startIcon={<OpenInNew sx={{ fontSize: 14 }} />} onClick={() => onOpenDocument(toBackendAssetUrl(previewDoc.url))} sx={{ borderRadius: 2, bgcolor: BRAND, color: "#fff", fontSize: "0.8rem", fontWeight: 800, boxShadow: "none" }}>Open in new tab</Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Paper>
   );
 };
@@ -1261,169 +1653,222 @@ const PaymentWorkspace = ({
   onClear,
   onCancel,
   onSave,
-}) => (
-  <Paper elevation={0} sx={{ p: 2.25, borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
-    <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2 }}>
-      <Stack direction="row" spacing={1.25} alignItems="center">
-        <Box sx={{ width: 34, height: 34, borderRadius: "9px", bgcolor: alpha(BRAND, 0.1), color: BRAND, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Payments sx={{ fontSize: 18 }} />
-        </Box>
-        <Box>
-          <Typography variant="subtitle2" fontWeight={900} color={INK}>
-            Payment Workspace
-          </Typography>
-          <Typography variant="caption" sx={{ color: MUTED }}>
-            Fill in the payment details below
-          </Typography>
-        </Box>
-      </Stack>
-      <Button
-        size="small"
-        variant="outlined"
-        startIcon={<Clear sx={{ fontSize: 16 }} />}
-        onClick={onClear}
-        sx={{ alignSelf: { xs: "flex-start", sm: "center" }, borderRadius: "8px", borderColor: BORDER, color: INK, fontWeight: 800 }}
-      >
-        Clear Form
-      </Button>
-    </Stack>
+}) => {
+  const paymentType = formData.paymentType || "Bank Loan";
+  const isCash = paymentType === "Cash";
+  const isBankLoan = paymentType === "Bank Loan";
+  const isOnlineTransfer = paymentType === "Online Transfer";
+  const isCheque = paymentType === "Cheque";
+  const moneyAdornment = {
+    startAdornment: (
+      <InputAdornment position="start">
+        <CurrencyRupee sx={{ fontSize: 16 }} />
+      </InputAdornment>
+    ),
+  };
 
-    <Grid container spacing={1.5}>
-      <Grid item xs={12} md={6}>
-        <FormControl fullWidth size="small">
-          <InputLabel>Payment Type</InputLabel>
-          <Select
-            label="Payment Type"
-            value={formData.paymentType}
-            onChange={(event) => onChange("paymentType", event.target.value)}
-          >
-            {PAYMENT_TYPE_OPTIONS.map((type) => (
-              <MenuItem key={type} value={type}>{type}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Grid>
-      <Grid item xs={12} md={6}>
-        <FormControl fullWidth size="small">
-          <InputLabel>Loan Status</InputLabel>
-          <Select
-            label="Loan Status"
-            value={formData.loanStatus}
-            onChange={(event) => onChange("loanStatus", event.target.value)}
-          >
-            {LOAN_STATUS_OPTIONS.map((status) => (
-              <MenuItem key={status.value} value={status.value}>{status.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Grid>
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          size="small"
-          type="number"
-          label="Loan Amount *"
-          value={formData.loanAmount}
-          onChange={(event) => onChange("loanAmount", event.target.value)}
-          error={!!errors.loanAmount}
-          helperText={errors.loanAmount}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <CurrencyRupee sx={{ fontSize: 16 }} />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </Grid>
-      <Grid item xs={12} md={6}>
-        <FormControl fullWidth size="small">
-          <InputLabel>Lead Status</InputLabel>
-          <Select
-            label="Lead Status"
-            value={formData.status}
-            onChange={(event) => onChange("status", event.target.value)}
-          >
-            {PAYMENT_LEAD_STATUS_OPTIONS.map((status) => (
-              <MenuItem key={status} value={status}>{status}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Grid>
-      <Grid item xs={12} md={6}>
-        <FormControl fullWidth size="small" error={!!errors.bank}>
-          <InputLabel>Bank</InputLabel>
-          <Select
-            label="Bank"
-            value={formData.bank}
-            onChange={(event) => onChange("bank", event.target.value)}
-          >
-            <MenuItem value="">
-              <em>Select Bank</em>
-            </MenuItem>
-            {BANK_LIST.map((bank) => (
-              <MenuItem key={bank} value={bank}>{bank}</MenuItem>
-            ))}
-          </Select>
-          {errors.bank && <FormHelperText>{errors.bank}</FormHelperText>}
-        </FormControl>
-      </Grid>
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          size="small"
-          type="date"
-          label="Loan Approval Date"
-          value={formData.loanApprovalDate}
-          onChange={(event) => onChange("loanApprovalDate", event.target.value)}
-          InputLabelProps={{ shrink: true }}
-        />
-      </Grid>
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          size="small"
-          label="Branch Name *"
-          value={formData.branchName}
-          onChange={(event) => onChange("branchName", event.target.value)}
-          error={!!errors.branchName}
-          helperText={errors.branchName}
-        />
-      </Grid>
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          multiline
-          minRows={2}
-          size="small"
-          label="Loan Notes"
-          value={formData.loanNotes}
-          onChange={(event) => onChange("loanNotes", event.target.value)}
-          placeholder="Add any comments or notes about this payment..."
-        />
-      </Grid>
-      <Grid item xs={12}>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="flex-end">
-          <Button
-            variant="outlined"
-            onClick={onCancel}
-            sx={{ minWidth: 120, borderRadius: "8px", borderColor: BORDER, color: INK, fontWeight: 800 }}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<Save sx={{ fontSize: 16 }} />}
-            onClick={onSave}
-            disabled={saving || !project?._id}
-            sx={{ minWidth: 150, borderRadius: "8px", bgcolor: BRAND, fontWeight: 900, "&:hover": { bgcolor: "#1d4ed8" } }}
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </Button>
+  return (
+    <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2.5 }}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          {workspaceHeaderIcon(Payments)}
+          <Box>
+            <Typography variant="subtitle2" fontWeight={800} color={INK}>
+              Payment Workspace
+            </Typography>
+            <Typography variant="caption" sx={{ color: MUTED }}>
+              {isCash
+                ? "Cash payments move directly to Disbursement after saving"
+                : isBankLoan
+                  ? "Bank loan payments move through Loan Pending before Disbursement"
+                  : "Fill in only the payment fields required for this payment type"}
+            </Typography>
+          </Box>
         </Stack>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<Clear sx={{ fontSize: 16 }} />}
+          onClick={onClear}
+          sx={{ alignSelf: { xs: "flex-start", sm: "center" }, borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none" }}
+        >
+          Clear Form
+        </Button>
+      </Stack>
+
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={6}>
+          <FormControl fullWidth size="small">
+            <InputLabel>Payment Type</InputLabel>
+            <Select
+              label="Payment Type"
+              value={paymentType}
+              onChange={(event) => onChange("paymentType", event.target.value)}
+            >
+              {PAYMENT_TYPE_OPTIONS.map((type) => (
+                <MenuItem key={type} value={type}>
+                  {type === "Online Transfer" ? "Online Transfer (UPI/NEFT/RTGS/IMPS)" : type}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Grid>
+
+        {isCash && (
+          <>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" type="number" label="Payment Amount *" value={formData.paymentAmount} onChange={(event) => onChange("paymentAmount", event.target.value)} error={!!errors.paymentAmount} helperText={errors.paymentAmount} InputProps={moneyAdornment} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" type="date" label="Payment Date *" value={formData.paymentDate} onChange={(event) => onChange("paymentDate", event.target.value)} error={!!errors.paymentDate} helperText={errors.paymentDate} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" label="Payment Reference" value={formData.paymentReference} onChange={(event) => onChange("paymentReference", event.target.value)} />
+            </Grid>
+          </>
+        )}
+
+        {isBankLoan && (
+          <>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth size="small" error={!!errors.bank}>
+                <InputLabel>Bank *</InputLabel>
+                <Select label="Bank *" value={formData.bank} onChange={(event) => onChange("bank", event.target.value)}>
+                  <MenuItem value=""><em>Select Bank</em></MenuItem>
+                  {BANK_LIST.map((bank) => <MenuItem key={bank} value={bank}>{bank}</MenuItem>)}
+                </Select>
+                {errors.bank && <FormHelperText>{errors.bank}</FormHelperText>}
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" label="Branch *" value={formData.branchName} onChange={(event) => onChange("branchName", event.target.value)} error={!!errors.branchName} helperText={errors.branchName} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" type="number" label="Loan Amount *" value={formData.loanAmount} onChange={(event) => onChange("loanAmount", event.target.value)} error={!!errors.loanAmount} helperText={errors.loanAmount} InputProps={moneyAdornment} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Loan Status</InputLabel>
+                <Select label="Loan Status" value={formData.loanStatus} onChange={(event) => onChange("loanStatus", event.target.value)}>
+                  {LOAN_STATUS_OPTIONS.map((status) => <MenuItem key={status.value} value={status.value}>{status.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" type="date" label="Loan Approval Date" value={formData.loanApprovalDate} onChange={(event) => onChange("loanApprovalDate", event.target.value)} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" label="Loan Reference Number" value={formData.loanReferenceNumber} onChange={(event) => onChange("loanReferenceNumber", event.target.value)} />
+            </Grid>
+          </>
+        )}
+
+        {isOnlineTransfer && (
+          <>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" type="number" label="Payment Amount *" value={formData.paymentAmount} onChange={(event) => onChange("paymentAmount", event.target.value)} error={!!errors.paymentAmount} helperText={errors.paymentAmount} InputProps={moneyAdornment} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" type="date" label="Payment Date *" value={formData.paymentDate} onChange={(event) => onChange("paymentDate", event.target.value)} error={!!errors.paymentDate} helperText={errors.paymentDate} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" label="Transaction ID (UTR) *" value={formData.transactionId} onChange={(event) => onChange("transactionId", event.target.value)} error={!!errors.transactionId} helperText={errors.transactionId} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Payment Status</InputLabel>
+                <Select label="Payment Status" value={formData.paymentStatus} onChange={(event) => onChange("paymentStatus", event.target.value)}>
+                  {PAYMENT_STATUS_OPTIONS.map((status) => <MenuItem key={status.value} value={status.value}>{status.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Grid>
+          </>
+        )}
+
+        {isCheque && (
+          <>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" label="Cheque Number *" value={formData.chequeNumber} onChange={(event) => onChange("chequeNumber", event.target.value)} error={!!errors.chequeNumber} helperText={errors.chequeNumber} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" label="Bank Name *" value={formData.bank} onChange={(event) => onChange("bank", event.target.value)} error={!!errors.bank} helperText={errors.bank} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" type="date" label="Cheque Date *" value={formData.chequeDate} onChange={(event) => onChange("chequeDate", event.target.value)} error={!!errors.chequeDate} helperText={errors.chequeDate} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth size="small" type="number" label="Payment Amount *" value={formData.paymentAmount} onChange={(event) => onChange("paymentAmount", event.target.value)} error={!!errors.paymentAmount} helperText={errors.paymentAmount} InputProps={moneyAdornment} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Payment Status</InputLabel>
+                <Select label="Payment Status" value={formData.paymentStatus} onChange={(event) => onChange("paymentStatus", event.target.value)}>
+                  {PAYMENT_STATUS_OPTIONS.map((status) => <MenuItem key={status.value} value={status.value}>{status.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Grid>
+          </>
+        )}
+
+        <Grid item xs={12} md={6}>
+          <TextField fullWidth multiline minRows={2} size="small" label="Notes" value={formData.loanNotes} onChange={(event) => onChange("loanNotes", event.target.value)} placeholder="Add any comments or notes about this payment..." />
+        </Grid>
+
+        <Grid item xs={12}>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="flex-end">
+            <Button variant="outlined" onClick={onCancel} sx={{ minWidth: 120, borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none" }}>
+              Cancel
+            </Button>
+            <Button variant="contained" startIcon={<Save sx={{ fontSize: 16 }} />} onClick={onSave} disabled={saving || !project?._id} sx={{ minWidth: 150, borderRadius: RADIUS_SM, bgcolor: BRAND, fontWeight: 800, textTransform: "none", boxShadow: "none", "&:hover": { bgcolor: BRAND_DARK, boxShadow: "none" } }}>
+              {saving ? "Saving..." : "Save Changes"}
+            </Button>
+          </Stack>
+        </Grid>
       </Grid>
-    </Grid>
-  </Paper>
+    </Paper>
+  );
+};
+
+const workflowStatusHeader = (Icon, title, customerName, onCancel) => (
+  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2.5, bgcolor: alpha(BRAND, 0.04), borderBottom: `1px solid ${BORDER}` }}>
+    <Stack direction="row" spacing={1.75} alignItems="center">
+      <Box sx={{ width: 46, height: 46, borderRadius: "13px", bgcolor: alpha(BRAND, 0.12), color: BRAND, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon sx={{ fontSize: 24 }} />
+      </Box>
+      <Box>
+        <Typography variant="h6" fontWeight={800} color={INK} sx={{ lineHeight: 1.15 }} letterSpacing="-0.01em">
+          {title}
+        </Typography>
+        <Typography variant="body2" sx={{ color: MUTED }}>
+          {customerName}
+        </Typography>
+      </Box>
+    </Stack>
+    <IconButton size="small" onClick={onCancel} sx={{ color: MUTED_2 }}>
+      <Clear sx={{ fontSize: 20 }} />
+    </IconButton>
+  </Stack>
+);
+
+const workflowFooter = (onCancel, onSave, saving, savingLabel, disabled) => (
+  <Stack direction="row" justifyContent="flex-end" spacing={1.5} sx={{ p: 2.25, borderTop: `1px solid ${BORDER}`, bgcolor: PANEL }}>
+    <Button
+      variant="outlined"
+      onClick={onCancel}
+      sx={{ minWidth: 120, borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none" }}
+    >
+      Cancel
+    </Button>
+    <Button
+      variant="contained"
+      startIcon={<Save sx={{ fontSize: 17 }} />}
+      onClick={onSave}
+      disabled={disabled}
+      sx={{ minWidth: 170, borderRadius: RADIUS_SM, bgcolor: BRAND, fontWeight: 800, textTransform: "none", boxShadow: "none", "&:hover": { bgcolor: BRAND_DARK, boxShadow: "none" } }}
+    >
+      {saving ? savingLabel : "Update Status"}
+    </Button>
+  </Stack>
 );
 
 const InstallationWorkspace = ({
@@ -1437,57 +1882,35 @@ const InstallationWorkspace = ({
 }) => {
   const currentInstallation =
     INSTALLATION_STATUS_OPTIONS.find((status) => status.value === project?.installationStatus)?.label ||
-    formatStatusLabel(project?.installationStatus || "pending");
-  const currentLead = project?.status || "Installation Completion";
+    formatStatusLabel(project?.installationStatus);
+  const currentLead = project?.status || "";
 
   return (
-    <Paper elevation={0} sx={{ borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff", overflow: "hidden" }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2.25, bgcolor: alpha(BRAND, 0.05), borderBottom: `1px solid ${BORDER}` }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Box sx={{ width: 46, height: 46, borderRadius: "50%", bgcolor: alpha(BRAND, 0.12), color: BRAND, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Build sx={{ fontSize: 26 }} />
-          </Box>
-          <Box>
-            <Typography variant="h6" fontWeight={900} color={INK} sx={{ lineHeight: 1.15 }}>
-              Update Installation Status
-            </Typography>
-            <Typography variant="body2" sx={{ color: MUTED }}>
-              {getCustomerName(project)}
-            </Typography>
-          </Box>
-        </Stack>
-        <Button
-          size="small"
-          variant="text"
-          onClick={onCancel}
-          sx={{ minWidth: 0, color: MUTED, fontSize: 24, lineHeight: 1 }}
-        >
-          x
-        </Button>
-      </Stack>
+    <Paper elevation={0} sx={{ borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, overflow: "hidden", boxShadow: SHADOW_SM }}>
+      {workflowStatusHeader(Build, "Update Installation Status", getCustomerName(project), onCancel)}
 
-      <Box sx={{ p: 2.25 }}>
+      <Box sx={{ p: 2.5 }}>
         <Grid container spacing={2} sx={{ mb: 2.5 }}>
           <Grid item xs={12} sm={6}>
-            <Typography variant="subtitle2" fontWeight={900} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
               Current Installation Status
             </Typography>
             <Chip
               icon={<Payments sx={{ fontSize: "16px !important" }} />}
               label={currentInstallation}
               size="small"
-              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 900, "& .MuiChip-icon": { color: `${MUTED} !important` } }}
+              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 800, "& .MuiChip-icon": { color: `${BRAND} !important` } }}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <Typography variant="subtitle2" fontWeight={900} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
               Current Lead Status
             </Typography>
             <Chip
               icon={<CheckCircle sx={{ fontSize: "16px !important" }} />}
               label={currentLead}
               size="small"
-              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 900, "& .MuiChip-icon": { color: `${MUTED} !important` } }}
+              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 800, "& .MuiChip-icon": { color: `${BRAND} !important` } }}
             />
           </Grid>
         </Grid>
@@ -1499,7 +1922,7 @@ const InstallationWorkspace = ({
               label="New Installation Status *"
               value={formData.installationStatus}
               onChange={(event) => onChange("installationStatus", event.target.value)}
-              sx={{ borderRadius: "10px" }}
+              sx={{ borderRadius: RADIUS_SM }}
             >
               <MenuItem value="">
                 <em>Select status</em>
@@ -1517,12 +1940,12 @@ const InstallationWorkspace = ({
               label="Lead Status *"
               value={formData.status}
               onChange={(event) => onChange("status", event.target.value)}
-              sx={{ borderRadius: "10px" }}
+              sx={{ borderRadius: RADIUS_SM }}
             >
               {INSTALLATION_LEAD_STATUS_OPTIONS.map((status) => (
                 <MenuItem key={status.value} value={status.value}>
                   <Stack direction="row" spacing={1.25} alignItems="center">
-                    <CheckCircle sx={{ fontSize: 17, color: INK }} />
+                    <CheckCircle sx={{ fontSize: 17, color: BRAND }} />
                     <Box>
                       <Typography variant="body2">{status.label}</Typography>
                       <Typography variant="caption" sx={{ color: MUTED }}>{status.description}</Typography>
@@ -1554,8 +1977,8 @@ const InstallationWorkspace = ({
             onChange={(event) => onChange("installationNotes", event.target.value)}
           />
 
-          <Stack direction="row" spacing={1.25} alignItems="center" sx={{ p: 1.75, borderRadius: "999px", bgcolor: alpha(BRAND, 0.08), color: "#24476b" }}>
-            <InfoOutlined sx={{ fontSize: 20, color: "#4c9dff" }} />
+          <Stack direction="row" spacing={1.25} alignItems="center" sx={{ p: 1.75, borderRadius: RADIUS_SM, bgcolor: alpha(BRAND, 0.06), color: INK }}>
+            <InfoOutlined sx={{ fontSize: 20, color: BRAND }} />
             <Typography variant="body2">
               When marked as final payment, installation will be considered completed.
             </Typography>
@@ -1563,24 +1986,7 @@ const InstallationWorkspace = ({
         </Stack>
       </Box>
 
-      <Stack direction="row" justifyContent="flex-end" spacing={2} sx={{ p: 2, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
-        <Button
-          variant="outlined"
-          onClick={onCancel}
-          sx={{ minWidth: 120, borderRadius: "12px", borderColor: BRAND, color: BRAND, fontWeight: 900 }}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          startIcon={<Save sx={{ fontSize: 17 }} />}
-          onClick={onSave}
-          disabled={saving || !project?._id}
-          sx={{ minWidth: 170, borderRadius: "12px", bgcolor: "#f47b2c", fontWeight: 900, "&:hover": { bgcolor: "#ea6b1f" } }}
-        >
-          {saving ? "Updating..." : "Update Status"}
-        </Button>
-      </Stack>
+      {workflowFooter(onCancel, onSave, saving, "Updating...", saving || !project?._id)}
     </Paper>
   );
 };
@@ -1596,59 +2002,37 @@ const DisbursementWorkspace = ({
 }) => {
   const currentDisbursement =
     DISBURSEMENT_STATUS_OPTIONS.find((status) => status.value === project?.disbursementStatus)?.label ||
-    formatStatusLabel(project?.disbursementStatus || "pending");
-  const currentLead = project?.status || "Disbursement";
+    formatStatusLabel(project?.disbursementStatus);
+  const currentLead = project?.status || "";
   const selectedStatus = DISBURSEMENT_STATUS_OPTIONS.find((status) => status.value === formData.disbursementStatus);
   const selectedLead = DISBURSEMENT_LEAD_STATUS_OPTIONS.find((status) => status.value === formData.status);
 
   return (
-    <Paper elevation={0} sx={{ borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff", overflow: "hidden" }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2.25, bgcolor: alpha(BRAND, 0.05), borderBottom: `1px solid ${BORDER}` }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Box sx={{ width: 46, height: 46, borderRadius: "50%", bgcolor: alpha(BRAND, 0.12), color: BRAND, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Payments sx={{ fontSize: 26 }} />
-          </Box>
-          <Box>
-            <Typography variant="h6" fontWeight={900} color={INK} sx={{ lineHeight: 1.15 }}>
-              Update Disbursement Status
-            </Typography>
-            <Typography variant="body2" sx={{ color: MUTED }}>
-              {getCustomerName(project)}
-            </Typography>
-          </Box>
-        </Stack>
-        <Button
-          size="small"
-          variant="text"
-          onClick={onCancel}
-          sx={{ minWidth: 0, color: MUTED, fontSize: 24, lineHeight: 1 }}
-        >
-          x
-        </Button>
-      </Stack>
+    <Paper elevation={0} sx={{ borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, overflow: "hidden", boxShadow: SHADOW_SM }}>
+      {workflowStatusHeader(Payments, "Update Disbursement Status", getCustomerName(project), onCancel)}
 
-      <Box sx={{ p: 2.25 }}>
+      <Box sx={{ p: 2.5 }}>
         <Grid container spacing={2} sx={{ mb: 2.5 }}>
           <Grid item xs={12} sm={6}>
-            <Typography variant="subtitle2" fontWeight={900} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
               Current Disbursement Status
             </Typography>
             <Chip
               icon={<Payments sx={{ fontSize: "16px !important" }} />}
               label={currentDisbursement}
               size="small"
-              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 900, "& .MuiChip-icon": { color: `${MUTED} !important` } }}
+              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 800, "& .MuiChip-icon": { color: `${BRAND} !important` } }}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <Typography variant="subtitle2" fontWeight={900} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
               Current Lead Status
             </Typography>
             <Chip
               icon={<Payments sx={{ fontSize: "16px !important" }} />}
               label={currentLead}
               size="small"
-              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 900, "& .MuiChip-icon": { color: `${MUTED} !important` } }}
+              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 800, "& .MuiChip-icon": { color: `${BRAND} !important` } }}
             />
           </Grid>
         </Grid>
@@ -1660,12 +2044,12 @@ const DisbursementWorkspace = ({
               label="New Disbursement Status *"
               value={formData.disbursementStatus}
               onChange={(event) => onChange("disbursementStatus", event.target.value)}
-              sx={{ borderRadius: "10px" }}
+              sx={{ borderRadius: RADIUS_SM }}
             >
               {DISBURSEMENT_STATUS_OPTIONS.map((status) => (
                 <MenuItem key={status.value} value={status.value}>
                   <Stack direction="row" spacing={1.25} alignItems="center">
-                    <Payments sx={{ fontSize: 17, color: INK }} />
+                    <Payments sx={{ fontSize: 17, color: BRAND }} />
                     <Box>
                       <Typography variant="body2">{status.label}</Typography>
                       <Typography variant="caption" sx={{ color: MUTED }}>{status.description}</Typography>
@@ -1683,12 +2067,12 @@ const DisbursementWorkspace = ({
               label="Lead Status *"
               value={formData.status}
               onChange={(event) => onChange("status", event.target.value)}
-              sx={{ borderRadius: "10px" }}
+              sx={{ borderRadius: RADIUS_SM }}
             >
               {DISBURSEMENT_LEAD_STATUS_OPTIONS.map((status) => (
                 <MenuItem key={status.value} value={status.value}>
                   <Stack direction="row" spacing={1.25} alignItems="center">
-                    <Payments sx={{ fontSize: 17, color: INK }} />
+                    <Payments sx={{ fontSize: 17, color: BRAND }} />
                     <Box>
                       <Typography variant="body2">{status.label}</Typography>
                       <Typography variant="caption" sx={{ color: MUTED }}>{status.description}</Typography>
@@ -1748,34 +2132,17 @@ const DisbursementWorkspace = ({
             onChange={(event) => onChange("disbursementNotes", event.target.value)}
           />
 
-          <Stack direction="row" spacing={1.25} alignItems="center" sx={{ p: 1.75, borderRadius: "999px", bgcolor: alpha(BRAND, 0.08), color: "#24476b" }}>
-            <InfoOutlined sx={{ fontSize: 20, color: "#4c9dff" }} />
+          <Stack direction="row" spacing={1.25} alignItems="center" sx={{ p: 1.75, borderRadius: RADIUS_SM, bgcolor: alpha(BRAND, 0.06), color: INK }}>
+            <InfoOutlined sx={{ fontSize: 20, color: BRAND }} />
             <Typography variant="body2">
-              Lead remains in -> {selectedLead?.label || "Disbursement"} stage
+              Lead remains in → {selectedLead?.label || "Disbursement"} stage
               {selectedStatus ? ` (${selectedStatus.description.toLowerCase()})` : ""}
             </Typography>
           </Stack>
         </Stack>
       </Box>
 
-      <Stack direction="row" justifyContent="flex-end" spacing={2} sx={{ p: 2, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
-        <Button
-          variant="outlined"
-          onClick={onCancel}
-          sx={{ minWidth: 120, borderRadius: "12px", borderColor: BRAND, color: BRAND, fontWeight: 900 }}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          startIcon={<Save sx={{ fontSize: 17 }} />}
-          onClick={onSave}
-          disabled={saving || !project?._id}
-          sx={{ minWidth: 170, borderRadius: "12px", bgcolor: "#f47b2c", fontWeight: 900, "&:hover": { bgcolor: "#ea6b1f" } }}
-        >
-          {saving ? "Updating..." : "Update Status"}
-        </Button>
-      </Stack>
+      {workflowFooter(onCancel, onSave, saving, "Updating...", saving || !project?._id)}
     </Paper>
   );
 };
@@ -1791,54 +2158,32 @@ const LoanPendingWorkspace = ({
 }) => {
   const currentBank =
     BANK_STATUS_OPTIONS.find((status) => status.value === project?.bankAtPendingStatus)?.label ||
-    formatStatusLabel(project?.bankAtPendingStatus || "pending");
+    formatStatusLabel(project?.bankAtPendingStatus);
   const currentBankDescription =
     BANK_STATUS_OPTIONS.find((status) => status.value === project?.bankAtPendingStatus)?.description ||
-    "Waiting for bank approval";
-  const currentLead = project?.status || "Bank at Pending";
+    "No bank status details available";
+  const currentLead = project?.status || "";
   const currentLeadDescription =
     BANK_LEAD_STATUS_OPTIONS.find((status) => status.value === currentLead)?.description ||
-    "Awaiting bank approval";
+    "No lead status details available";
   const selectedLead =
     BANK_LEAD_STATUS_OPTIONS.find((status) => status.value === formData.status) || BANK_LEAD_STATUS_OPTIONS[0];
 
   return (
-    <Paper elevation={0} sx={{ borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff", overflow: "hidden" }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2.25, bgcolor: alpha(BRAND, 0.05), borderBottom: `1px solid ${BORDER}` }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Box sx={{ width: 46, height: 46, borderRadius: "50%", bgcolor: alpha(BRAND, 0.12), color: BRAND, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <AccountBalance sx={{ fontSize: 26 }} />
-          </Box>
-          <Box>
-            <Typography variant="h6" fontWeight={900} color={INK} sx={{ lineHeight: 1.15 }}>
-              Update Bank Status
-            </Typography>
-            <Typography variant="body2" sx={{ color: MUTED }}>
-              {getCustomerName(project)}
-            </Typography>
-          </Box>
-        </Stack>
-        <Button
-          size="small"
-          variant="text"
-          onClick={onCancel}
-          sx={{ minWidth: 0, color: MUTED, fontSize: 24, lineHeight: 1 }}
-        >
-          x
-        </Button>
-      </Stack>
+    <Paper elevation={0} sx={{ borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, overflow: "hidden", boxShadow: SHADOW_SM }}>
+      {workflowStatusHeader(AccountBalance, "Update Bank Status", getCustomerName(project), onCancel)}
 
-      <Box sx={{ p: 2.25 }}>
+      <Box sx={{ p: 2.5 }}>
         <Stack spacing={2.5}>
           <Box>
-            <Typography variant="subtitle2" fontWeight={900} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
               Current Bank Status
             </Typography>
             <Chip
               icon={<AccountBalance sx={{ fontSize: "16px !important" }} />}
               label={currentBank}
               size="small"
-              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 900, "& .MuiChip-icon": { color: `${MUTED} !important` } }}
+              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 800, "& .MuiChip-icon": { color: `${BRAND} !important` } }}
             />
             <Typography variant="body2" sx={{ color: MUTED, mt: 1 }}>
               {currentBankDescription}
@@ -1846,14 +2191,14 @@ const LoanPendingWorkspace = ({
           </Box>
 
           <Box>
-            <Typography variant="subtitle2" fontWeight={900} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
               Current Lead Status
             </Typography>
             <Chip
               icon={<AccountBalance sx={{ fontSize: "16px !important" }} />}
               label={currentLead}
               size="small"
-              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 900, "& .MuiChip-icon": { color: `${MUTED} !important` } }}
+              sx={{ bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 800, "& .MuiChip-icon": { color: `${BRAND} !important` } }}
             />
             <Typography variant="body2" sx={{ color: MUTED, mt: 1 }}>
               {currentLeadDescription}
@@ -1866,7 +2211,7 @@ const LoanPendingWorkspace = ({
               label="New Bank Status *"
               value={formData.bankAtPendingStatus}
               onChange={(event) => onChange("bankAtPendingStatus", event.target.value)}
-              sx={{ borderRadius: "10px" }}
+              sx={{ borderRadius: RADIUS_SM }}
             >
               <MenuItem value="">
                 <em>Select bank status</em>
@@ -1874,7 +2219,7 @@ const LoanPendingWorkspace = ({
               {BANK_STATUS_OPTIONS.map((status) => (
                 <MenuItem key={status.value} value={status.value}>
                   <Stack direction="row" spacing={1.25} alignItems="center">
-                    <AccountBalance sx={{ fontSize: 17, color: INK }} />
+                    <AccountBalance sx={{ fontSize: 17, color: BRAND }} />
                     <Box>
                       <Typography variant="body2">{status.label}</Typography>
                       <Typography variant="caption" sx={{ color: MUTED }}>{status.description}</Typography>
@@ -1892,12 +2237,12 @@ const LoanPendingWorkspace = ({
               label="Lead Status *"
               value={formData.status}
               onChange={(event) => onChange("status", event.target.value)}
-              sx={{ borderRadius: "10px" }}
+              sx={{ borderRadius: RADIUS_SM }}
             >
               {BANK_LEAD_STATUS_OPTIONS.map((status) => (
                 <MenuItem key={status.value} value={status.value}>
                   <Stack direction="row" spacing={1.25} alignItems="center">
-                    <AccountBalance sx={{ fontSize: 17, color: INK }} />
+                    <AccountBalance sx={{ fontSize: 17, color: BRAND }} />
                     <Box>
                       <Typography variant="body2">{status.label}</Typography>
                       <Typography variant="caption" sx={{ color: MUTED }}>{status.description}</Typography>
@@ -1933,8 +2278,8 @@ const LoanPendingWorkspace = ({
             onChange={(event) => onChange("bankAtPendingNotes", event.target.value)}
           />
 
-          <Stack direction="row" spacing={1.25} alignItems="center" sx={{ p: 1.75, borderRadius: "999px", bgcolor: alpha(BRAND, 0.08), color: "#24476b" }}>
-            <InfoOutlined sx={{ fontSize: 20, color: "#4c9dff" }} />
+          <Stack direction="row" spacing={1.25} alignItems="center" sx={{ p: 1.75, borderRadius: RADIUS_SM, bgcolor: alpha(BRAND, 0.06), color: INK }}>
+            <InfoOutlined sx={{ fontSize: 20, color: BRAND }} />
             <Typography variant="body2">
               When pending, lead will stay in {selectedLead.label} stage.
             </Typography>
@@ -1942,24 +2287,7 @@ const LoanPendingWorkspace = ({
         </Stack>
       </Box>
 
-      <Stack direction="row" justifyContent="flex-end" spacing={2} sx={{ p: 2, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
-        <Button
-          variant="outlined"
-          onClick={onCancel}
-          sx={{ minWidth: 120, borderRadius: "12px", borderColor: BRAND, color: BRAND, fontWeight: 900 }}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          startIcon={<Save sx={{ fontSize: 17 }} />}
-          onClick={onSave}
-          disabled={saving || !project?._id}
-          sx={{ minWidth: 170, borderRadius: "12px", bgcolor: "#f47b2c", fontWeight: 900, "&:hover": { bgcolor: "#ea6b1f" } }}
-        >
-          {saving ? "Updating..." : "Update Status"}
-        </Button>
-      </Stack>
+      {workflowFooter(onCancel, onSave, saving, "Updating...", saving || !project?._id)}
     </Paper>
   );
 };
@@ -1992,11 +2320,19 @@ function ProjectDetails() {
   const [savingRegistration, setSavingRegistration] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     paymentType: "Bank Loan",
+    paymentAmount: "",
+    paymentDate: "",
+    paymentReference: "",
+    paymentStatus: "pending",
     loanAmount: "",
     bank: "",
     branchName: "",
     loanStatus: "pending",
     loanApprovalDate: "",
+    loanReferenceNumber: "",
+    transactionId: "",
+    chequeNumber: "",
+    chequeDate: "",
     loanNotes: "",
     status: "Bank Loan Apply",
   });
@@ -2027,6 +2363,13 @@ function ProjectDetails() {
   });
   const [loanPendingErrors, setLoanPendingErrors] = useState({});
   const [savingLoanPending, setSavingLoanPending] = useState(false);
+  const [documentUploadLinks, setDocumentUploadLinks] = useState([]);
+  const [pendingUploadSlot, setPendingUploadSlot] = useState("");
+  const [uploadingSlotKey, setUploadingSlotKey] = useState("");
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewImageZoomed, setPreviewImageZoomed] = useState(false);
+  const documentFileInputRef = useRef(null);
+  const hasInitialProjectRef = useRef(Boolean(location.state?.project));
 
   const fetchProject = useCallback(async () => {
     if (!projectId) {
@@ -2036,12 +2379,13 @@ function ProjectDetails() {
     }
 
     try {
-      setLoading(!project);
+      setLoading(!hasInitialProjectRef.current);
       setError("");
       const res = await fetchAPI(`/lead/getLeadById/${projectId}`);
       const nextProject = res?.result?.lead || res?.result;
       if (res?.success && nextProject) {
         setProject(nextProject);
+        hasInitialProjectRef.current = true;
       } else {
         throw new Error(res?.message || "Failed to load project");
       }
@@ -2050,17 +2394,25 @@ function ProjectDetails() {
     } finally {
       setLoading(false);
     }
-  }, [fetchAPI, project, projectId]);
+  }, [fetchAPI, projectId]);
 
   useEffect(() => {
     fetchProject();
   }, [fetchProject]);
 
+  useEffect(() => {
+    setPreviewImageZoomed(false);
+  }, [previewDoc?.url]);
+
   const currentStageKey = normalizeProjectStage(project || location.state?.projectStage);
   const currentStage = getStageMeta(currentStageKey);
-  const currentIndex = Math.max(stageIndex(currentStageKey), 0);
-  const progress = Math.round(((currentIndex + 1) / PROJECT_STAGES.length) * 100);
   const selectedWorkflow = getStageMeta(selectedWorkflowStage);
+  const documentSlots = useMemo(() => getDocumentSlots(project), [project]);
+  const firstAvailableWorkflowStage = useMemo(() => getFirstAvailableWorkflowStage(project), [project]);
+  const selectedWorkflowLock = useMemo(
+    () => getStrictWorkflowLock(project, selectedWorkflowStage),
+    [project, selectedWorkflowStage],
+  );
 
   const getRegistrationForm = useCallback((source) => ({
     address: source?.address || "",
@@ -2075,13 +2427,21 @@ function ProjectDetails() {
 
   const getPaymentForm = useCallback((source) => ({
     paymentType: source?.paymentType || "Bank Loan",
+    paymentAmount: source?.paymentAmount ? String(source.paymentAmount) : "",
+    paymentDate: formatInputDate(source?.paymentDate),
+    paymentReference: source?.paymentReference || "",
+    paymentStatus: source?.paymentStatus || "pending",
     loanAmount: source?.loanAmount ? String(source.loanAmount) : "",
     bank: source?.bank || "",
     branchName: source?.branchName || "",
     loanStatus: source?.loanStatus || "pending",
     loanApprovalDate: formatInputDate(source?.loanApprovalDate),
+    loanReferenceNumber: source?.loanReferenceNumber || "",
+    transactionId: source?.transactionId || "",
+    chequeNumber: source?.chequeNumber || "",
+    chequeDate: formatInputDate(source?.chequeDate),
     loanNotes: source?.loanNotes || "",
-    status: source?.status || "Bank Loan Apply",
+    status: source?.paymentType === "Cash" ? "Disbursement" : source?.status || "Bank Loan Apply",
   }), []);
 
   const getInstallationForm = useCallback((source) => ({
@@ -2119,27 +2479,57 @@ function ProjectDetails() {
     setLoanPendingErrors({});
   }, [getDisbursementForm, getInstallationForm, getLoanPendingForm, getPaymentForm, getRegistrationForm, project]);
 
-  const stageState = useCallback(
-    (stageKey) => {
-      const index = stageIndex(stageKey);
-      if (index < currentIndex) return "done";
-      if (index === currentIndex) return "active";
-      return "pending";
-    },
-    [currentIndex],
-  );
-
   const actionState = useMemo(() => {
     if (!project) return {};
     return {
-      registration: project.registrationStatus || "pending",
-      document: project.documentStatus || "pending",
-      payment: project.loanStatus || project.paymentStatus || "pending",
-      loan_pending: project.bankAtPendingStatus || "pending",
-      installation: project.installationStatus || "pending",
-      disbursement: project.disbursementStatus || "pending",
+      registration: project.registrationStatus || "",
+      document: project.documentStatus || "",
+      payment: project.loanStatus || project.paymentStatus || "",
+      loan_pending: project.bankAtPendingStatus || "",
+      installation: project.installationStatus || "",
+      disbursement: project.disbursementStatus || "",
     };
   }, [project]);
+
+  const completedStageCount = useMemo(() => {
+    if (!project) return 0;
+    return PROJECT_STAGES.reduce((count, stage) => {
+      if (stage.key === "lead_converted") {
+        return project.projectConvertedAt || project.projectCode ? count + 1 : count;
+      }
+      return isCompletedStatus(actionState[stage.key]) ? count + 1 : count;
+    }, 0);
+  }, [actionState, project]);
+
+  const progress = Math.round((completedStageCount / PROJECT_STAGES.length) * 100);
+
+  const stageState = useCallback(
+    (stageKey) => {
+      if (stageKey === "lead_converted") {
+        return project?.projectConvertedAt || project?.projectCode ? "done" : "pending";
+      }
+      if (isCompletedStatus(actionState[stageKey])) return "done";
+      if (stageKey === firstAvailableWorkflowStage) return "active";
+      return "pending";
+    },
+    [actionState, firstAvailableWorkflowStage, project?.projectCode, project?.projectConvertedAt],
+  );
+
+  const selectWorkflowStage = useCallback((stageKey) => {
+    const lock = getStrictWorkflowLock(project, stageKey);
+    if (lock.locked) {
+      setSnackbar({ open: true, message: lock.message, severity: "warning" });
+      return false;
+    }
+    setSelectedWorkflowStage(stageKey);
+    return true;
+  }, [project]);
+
+  useEffect(() => {
+    if (selectedWorkflowLock.locked) {
+      setSelectedWorkflowStage(firstAvailableWorkflowStage || "summary");
+    }
+  }, [firstAvailableWorkflowStage, selectedWorkflowLock.locked]);
 
   const openStagePage = (stageKey) => {
     const path = STAGE_ROUTES[stageKey];
@@ -2248,26 +2638,56 @@ function ProjectDetails() {
 
   const validatePaymentForm = useCallback(() => {
     const errors = {};
-    if (!paymentForm.loanAmount) errors.loanAmount = "Loan amount is required";
-    if (!paymentForm.bank) errors.bank = "Bank name is required";
-    if (!paymentForm.branchName.trim()) errors.branchName = "Branch name is required";
+    if (paymentForm.paymentType === "Bank Loan") {
+      if (!paymentForm.bank) errors.bank = "Bank name is required";
+      if (!paymentForm.branchName.trim()) errors.branchName = "Branch name is required";
+      if (!paymentForm.loanAmount) errors.loanAmount = "Loan amount is required";
+    } else if (paymentForm.paymentType === "Cash") {
+      if (!paymentForm.paymentAmount) errors.paymentAmount = "Payment amount is required";
+      if (!paymentForm.paymentDate) errors.paymentDate = "Payment date is required";
+    } else if (paymentForm.paymentType === "Online Transfer") {
+      if (!paymentForm.paymentAmount) errors.paymentAmount = "Payment amount is required";
+      if (!paymentForm.paymentDate) errors.paymentDate = "Payment date is required";
+      if (!paymentForm.transactionId.trim()) errors.transactionId = "Transaction ID is required";
+    } else if (paymentForm.paymentType === "Cheque") {
+      if (!paymentForm.chequeNumber.trim()) errors.chequeNumber = "Cheque number is required";
+      if (!paymentForm.bank.trim()) errors.bank = "Bank name is required";
+      if (!paymentForm.chequeDate) errors.chequeDate = "Cheque date is required";
+      if (!paymentForm.paymentAmount) errors.paymentAmount = "Payment amount is required";
+    }
     setPaymentErrors(errors);
     return Object.keys(errors).length === 0;
   }, [paymentForm]);
 
   const handlePaymentFieldChange = useCallback((field, value) => {
-    setPaymentForm((prev) => ({ ...prev, [field]: value }));
+    setPaymentForm((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === "paymentType") {
+        next.status = value === "Cash" ? "Disbursement" : "Bank Loan Apply";
+        next.paymentStatus = value === "Cash" ? "completed" : "pending";
+        next.loanStatus = value === "Bank Loan" ? prev.loanStatus || "pending" : "submitted";
+      }
+      return next;
+    });
     setPaymentErrors((prev) => ({ ...prev, [field]: "" }));
   }, []);
 
   const clearPaymentForm = useCallback(() => {
     setPaymentForm({
       paymentType: "Bank Loan",
+      paymentAmount: "",
+      paymentDate: "",
+      paymentReference: "",
+      paymentStatus: "pending",
       loanAmount: "",
       bank: "",
       branchName: "",
       loanStatus: "pending",
       loanApprovalDate: "",
+      loanReferenceNumber: "",
+      transactionId: "",
+      chequeNumber: "",
+      chequeDate: "",
       loanNotes: "",
       status: "Bank Loan Apply",
     });
@@ -2290,15 +2710,41 @@ function ProjectDetails() {
     try {
       const payload = {
         paymentType: paymentForm.paymentType,
-        loanAmount: parseFloat(paymentForm.loanAmount),
-        bank: paymentForm.bank.trim(),
-        branchName: paymentForm.branchName.trim(),
-        loanStatus: paymentForm.loanStatus,
         loanNotes: paymentForm.loanNotes.trim(),
-        status: paymentForm.status,
       };
 
-      if (paymentForm.loanApprovalDate) {
+      if (paymentForm.paymentType === "Bank Loan") {
+        payload.bank = paymentForm.bank.trim();
+        payload.branchName = paymentForm.branchName.trim();
+        payload.loanAmount = parseFloat(paymentForm.loanAmount);
+        payload.loanStatus = paymentForm.loanStatus;
+        payload.loanReferenceNumber = paymentForm.loanReferenceNumber.trim();
+        payload.status = "Bank Loan Apply";
+      } else if (paymentForm.paymentType === "Cash") {
+        payload.paymentAmount = parseFloat(paymentForm.paymentAmount);
+        payload.paymentDate = paymentForm.paymentDate;
+        payload.paymentReference = paymentForm.paymentReference.trim();
+        payload.paymentStatus = "completed";
+        payload.loanStatus = "submitted";
+        payload.status = "Disbursement";
+      } else if (paymentForm.paymentType === "Online Transfer") {
+        payload.paymentAmount = parseFloat(paymentForm.paymentAmount);
+        payload.paymentDate = paymentForm.paymentDate;
+        payload.transactionId = paymentForm.transactionId.trim();
+        payload.paymentStatus = paymentForm.paymentStatus;
+        payload.loanStatus = "submitted";
+        payload.status = "Bank Loan Apply";
+      } else if (paymentForm.paymentType === "Cheque") {
+        payload.chequeNumber = paymentForm.chequeNumber.trim();
+        payload.bank = paymentForm.bank.trim();
+        payload.chequeDate = paymentForm.chequeDate;
+        payload.paymentAmount = parseFloat(paymentForm.paymentAmount);
+        payload.paymentStatus = paymentForm.paymentStatus;
+        payload.loanStatus = "submitted";
+        payload.status = "Bank Loan Apply";
+      }
+
+      if (paymentForm.paymentType === "Bank Loan" && paymentForm.loanApprovalDate) {
         payload.loanApprovalDate = paymentForm.loanApprovalDate;
       }
 
@@ -2315,6 +2761,9 @@ function ProjectDetails() {
       const updatedProject = response?.result?.lead || response?.result || { ...project, ...payload };
       setProject(updatedProject);
       setSnackbar({ open: true, message: "Payment updated successfully", severity: "success" });
+      if (paymentForm.paymentType === "Cash") {
+        setSelectedWorkflowStage("disbursement");
+      }
     } catch (err) {
       setSnackbar({ open: true, message: err.message || "Failed to update payment", severity: "error" });
     } finally {
@@ -2546,7 +2995,7 @@ function ProjectDetails() {
     [],
   );
 
-  const createDocumentUploadLink = useCallback(async () => {
+  const createDocumentUploadLink = useCallback(() => {
     if (!project?._id) {
       setSnackbar({ open: true, message: "Project is not ready for document upload", severity: "error" });
       return;
@@ -2554,39 +3003,264 @@ function ProjectDetails() {
 
     const token = createDocumentUploadToken(project._id);
     const link = `${window.location.origin}/documents/upload/${token}`;
+    setDocumentUploadLinks([link]);
+    setSnackbar({ open: true, message: "Upload link created", severity: "success" });
+  }, [createDocumentUploadToken, project?._id]);
 
+  const copyDocumentUploadLink = useCallback(async (link) => {
+    if (!link) return;
     try {
       await navigator.clipboard?.writeText(link);
-      setSnackbar({ open: true, message: "Upload link copied", severity: "success" });
+      setSnackbar({ open: true, message: "Document link copied", severity: "success" });
     } catch {
-      setSnackbar({ open: true, message: `Upload link: ${link}`, severity: "info" });
+      setSnackbar({ open: true, message: "Could not copy document link", severity: "error" });
     }
-  }, [createDocumentUploadToken, project?._id]);
+  }, []);
+
+  const shareDocumentUploadLink = useCallback((link) => {
+    if (!link) return;
+    const message = `Please upload your solar documents using this link: ${link}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  }, []);
+
+  const openDocumentFile = useCallback((url) => {
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, []);
+
+  const downloadDocumentFile = useCallback((url, fileName) => {
+    if (!url) return;
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.download = fileName || "document";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
+
+  const updateDocumentStatus = useCallback(async (nextStatus) => {
+    if (!project?._id) {
+      setSnackbar({ open: true, message: "Project is not ready", severity: "error" });
+      return;
+    }
+
+    try {
+      const response = await fetchAPI(`/lead/updateLead/${project._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentStatus: nextStatus }),
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.message || "Failed to update document status");
+      }
+
+      const updatedProject = response?.result?.lead || response?.result || { ...project, documentStatus: nextStatus };
+      setProject(updatedProject);
+      setSnackbar({
+        open: true,
+        message: nextStatus === "rejected" ? "Document marked as rejected" : "Document marked as verified",
+        severity: "success",
+      });
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "Failed to update document status", severity: "error" });
+    }
+  }, [fetchAPI, project]);
+
+  const handleDocumentVerify = useCallback((slot) => {
+    if (!slot?.uploaded) return;
+    updateDocumentStatus("submitted");
+  }, [updateDocumentStatus]);
+
+  const handleDocumentReject = useCallback((slot) => {
+    if (!slot?.uploaded) return;
+    updateDocumentStatus("rejected");
+  }, [updateDocumentStatus]);
+
+  const handleDocumentDelete = useCallback(async (slot) => {
+    if (!project?._id || !slot?.uploaded || !slot?.source) {
+      setSnackbar({ open: true, message: "Document cannot be removed", severity: "error" });
+      return;
+    }
+
+    let payload = null;
+
+    if (slot.source === "aadhaar") {
+      payload = { aadhaar: { url: null } };
+    } else if (slot.source === "panCard") {
+      payload = { panCard: { url: null } };
+    } else if (slot.source === "passbook") {
+      payload = { passbook: { url: null } };
+    } else if (slot.source === "uploadDocument") {
+      payload = { uploadDocument: { url: null } };
+    } else if (slot.source === "otherDocuments") {
+      let removed = false;
+      payload = {
+        otherDocuments: (project.otherDocuments || []).filter((doc) => {
+          const docName = doc?.name || getFileNameFromUrl(doc?.url);
+          const matches = doc?.url === slot.url && docName === slot.fileName;
+          if (matches && !removed) {
+            removed = true;
+            return false;
+          }
+          return true;
+        }),
+      };
+    }
+
+    if (!payload) {
+      setSnackbar({ open: true, message: "Document cannot be removed", severity: "error" });
+      return;
+    }
+
+    try {
+      const response = await fetchAPI(`/lead/updateLead/${project._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.message || "Failed to delete document");
+      }
+
+      const updatedProject = response?.result?.lead || response?.result || { ...project, ...payload };
+      setProject(updatedProject);
+      if (previewDoc?.url === slot.url) {
+        setPreviewDoc(null);
+      }
+      setSnackbar({ open: true, message: "Document deleted successfully", severity: "success" });
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "Failed to delete document", severity: "error" });
+    }
+  }, [fetchAPI, previewDoc?.url, project]);
+
+  const validateDocumentFile = useCallback((file) => {
+    if (file.size > MAX_DOCUMENT_FILE_SIZE) {
+      return "File size should be less than 5MB";
+    }
+    if (!ALLOWED_DOCUMENT_FILE_TYPES.includes(file.type)) {
+      return "Only JPG, PNG and PDF files are allowed";
+    }
+    return "";
+  }, []);
+
+  const openDirectDocumentUpload = useCallback((slotKey) => {
+    setPendingUploadSlot(slotKey);
+    if (documentFileInputRef.current) {
+      documentFileInputRef.current.value = "";
+      documentFileInputRef.current.click();
+    }
+  }, []);
+
+  const uploadDocumentForSlot = useCallback(async (slotKey, file) => {
+    if (!project?._id) {
+      setSnackbar({ open: true, message: "Project is not ready for upload", severity: "error" });
+      return;
+    }
+
+    const slot = DOCUMENT_REQUIREMENTS.find((item) => item.key === slotKey);
+    if (!slot) {
+      setSnackbar({ open: true, message: "Unknown document slot", severity: "error" });
+      return;
+    }
+
+    const validationError = validateDocumentFile(file);
+    if (validationError) {
+      setSnackbar({ open: true, message: validationError, severity: "error" });
+      return;
+    }
+
+    const formDataToSend = new FormData();
+    const jsonData = {
+      documentStatus: project.documentStatus || "pending",
+      documentSubmissionDate: project.documentSubmissionDate
+        ? format(new Date(project.documentSubmissionDate), "yyyy-MM-dd")
+        : format(new Date(), "yyyy-MM-dd"),
+    };
+
+    if (project.documentNotes) {
+      jsonData.documentNotes = project.documentNotes;
+    }
+
+    const directFieldMap = {
+      aadhaar: "aadhaar",
+      panCard: "panCard",
+      bankStatement: "passbook",
+    };
+
+    if (directFieldMap[slotKey]) {
+      formDataToSend.append(directFieldMap[slotKey], file);
+    } else {
+      const renamedFile = new File([file], createSlotFileName(slot.label, file), {
+        type: file.type,
+        lastModified: file.lastModified,
+      });
+      formDataToSend.append("otherDocuments", renamedFile);
+    }
+
+    formDataToSend.append("data", JSON.stringify(jsonData));
+
+    try {
+      setUploadingSlotKey(slotKey);
+      const response = await fetchAPI(`/lead/upload/${project._id}/upload-documents`, {
+        method: "PUT",
+        body: formDataToSend,
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.message || "Failed to upload document");
+      }
+
+      const updatedProject = response?.result?.lead || response?.result || null;
+      if (updatedProject) {
+        setProject(updatedProject);
+      } else {
+        await fetchProject();
+      }
+      setSnackbar({ open: true, message: `${slot.label} uploaded successfully`, severity: "success" });
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "Failed to upload document", severity: "error" });
+    } finally {
+      setUploadingSlotKey("");
+      setPendingUploadSlot("");
+    }
+  }, [fetchAPI, fetchProject, project, validateDocumentFile]);
+
+  const handleDirectDocumentFileSelection = useCallback(async (event) => {
+    const file = event.target.files?.[0];
+    const slotKey = pendingUploadSlot;
+    event.target.value = "";
+    if (!file || !slotKey) return;
+    await uploadDocumentForSlot(slotKey, file);
+  }, [pendingUploadSlot, uploadDocumentForSlot]);
 
   if (loading && !project) {
     return (
       <Box sx={{ p: { xs: 2, md: 4 }, minHeight: "100vh", bgcolor: SURFACE }}>
-        <Skeleton variant="rounded" height={90} sx={{ mb: 2, borderRadius: "12px" }} />
-        <Skeleton variant="rounded" height={120} sx={{ mb: 2, borderRadius: "12px" }} />
-        <Skeleton variant="rounded" height={260} sx={{ borderRadius: "12px" }} />
+        <Skeleton variant="rounded" height={90} sx={{ mb: 2, borderRadius: RADIUS }} />
+        <Skeleton variant="rounded" height={120} sx={{ mb: 2, borderRadius: RADIUS }} />
+        <Skeleton variant="rounded" height={260} sx={{ borderRadius: RADIUS }} />
       </Box>
     );
   }
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, minHeight: "100vh", bgcolor: SURFACE }}>
-      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
+      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2} sx={{ mb: 2.5 }}>
         <Box>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="caption" sx={{ color: MUTED }}>Projects</Typography>
-            <Typography variant="caption" sx={{ color: MUTED }}>/</Typography>
-            <Typography variant="caption" fontWeight={800} color={INK}>
+            <Typography variant="caption" sx={{ color: MUTED_2 }}>Projects</Typography>
+            <Typography variant="caption" sx={{ color: MUTED_2 }}>/</Typography>
+            <Typography variant="caption" fontWeight={700} color={INK}>
               {project?.projectCode || project?.leadId || projectId}
             </Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+          <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.25 }}>
             <Tooltip title="Back to projects">
-              <IconButton size="small" onClick={() => navigate("/projects")} sx={{ border: `1px solid ${BORDER}` }}>
+              <IconButton size="small" onClick={() => navigate("/projects")} sx={{ border: `1px solid ${BORDER}`, bgcolor: PANEL, "&:hover": { bgcolor: SURFACE } }}>
                 <ArrowBack sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
@@ -2597,17 +3271,18 @@ function ProjectDetails() {
                 bgcolor: alpha(BRAND, 0.1),
                 color: BRAND,
                 fontWeight: 800,
+                letterSpacing: "0.03em",
               }}
             />
-            <Typography variant="caption" sx={{ color: MUTED }}>
+            <Typography variant="caption" sx={{ color: MUTED_2 }}>
               Created {formatDate(project?.projectConvertedAt || project?.createdAt)}
             </Typography>
           </Stack>
-          <Typography variant="h5" fontWeight={900} color={INK} sx={{ lineHeight: 1.15 }}>
-            {getCustomerName(project)} . {getSystemSize(project)} kW Residential Rooftop
+          <Typography variant="h5" fontWeight={800} color={INK} sx={{ lineHeight: 1.15 }} letterSpacing="-0.015em">
+            {getProjectTitle(project)}
           </Typography>
           <Typography variant="body2" sx={{ color: MUTED, mt: 0.75 }}>
-            {project?.city || project?.address || "No site location"} . {project?.phone || "No phone"}
+            {getProjectSubtitle(project)}
           </Typography>
         </Box>
 
@@ -2617,100 +3292,91 @@ function ProjectDetails() {
             variant="outlined"
             startIcon={<Edit sx={{ fontSize: 16 }} />}
             onClick={editProject}
-            sx={{ borderRadius: "8px", borderColor: BORDER, color: INK, fontWeight: 800 }}
+            sx={{ borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none", bgcolor: PANEL, "&:hover": { borderColor: alpha(BRAND, 0.4), bgcolor: alpha(BRAND, 0.04) } }}
           >
             Edit
           </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<Download sx={{ fontSize: 16 }} />}
-            onClick={() => setSnackbar({ open: true, message: "Export is not connected yet", severity: "info" })}
-            sx={{ borderRadius: "8px", borderColor: BORDER, color: INK, fontWeight: 800 }}
-          >
-            Export
-          </Button>
-          <IconButton size="small" sx={{ border: `1px solid ${BORDER}`, borderRadius: "8px" }}>
-            <MoreVert sx={{ fontSize: 18 }} />
-          </IconButton>
         </Stack>
       </Stack>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: RADIUS_SM }}>{error}</Alert>}
 
-      <Grid container spacing={2} sx={{ mb: 2 }}>
+      <Grid container spacing={2} sx={{ mb: 2.5 }}>
         <Grid item xs={12} md={3}>
-          <MetricCard icon={<Bolt />} label="System Size" value={`${getSystemSize(project)} kW`} color={BRAND} />
+          <MetricCard icon={<Bolt />} label="System Size" value={getSystemSize(project) || "Not available"} color={BRAND} />
         </Grid>
         <Grid item xs={12} md={3}>
-          <MetricCard icon={<AccountBalance />} label="Project Value" value={formatMoney(getProjectValue(project))} color={SUCCESS} />
+          <MetricCard icon={<AccountBalance />} label="Project Value" value={formatOptionalMoney(getProjectValue(project))} color={SUCCESS} />
         </Grid>
         <Grid item xs={12} md={3}>
-          <MetricCard icon={<Payments />} label="Subsidy" value={formatMoney(project?.subsidyAmount || project?.subsidy || 0)} color={WARNING} />
+          <MetricCard icon={<Payments />} label="Subsidy" value={formatOptionalMoney(project?.subsidyAmount || project?.subsidy)} color={WARNING} />
         </Grid>
         <Grid item xs={12} md={3}>
-          <MetricCard icon={<CalendarMonth />} label="Milestones Paid" value={`${project?.milestonesPaid || 0} of ${ACTION_STAGES.length}`} color={INK_2} />
+          <MetricCard icon={<CalendarMonth />} label="Stages Complete" value={`${completedStageCount} of ${PROJECT_STAGES.length}`} color={INK_2} />
         </Grid>
       </Grid>
 
       <Paper
         elevation={0}
         sx={{
-          p: 2,
-          mb: 2,
-          borderRadius: "12px",
-          border: `1px solid ${alpha(INK, 0.08)}`,
-          background: `linear-gradient(135deg, ${INK} 0%, ${INK_2} 100%)`,
+          p: 2.75,
+          mb: 2.5,
+          borderRadius: RADIUS,
+          border: `1px solid ${alpha(INK, 0.06)}`,
+          background: `linear-gradient(135deg, ${INK} 0%, ${INK_2} 65%, #16213D 100%)`,
           color: "#fff",
+          boxShadow: SHADOW_MD,
         }}
       >
         <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2} alignItems={{ xs: "flex-start", md: "center" }}>
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <Box sx={{ width: 44, height: 44, borderRadius: "10px", bgcolor: alpha("#fff", 0.14), display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Stack direction="row" spacing={1.75} alignItems="center">
+            <Box sx={{ width: 46, height: 46, borderRadius: RADIUS_SM, bgcolor: alpha("#fff", 0.12), display: "flex", alignItems: "center", justifyContent: "center" }}>
               <TaskAlt />
             </Box>
             <Box>
-              <Typography variant="caption" fontWeight={900} sx={{ letterSpacing: "0.08em", opacity: 0.75 }}>
+              <Typography variant="caption" fontWeight={800} sx={{ letterSpacing: "0.08em", opacity: 0.7 }}>
                 NEXT ACTION
               </Typography>
-              <Typography variant="subtitle1" fontWeight={900}>
-                {NEXT_ACTIONS[currentStageKey]}
+              <Typography variant="subtitle1" fontWeight={800} letterSpacing="-0.01em">
+                {getNextActionLabel(project, currentStage)}
               </Typography>
-              <Typography variant="caption" sx={{ opacity: 0.75 }}>
-                Updated {formatDate(project?.updatedAt || project?.projectConvertedAt || project?.createdAt)}
+              <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                Last updated {formatDate(project?.updatedAt)}
               </Typography>
             </Box>
           </Stack>
           <Button
             size="small"
             variant="contained"
-            onClick={() => setSelectedWorkflowStage(currentStageKey)}
-            disabled={currentStageKey === "lead_converted"}
+            onClick={() => selectWorkflowStage(firstAvailableWorkflowStage)}
+            disabled={!project?._id}
             sx={{
               bgcolor: "#fff",
               color: INK,
-              fontWeight: 900,
-              borderRadius: "8px",
-              "&:hover": { bgcolor: alpha("#fff", 0.9) },
-              "&.Mui-disabled": { bgcolor: alpha("#fff", 0.3), color: alpha(INK, 0.5) },
+              fontWeight: 800,
+              textTransform: "none",
+              borderRadius: RADIUS_SM,
+              boxShadow: "none",
+              "&:hover": { bgcolor: alpha("#fff", 0.9), boxShadow: "none" },
+              "&.Mui-disabled": { bgcolor: alpha("#fff", 0.25), color: alpha("#fff", 0.5) },
             }}
           >
-            Update current stage
+            Open next stage
           </Button>
         </Stack>
       </Paper>
 
-      <Paper elevation={0} sx={{ p: 2, mb: 2, borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
-        <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1} sx={{ mb: 2 }}>
+      <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+        <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1} sx={{ mb: 2.5 }}>
           <Box>
-            <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase" }}>
+            <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
               Stage Progress
             </Typography>
-            <Typography variant="subtitle2" fontWeight={900} color={INK}>
+            <Typography variant="subtitle2" fontWeight={800} color={INK}>
               Lifecycle status of every project stage
             </Typography>
           </Box>
-          <Chip label={`${progress}%`} size="small" sx={{ alignSelf: { xs: "flex-start", md: "center" }, bgcolor: alpha(BRAND, 0.1), color: BRAND, fontWeight: 900 }} />
+          <Chip label={`${progress}%`} size="small" sx={{ alignSelf: { xs: "flex-start", md: "center" }, bgcolor: alpha(BRAND, 0.1), color: BRAND, fontWeight: 800 }} />
         </Stack>
 
         <Box sx={{ overflowX: "auto", pb: 0.5 }}>
@@ -2726,8 +3392,8 @@ function ProjectDetails() {
                   <Stack alignItems="center" spacing={0.75} sx={{ width: 128, flexShrink: 0 }}>
                     <Box
                       sx={{
-                        width: 32,
-                        height: 32,
+                        width: 34,
+                        height: 34,
                         borderRadius: "50%",
                         bgcolor: done || active ? color : "#fff",
                         border: `1px solid ${done || active ? color : BORDER}`,
@@ -2735,15 +3401,16 @@ function ProjectDetails() {
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        boxShadow: active ? `0 0 0 5px ${alpha(color, 0.12)}` : "none",
+                        boxShadow: active ? `0 0 0 5px ${alpha(color, 0.14)}` : "none",
+                        transition: "box-shadow 0.2s ease",
                       }}
                     >
                       <Icon sx={{ fontSize: 16 }} />
                     </Box>
-                    <Typography variant="caption" sx={{ color: MUTED }} fontWeight={800}>
+                    <Typography variant="caption" sx={{ color: MUTED_2 }} fontWeight={700}>
                       Stage {index + 1}
                     </Typography>
-                    <Typography variant="caption" color={INK} fontWeight={900} textAlign="center" sx={{ lineHeight: 1.2 }}>
+                    <Typography variant="caption" color={INK} fontWeight={800} textAlign="center" sx={{ lineHeight: 1.2 }}>
                       {stage.label}
                     </Typography>
                     <Chip
@@ -2752,14 +3419,14 @@ function ProjectDetails() {
                       sx={{
                         height: 20,
                         fontSize: 10,
-                        fontWeight: 900,
+                        fontWeight: 800,
                         bgcolor: alpha(color, 0.1),
                         color,
                       }}
                     />
                   </Stack>
                   {index < PROJECT_STAGES.length - 1 && (
-                    <Divider sx={{ flex: 1, minWidth: 42, mt: 2, borderColor: index < currentIndex ? alpha(SUCCESS, 0.4) : BORDER }} />
+                    <Divider sx={{ flex: 1, minWidth: 42, mt: 2.1, borderColor: done ? alpha(SUCCESS, 0.4) : BORDER }} />
                   )}
                 </React.Fragment>
               );
@@ -2770,59 +3437,77 @@ function ProjectDetails() {
 
       <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1.5} sx={{ mb: 1.5 }}>
         <Box>
-          <Typography variant="caption" fontWeight={900} sx={{ color: MUTED, textTransform: "uppercase" }}>
+          <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
             Project Workflow
           </Typography>
-          <Typography variant="subtitle2" fontWeight={900} color={INK}>
-            {currentIndex} of {ACTION_STAGES.length} stages complete
+          <Typography variant="subtitle2" fontWeight={800} color={INK}>
+            {completedStageCount} of {PROJECT_STAGES.length} stages complete
           </Typography>
         </Box>
-        <Typography variant="subtitle2" fontWeight={900} sx={{ color: BRAND }}>
+        <Typography variant="subtitle2" fontWeight={800} sx={{ color: BRAND }}>
           {progress}%
         </Typography>
       </Stack>
 
-      <Paper elevation={0} sx={{ p: 1.5, mb: 2, borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
+      <Paper elevation={0} sx={{ p: 1.5, mb: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
         <Stack direction="row" spacing={1} sx={{ overflowX: "auto", pb: 0.5 }}>
           {WORKFLOW_TABS.map((stage) => {
             const Icon = stage.icon;
             const active = selectedWorkflowStage === stage.key;
+            const lock = getStrictWorkflowLock(project, stage.key);
             return (
-              <Button
-                key={stage.key}
-                size="small"
-                startIcon={<Icon sx={{ fontSize: 15 }} />}
-                onClick={() => setSelectedWorkflowStage(stage.key)}
-                sx={{
-                  flexShrink: 0,
-                  minWidth: 132,
-                  justifyContent: "flex-start",
-                  borderRadius: "8px",
-                  px: 1.25,
-                  py: 0.9,
-                  fontSize: 11,
-                  fontWeight: 900,
-                  color: active ? BRAND : INK,
-                  border: `1px solid ${active ? alpha(BRAND, 0.35) : BORDER}`,
-                  bgcolor: active ? alpha(BRAND, 0.06) : "#fff",
-                  "&:hover": { bgcolor: alpha(BRAND, 0.06), borderColor: alpha(BRAND, 0.35) },
-                }}
-              >
-                <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {stage.label}
-                </Box>
-              </Button>
+              <Tooltip key={stage.key} title={lock.locked ? lock.message : ""}>
+                <span>
+                  <Button
+                    size="small"
+                    startIcon={<Icon sx={{ fontSize: 15 }} />}
+                    disabled={lock.locked}
+                    onClick={() => selectWorkflowStage(stage.key)}
+                    sx={{
+                      flexShrink: 0,
+                      minWidth: 132,
+                      justifyContent: "flex-start",
+                      borderRadius: RADIUS_SM,
+                      px: 1.5,
+                      py: 0.9,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: active ? BRAND : INK,
+                      border: `1px solid ${active ? alpha(BRAND, 0.35) : BORDER}`,
+                      bgcolor: active ? alpha(BRAND, 0.06) : PANEL,
+                      textTransform: "none",
+                      "&:hover": { bgcolor: alpha(BRAND, 0.06), borderColor: alpha(BRAND, 0.35) },
+                      "&.Mui-disabled": {
+                        color: MUTED_2,
+                        borderColor: BORDER_SOFT,
+                        bgcolor: SURFACE,
+                      },
+                    }}
+                  >
+                    <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {stage.label}
+                    </Box>
+                  </Button>
+                </span>
+              </Tooltip>
             );
           })}
         </Stack>
       </Paper>
 
-      <Grid container spacing={2}>
+      <Grid container spacing={2.5}>
         <Grid item xs={12} md={selectedWorkflowStage === "summary" ? 12 : 8}>
+          <input
+            ref={documentFileInputRef}
+            type="file"
+            hidden
+            accept="image/jpeg,image/png,image/jpg,application/pdf"
+            onChange={handleDirectDocumentFileSelection}
+          />
           {selectedWorkflowStage === "summary" ? (
             <SummaryWorkspace
               project={project}
-              onGoToStage={(stageKey) => setSelectedWorkflowStage(stageKey)}
+              onGoToStage={selectWorkflowStage}
               onOpenSurveyEditor={openSurveyEditor}
             />
           ) : selectedWorkflowStage === "registration" ? (
@@ -2839,8 +3524,23 @@ function ProjectDetails() {
           ) : selectedWorkflowStage === "document" ? (
             <DocumentWorkspace
               project={project}
-              onUpload={() => openStagePage("document")}
+              documentSlots={documentSlots}
+              documentUploadLinks={documentUploadLinks}
+              previewDoc={previewDoc}
+              previewImageZoomed={previewImageZoomed}
+              uploadingSlotKey={uploadingSlotKey}
+              onUpload={openDirectDocumentUpload}
               onCreateLink={createDocumentUploadLink}
+              onCopyLink={copyDocumentUploadLink}
+              onShareLink={shareDocumentUploadLink}
+              onPreview={setPreviewDoc}
+              onClosePreview={() => setPreviewDoc(null)}
+              onTogglePreviewZoom={() => setPreviewImageZoomed((prev) => !prev)}
+              onOpenDocument={openDocumentFile}
+              onDownloadDocument={downloadDocumentFile}
+              onVerify={handleDocumentVerify}
+              onReject={handleDocumentReject}
+              onDelete={handleDocumentDelete}
             />
           ) : selectedWorkflowStage === "payment" ? (
             <PaymentWorkspace
@@ -2884,10 +3584,10 @@ function ProjectDetails() {
               onSave={saveLoanPending}
             />
           ) : (
-            <Paper elevation={0} sx={{ minHeight: 220, p: 3, borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
+            <Paper elevation={0} sx={{ minHeight: 220, p: 3, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
               <Stack alignItems="center" justifyContent="center" spacing={1.25} sx={{ minHeight: 170, textAlign: "center" }}>
-                <TaskAlt sx={{ fontSize: 44, color: alpha(INK, 0.35) }} />
-                <Typography variant="subtitle1" fontWeight={900} color={INK}>
+                <TaskAlt sx={{ fontSize: 44, color: alpha(INK, 0.25) }} />
+                <Typography variant="subtitle1" fontWeight={800} color={INK}>
                   {selectedWorkflow.label} Workspace
                 </Typography>
                 <Typography variant="body2" sx={{ color: MUTED, maxWidth: 520 }}>
@@ -2897,7 +3597,7 @@ function ProjectDetails() {
                   size="small"
                   variant="outlined"
                   onClick={() => openStagePage(selectedWorkflowStage)}
-                  sx={{ mt: 1, borderRadius: "8px", borderColor: BORDER, color: INK, fontWeight: 800 }}
+                  sx={{ mt: 1, borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none" }}
                 >
                   Open {selectedWorkflow.label}
                 </Button>
@@ -2907,40 +3607,26 @@ function ProjectDetails() {
         </Grid>
         {selectedWorkflowStage !== "summary" && (
         <Grid item xs={12} md={4}>
-          <Stack spacing={2}>
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "12px", border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
+          <Stack spacing={2.5}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
                 <InfoOutlined sx={{ fontSize: 18, color: BRAND }} />
-                <Typography variant="subtitle2" fontWeight={900} color={INK}>
+                <Typography variant="subtitle2" fontWeight={800} color={INK}>
                   Current Stage Info
                 </Typography>
               </Stack>
-              <Stack spacing={1}>
+              <Stack spacing={1.25}>
                 {ACTION_STAGES.map((stage) => (
                   <Stack key={stage.key} direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography variant="caption" sx={{ color: MUTED }} fontWeight={800}>
+                    <Typography variant="caption" sx={{ color: MUTED }} fontWeight={700}>
                       {stage.label}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: stage.key === selectedWorkflowStage ? BRAND : INK }} fontWeight={900}>
+                    <Typography variant="caption" sx={{ color: stage.key === selectedWorkflowStage ? BRAND : INK }} fontWeight={800}>
                       {formatStatusLabel(actionState[stage.key])}
                     </Typography>
                   </Stack>
                 ))}
               </Stack>
-            </Paper>
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "12px", border: `1px solid ${alpha(BRAND, 0.12)}`, bgcolor: alpha(BRAND, 0.05) }}>
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                <SupportAgent sx={{ fontSize: 18, color: BRAND }} />
-                <Typography variant="subtitle2" fontWeight={900} color={INK}>
-                  Need Help?
-                </Typography>
-              </Stack>
-              <Typography variant="body2" sx={{ color: MUTED, mb: 1.5 }}>
-                You can update the stage details or contact support for assistance.
-              </Typography>
-              <Button size="small" variant="outlined" sx={{ borderRadius: "8px", borderColor: BORDER, color: INK, fontWeight: 800 }}>
-                Contact Support
-              </Button>
             </Paper>
           </Stack>
         </Grid>
@@ -2952,7 +3638,7 @@ function ProjectDetails() {
         autoHideDuration={3000}
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
       >
-        <Alert severity={snackbar.severity} sx={{ width: "100%" }}>
+        <Alert severity={snackbar.severity} sx={{ width: "100%", borderRadius: RADIUS_SM }}>
           {snackbar.message}
         </Alert>
       </Snackbar>

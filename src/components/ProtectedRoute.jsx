@@ -4,7 +4,11 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 
-const normalizeRole = (role) => (role === 'Head_office' ? 'Admin_panel' : role);
+const normalizeRole = (role) => {
+  const value = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const map = { head_office: 'ADMIN', admin_panel: 'ADMIN', admin: 'ADMIN', project_head: 'PROJECT_HEAD', manager: 'MANAGER', supervisor: 'SUPERVISOR', installer: 'INSTALLER', team: 'INSTALLER', zsm: 'PROJECT_HEAD', incharge: 'SUPERVISOR' };
+  return map[value] || role;
+};
 
 const ProtectedRoute = ({ 
   children, 

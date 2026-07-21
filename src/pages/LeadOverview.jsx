@@ -2052,7 +2052,7 @@ const LeadOverview = () => {
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState("desc");
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
-
+const [todayFollowUpLeads, setTodayFollowUpLeads] = useState([]);
   const containerRef = useRef(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
@@ -2071,12 +2071,64 @@ const LeadOverview = () => {
     return count;
   }, [searchTerm, statusFilter, period, quickFilter]);
 
+
+
+
+  const isDueTodayOrEarlier = (value) => {
+  if (!value) return false;
+  const date = typeof value === "string" ? parseISO(value) : new Date(value);
+  if (!isValid(date)) return false;
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  return date.getTime() <= endOfToday.getTime();
+};
+
+
+
+// Covers both the lead-level followUpDate AND custom "Reminder" activities
+// (the ones created from the Reminders tab), so nothing gets missed just
+// because it lives in leadActivities instead of followUpDate.
+const leadHasActiveFollowUpToday = (lead = {}) => {
+  const followUpDateDue = Boolean(lead.followUpDate) && isDueTodayOrEarlier(lead.followUpDate);
+
+  const hasActiveReminderActivity =
+    Array.isArray(lead.leadActivities) &&
+    lead.leadActivities.some((activity) => {
+      const type = String(activity?.type || activity?.activityType || "").trim().toLowerCase();
+      if (type !== "reminder") return false;
+      if (activity?.completedAt) return false;
+      return isDueTodayOrEarlier(activity?.scheduledAt);
+    });
+
+  return followUpDateDue || hasActiveReminderActivity;
+};
+
+
   const addLeads = () => navigate("/add-lead");
   const showSnackbar = useCallback((message, severity = "success") => setSnackbar({ open: true, message, severity }), []);
 
-  const fetchLeads = useCallback(async () => {
+ const fetchLeads = useCallback(async () => {
   try {
     setLoading(true);
+
+    // Follow-up-today needs client-side filtering because the backend's
+    // followUpDue=today filter doesn't account for reminders stored in
+    // leadActivities — same issue we already fixed for the summary count.
+    if (quickFilter === "followUpToday") {
+      const leadData = await fetchAPI(`/lead/getAll?limit=1000&sortBy=followUpDate&sortOrder=asc`);
+      if (leadData.success) {
+        const allLeads = leadData.result?.leads || [];
+        const filtered = allLeads.filter(leadHasActiveFollowUpToday);
+        setLeads(filtered);
+        setTotalLeads(filtered.length);
+      } else {
+        showSnackbar(leadData.message || "Failed to fetch leads", "error");
+        setLeads([]);
+        setTotalLeads(0);
+      }
+      return;
+    }
+
     const params = new URLSearchParams({
       page: (page + 1).toString(),
       limit: rowsPerPage.toString(),
@@ -2086,10 +2138,8 @@ const LeadOverview = () => {
 
     if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
     if (statusFilter !== "all") params.append("status", statusFilter);
-    if (quickFilter === "followUpToday") params.append("followUpDue", "today");
     if (quickFilter.startsWith("pipeline:")) params.append("pipelineStage", quickFilter.replace("pipeline:", ""));
 
-    // ✅ Always send date range — fall back to today if periodRange is empty
     const today = toDateInputValue(new Date());
     const fromDate = periodRange.fromDate ?? today;
     const toDate = periodRange.toDate ?? today;
@@ -2122,35 +2172,57 @@ const LeadOverview = () => {
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
-  const fetchOverviewStats = useCallback(async () => {
-    try {
-      const data = await fetchAPI("/lead/stats?page=1&limit=1");
-      if (data.success) {
-        const stats = data.result?.stats || {};
-        let pipelineThisQuarter = stats.pipelineThisQuarter || { ...EMPTY_PIPELINE_COUNTS };
-        const totalStatsLeads = stats.totalLeads || 0;
+const fetchOverviewStats = useCallback(async () => {
+  try {
+    const ts = Date.now();
+    const data = await fetchAPI(`/lead/stats?page=1&limit=1&_ts=${ts}`);
+    if (data.success) {
+      const stats = data.result?.stats || {};
+      let pipelineThisQuarter = stats.pipelineThisQuarter || { ...EMPTY_PIPELINE_COUNTS };
+      const totalStatsLeads = stats.totalLeads || 0;
 
-        if ((pipelineThisQuarter.all || 0) === 0 && totalStatsLeads > 0) {
-          const leadData = await fetchAPI("/lead/getAll?limit=1000&sortBy=createdAt&sortOrder=desc");
-          if (leadData.success) {
-            pipelineThisQuarter = buildPipelineCountsFromLeads(leadData.result?.leads || []);
-          }
-        }
-
-        setOverviewStats({
-          totalLeads: totalStatsLeads,
-          activeLeads: stats.activeLeads || 0,
-          newLeads: stats.newLeads || stats.activeLeads || 0,
-          convertedLeads: stats.convertedLeads || 0,
-          conversionRate: stats.conversionRate || 0,
-          followUpToday: stats.followUpToday || 0,
-          pipelineThisQuarter,
-        });
+      // Pull the full lead list once and use it as the source of truth for
+      // both pipeline counts and "follow-up due today", since the backend
+      // aggregate can miss reminders stored on leadActivities.
+      let allLeads = null;
+      try {
+        const leadData = await fetchAPI("/lead/getAll?limit=1000&sortBy=createdAt&sortOrder=desc");
+        if (leadData.success) allLeads = leadData.result?.leads || [];
+      } catch {
+        // fall back to backend stats below if this fails
       }
-    } catch {
-      setOverviewStats((prev) => prev);
+
+      if (Array.isArray(allLeads) && (pipelineThisQuarter.all || 0) === 0 && totalStatsLeads > 0) {
+        pipelineThisQuarter = buildPipelineCountsFromLeads(allLeads);
+      }
+
+      let followUpToday = stats.followUpToday || 0;
+      let followUpLeads = [];
+      if (Array.isArray(allLeads)) {
+        followUpLeads = allLeads.filter(leadHasActiveFollowUpToday);
+        followUpToday = followUpLeads.length;
+      } else {
+        try {
+          const followUpData = await fetchAPI(`/lead/getAll?page=1&limit=1&followUpDue=today&_ts=${ts}`);
+          if (followUpData?.success) followUpToday = followUpData.result?.pagination?.total || 0;
+        } catch {}
+      }
+
+      setTodayFollowUpLeads(followUpLeads);
+      setOverviewStats({
+        totalLeads: totalStatsLeads,
+        activeLeads: stats.activeLeads || 0,
+        newLeads: stats.newLeads || stats.activeLeads || 0,
+        convertedLeads: stats.convertedLeads || 0,
+        conversionRate: stats.conversionRate || 0,
+        followUpToday,
+        pipelineThisQuarter,
+      });
     }
-  }, [fetchAPI]);
+  } catch {
+    setOverviewStats((prev) => prev);
+  }
+}, [fetchAPI]);
 
   const fetchVisitSummary = useCallback(async () => {
     try {
@@ -2173,6 +2245,23 @@ const LeadOverview = () => {
   useEffect(() => {
     fetchOverviewStats();
   }, [fetchOverviewStats]);
+
+  // Refresh stats when user returns to this page (e.g. after adding a reminder in LeadDetailsPage)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchOverviewStats();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [fetchOverviewStats]);
+
+  // Also refresh stats on every navigation back to this page (React Router SPA navigation)
+  useEffect(() => {
+    fetchOverviewStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
 
   useEffect(() => {
     fetchVisitSummary();
@@ -2244,33 +2333,23 @@ const LeadOverview = () => {
   const handleResetFilters = useCallback(() => { setSearchTerm(""); setStatusFilter("all"); setQuickFilter(""); setPeriod("All"); setPage(0); setSelectedLeads([]); setSelectAll(false); }, []);
   const handleClearFiltersMobile = useCallback(() => { setSearchTerm(""); setStatusFilter("all"); setQuickFilter(""); setPeriod("All"); }, []);
 
-  const handleViewTodayFollowUps = useCallback(async () => {
-    try {
-      const data = await fetchAPI("/lead/getAll?page=1&limit=2&followUpDue=today&sortBy=followUpDate&sortOrder=asc");
-      const todayReminderLeads = data?.success ? (data.result?.leads || []) : [];
-      const totalTodayReminders = data?.result?.pagination?.total || todayReminderLeads.length;
+  const handleViewTodayFollowUps = useCallback(() => {
+  if (todayFollowUpLeads.length === 1) {
+    const lead = todayFollowUpLeads[0];
+    navigate(`/all-leads/${lead._id}`, {
+      state: { lead, initialTab: "reminders" },
+    });
+    return;
+  }
 
-      if (totalTodayReminders === 1 && todayReminderLeads[0]?._id) {
-        navigate(`/all-leads/${todayReminderLeads[0]._id}`, {
-          state: {
-            lead: todayReminderLeads[0],
-            initialTab: "reminders",
-          },
-        });
-        return;
-      }
-    } catch {
-      // Fall back to the filtered list if the direct reminder lookup fails.
-    }
-
-    setSearchTerm("");
-    setStatusFilter("all");
-    setQuickFilter("followUpToday");
-    setPeriod("All");
-    setPage(0);
-    setSelectedLeads([]);
-    setSelectAll(false);
-  }, [fetchAPI, navigate]);
+  setSearchTerm("");
+  setStatusFilter("all");
+  setQuickFilter("followUpToday");
+  setPeriod("All");
+  setPage(0);
+  setSelectedLeads([]);
+  setSelectAll(false);
+}, [navigate, todayFollowUpLeads]);
 
   const handleViewNewLeads = useCallback(() => {
     setSearchTerm("");
@@ -2317,7 +2396,7 @@ const LeadOverview = () => {
     setProjectDialogLead(null);
   }, [projectDialogSubmitting]);
 
-  const completeProjectConversion = useCallback(async (lead, quotation = null) => {
+  const completeProjectConversion = useCallback(async (lead, quotation = null, projectDetails = {}) => {
     if (!lead?._id) {
       showSnackbar("Invalid lead selected", "error");
       return;
@@ -2327,7 +2406,7 @@ const LeadOverview = () => {
       setProjectDialogSubmitting(true);
       const response = await fetchAPI(`/lead/updateLead/${lead._id}`, {
         method: "PUT",
-        body: JSON.stringify({ isProject: true }),
+        body: JSON.stringify({ isProject: true, projectType: projectDetails.projectType }),
       });
       if (response?.success === false) {
         throw new Error(response.message || "Failed to convert lead to project");
@@ -2485,7 +2564,7 @@ const LeadOverview = () => {
   {
     label: "Need follow-up today",
     value: overviewStats.followUpToday || 0,
-    caption: "Reminders due today",
+    caption: "Reminders due today or overdue",
     action: "View list",
     icon: <Warning />,
     iconBg: "rgba(255,255,255,0.14)",       // subtle glass circle, not solid navy-on-navy
@@ -2557,8 +2636,8 @@ const LeadOverview = () => {
         submitting={projectDialogSubmitting}
         onClose={closeProjectDialog}
         onCreateQuotation={handleProjectDialogCreateQuotation}
-        onCreateWithoutQuotation={() => completeProjectConversion(projectDialogLead)}
-        onContinueWithQuotation={(quotation) => completeProjectConversion(projectDialogLead, quotation)}
+        onCreateWithoutQuotation={(projectDetails) => completeProjectConversion(projectDialogLead, null, projectDetails)}
+        onContinueWithQuotation={(quotation, projectDetails) => completeProjectConversion(projectDialogLead, quotation, projectDetails)}
       />
 
       {/* Header */}

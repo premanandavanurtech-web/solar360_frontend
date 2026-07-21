@@ -490,9 +490,21 @@ const Login = () => {
           throw new Error("User role not found in login response");
         }
 
-        const normalizedRole = userRole === "Head_office" ? "Admin_panel" : userRole;
+        const normalizedRoleMap = {
+          Head_office: "ADMIN",
+          Admin_panel: "ADMIN",
+          ADMIN: "ADMIN",
+          ZSM: "PROJECT_HEAD",
+          PROJECT_HEAD: "PROJECT_HEAD",
+          Incharge: "SUPERVISOR",
+          SUPERVISOR: "SUPERVISOR",
+          TEAM: "INSTALLER",
+          INSTALLER: "INSTALLER",
+          MANAGER: "MANAGER",
+        };
+        const normalizedRole = normalizedRoleMap[userRole] || userRole;
 
-        if (!["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(normalizedRole)) {
+        if (!["ADMIN", "PROJECT_HEAD", "MANAGER", "SUPERVISOR", "INSTALLER"].includes(normalizedRole)) {
           throw new Error("You do not have permission to access this system");
         }
 
@@ -509,7 +521,7 @@ const Login = () => {
         setSuccessMessage("Login successful! Redirecting to dashboard...");
 
         setTimeout(() => {
-          if (normalizedRole === "TEAM") {
+          if (normalizedRole === "INSTALLER") {
             navigate("/attendance", { replace: true });
           } else {
             navigate("/dashboard", { replace: true });

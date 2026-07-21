@@ -105,6 +105,11 @@ const PERIOD_OPTIONS = [
 ];
 
 const ROLE_CONFIG = {
+  ADMIN: { color: PRIMARY_COLOR, bg: alpha(PRIMARY_COLOR, 0.08), icon: <AdminPanelSettings fontSize="small" />, label: "Admin / Super Admin", level: 1 },
+  PROJECT_HEAD: { color: PRIMARY_COLOR, bg: alpha(PRIMARY_COLOR, 0.08), icon: <SupervisorAccount fontSize="small" />, label: "Project Head", level: 2 },
+  MANAGER: { color: PRIMARY_COLOR, bg: alpha(PRIMARY_COLOR, 0.08), icon: <SupervisorAccount fontSize="small" />, label: "Manager (Backend / Ops)", level: 3 },
+  SUPERVISOR: { color: PRIMARY_COLOR, bg: alpha(PRIMARY_COLOR, 0.08), icon: <SupervisorAccount fontSize="small" />, label: "Supervisor", level: 4 },
+  INSTALLER: { color: PRIMARY_COLOR, bg: alpha(PRIMARY_COLOR, 0.08), icon: <Group fontSize="small" />, label: "Installer", level: 5 },
   Admin_panel: {
     color: PRIMARY_COLOR,
     bg: alpha(PRIMARY_COLOR, 0.08),
@@ -134,6 +139,30 @@ const ROLE_CONFIG = {
     level: 4,
   },
 };
+
+const normalizeRole = (role) => {
+  const value = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const map = {
+    head_office: "ADMIN",
+    admin_panel: "ADMIN",
+    admin: "ADMIN",
+    super_admin: "ADMIN",
+    zsm: "PROJECT_HEAD",
+    project_head: "PROJECT_HEAD",
+    manager: "MANAGER",
+    incharge: "SUPERVISOR",
+    supervisor: "SUPERVISOR",
+    team: "INSTALLER",
+    installer: "INSTALLER",
+  };
+  return map[value] || role;
+};
+
+const getRoleConfig = (role) => ROLE_CONFIG[normalizeRole(role)] || ROLE_CONFIG[role] || ROLE_CONFIG.INSTALLER;
+const isAdminRole = (role) => normalizeRole(role) === "ADMIN";
+const isInstallerRole = (role) => normalizeRole(role) === "INSTALLER";
+const MANAGER_ROLE_KEYS = ["ADMIN", "PROJECT_HEAD", "MANAGER", "SUPERVISOR"];
+const EDITABLE_ROLE_KEYS = ["ADMIN", "PROJECT_HEAD", "MANAGER", "SUPERVISOR", "INSTALLER"];
 
 const STATUS_CONFIG = {
   active: {
@@ -822,29 +851,31 @@ const MobileUserCard = ({
   statusLoading,
 }) => {
   const [expanded, setExpanded] = useState(false);
-  const roleConfig = ROLE_CONFIG[user.role] || ROLE_CONFIG.TEAM;
+  const roleConfig = getRoleConfig(user.role);
   const statusConfig = STATUS_CONFIG[user.status] || STATUS_CONFIG.active;
   const initials = `${user.firstName?.[0] || ""}${user.lastName?.[0] || ""}`;
+  const normalizedCurrentRole = normalizeRole(currentUserRole);
+  const normalizedUserRole = normalizeRole(user.role);
 
   const canEdit = useMemo(() => {
     if (!currentUserRole || !user) return false;
     if (user._id === currentUserId) return true;
-    if (currentUserRole === "Admin_panel") return true;
-    const userRoleLevel = ROLE_CONFIG[user.role]?.level || 999;
-    const currentRoleLevel = ROLE_CONFIG[currentUserRole]?.level || 0;
-    if (currentUserRole === "ZSM") return userRoleLevel > currentRoleLevel;
-    if (currentUserRole === "Incharge") return user.role === "TEAM";
+    if (isAdminRole(currentUserRole)) return true;
+    const userRoleLevel = getRoleConfig(user.role)?.level || 999;
+    const currentRoleLevel = getRoleConfig(currentUserRole)?.level || 0;
+    if (normalizedCurrentRole === "PROJECT_HEAD" || normalizedCurrentRole === "MANAGER") return userRoleLevel > currentRoleLevel;
+    if (normalizedCurrentRole === "SUPERVISOR") return isInstallerRole(user.role);
     return false;
-  }, [currentUserRole, user, currentUserId]);
+  }, [currentUserRole, user, currentUserId, normalizedCurrentRole]);
 
   const canToggleStatus = canEdit;
   const canAssign =
-    user.role === "TEAM" &&
-    ["ZSM", "Incharge", "Admin_panel"].includes(currentUserRole) &&
+    normalizedUserRole === "INSTALLER" &&
+    MANAGER_ROLE_KEYS.includes(normalizedCurrentRole) &&
     !user.supervisor;
-  const canViewPassword = currentUserRole === "Admin_panel";
+  const canViewPassword = isAdminRole(currentUserRole);
   const canDelete =
-    currentUserRole === "Admin_panel" && user.role !== "Admin_panel";
+    isAdminRole(currentUserRole) && !isAdminRole(user.role);
 
   return (
     <Paper
@@ -1193,7 +1224,7 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const validRoles = ["Admin_panel", "ZSM", "Incharge", "TEAM"];
+  const validRoles = EDITABLE_ROLE_KEYS;
 
   const getPasswordRequirementMessage = (password) => {
     if (!password) return "Use 1 capital letter, 1 number, and 1 special character";
@@ -1214,7 +1245,7 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
         lastName: user.lastName || "",
         email: user.email || "",
         phoneNumber: user.phoneNumber || "",
-        role: validRoles.includes(user.role) ? user.role : "",
+        role: validRoles.includes(normalizeRole(user.role)) ? normalizeRole(user.role) : "",
         status: user.status || "active",
         password: "",
         confirmPassword: "",
@@ -1225,10 +1256,11 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
   }, [user]);
 
   const getAvailableRoles = useMemo(() => {
-    const currentRoleLevel = ROLE_CONFIG[currentUserRole]?.level || 0;
-    return Object.entries(ROLE_CONFIG)
+    const currentRoleLevel = getRoleConfig(currentUserRole)?.level || 0;
+    return EDITABLE_ROLE_KEYS
+      .map((roleKey) => [roleKey, ROLE_CONFIG[roleKey]])
       .filter(([roleKey, config]) => {
-        if (currentUserRole === "Admin_panel") return true;
+        if (isAdminRole(currentUserRole)) return true;
         return config.level > currentRoleLevel;
       })
       .map(([value, config]) => ({
@@ -1242,19 +1274,19 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
 
   const canEditRole = useMemo(() => {
     if (!user || !currentUserRole) return false;
-    if (currentUserRole === "Admin_panel") return true;
+    if (isAdminRole(currentUserRole)) return true;
     if (user._id === currentUser?._id) return false;
-    const userRoleLevel = ROLE_CONFIG[user.role]?.level || 0;
-    const currentRoleLevel = ROLE_CONFIG[currentUserRole]?.level || 0;
+    const userRoleLevel = getRoleConfig(user.role)?.level || 0;
+    const currentRoleLevel = getRoleConfig(currentUserRole)?.level || 0;
     return userRoleLevel > currentRoleLevel;
   }, [user, currentUserRole, currentUser]);
 
   const canEditStatus = useMemo(() => {
     if (!user || !currentUserRole) return false;
-    if (currentUserRole === "Admin_panel") return true;
+    if (isAdminRole(currentUserRole)) return true;
     if (user._id === currentUser?._id) return true;
-    const userRoleLevel = ROLE_CONFIG[user.role]?.level || 0;
-    const currentRoleLevel = ROLE_CONFIG[currentUserRole]?.level || 0;
+    const userRoleLevel = getRoleConfig(user.role)?.level || 0;
+    const currentRoleLevel = getRoleConfig(currentUserRole)?.level || 0;
     return userRoleLevel > currentRoleLevel;
   }, [user, currentUserRole, currentUser]);
 
@@ -1297,7 +1329,7 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
       };
       if (canEditRole && validRoles.includes(formData.role)) updateData.role = formData.role;
       if (canEditStatus) updateData.status = formData.status;
-      if (currentUserRole === "Admin_panel" && formData.password) {
+      if (isAdminRole(currentUserRole) && formData.password) {
         updateData.password = formData.password;
       }
 
@@ -1338,7 +1370,7 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
-  const roleConfig = user ? ROLE_CONFIG[user.role] || ROLE_CONFIG.TEAM : null;
+  const roleConfig = user ? getRoleConfig(user.role) : null;
 
   const fieldSx = {
     "& .MuiOutlinedInput-root": {
@@ -1512,7 +1544,7 @@ const EditUserModal = ({ open, onClose, user, onSave, currentUserRole, currentUs
             </FormControl>
           )}
 
-          {currentUserRole === "Admin_panel" && (
+          {isAdminRole(currentUserRole) && (
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -1918,7 +1950,7 @@ const PasswordViewDialog = ({ open, onClose, user, fetchAPI }) => {
               </Box>
               <Box sx={{ ml: "auto" }}>
                 <Chip
-                  label={ROLE_CONFIG[user.role]?.label || user.role}
+                  label={getRoleConfig(user.role)?.label || user.role}
                   size="small"
                   sx={{
                     bgcolor: alpha(PRIMARY_COLOR, 0.1),
@@ -2062,7 +2094,7 @@ const DeleteUserDialog = ({ open, onClose, user, onConfirm }) => {
                   {user.email}
                 </Typography>
                 <Chip
-                  label={ROLE_CONFIG[user.role]?.label || user.role}
+                  label={getRoleConfig(user.role)?.label || user.role}
                   size="small"
                   sx={{
                     mt: 0.5,
@@ -2296,7 +2328,7 @@ const AssignManagerDialog = ({
                 <Stack spacing={1}>
                   {managers.map((manager) => {
                     const selected = selectedManager === manager._id;
-                    const rc = ROLE_CONFIG[manager.role] || ROLE_CONFIG.TEAM;
+                    const rc = getRoleConfig(manager.role);
                     return (
                       <Box
                         key={manager._id}
@@ -2369,7 +2401,7 @@ const AssignManagerDialog = ({
               )}
             </Box>
 
-            {userRole === "Incharge" && (
+            {userRole === "SUPERVISOR" && (
               <Box
                 sx={{
                   p: 2,
@@ -2385,7 +2417,7 @@ const AssignManagerDialog = ({
                   sx={{ color: "#00838f", fontSize: 18, flexShrink: 0, mt: 0.1 }}
                 />
                 <Typography variant="caption" color="#00838f">
-                  As an Incharge, you can only assign team members to yourself.
+                  As a Supervisor, you can only assign installers to yourself.
                 </Typography>
               </Box>
             )}
@@ -2493,30 +2525,30 @@ const UserManagement = () => {
   const containerRef = useRef(null);
 
   // Role-based permissions
-  const userRole = currentUser?.role || "";
-  const canAddUser = ["Admin_panel", "ZSM", "Incharge", "TEAM"].includes(userRole);
-  const canViewPassword = userRole === "Admin_panel";
-  const canDeleteUsers = userRole === "Admin_panel";
+  const userRole = normalizeRole(currentUser?.role);
+  const canAddUser = MANAGER_ROLE_KEYS.includes(userRole) || userRole === "INSTALLER";
+  const canViewPassword = isAdminRole(userRole);
+  const canDeleteUsers = isAdminRole(userRole);
 
   // Filter options based on role
   const roleOptions = useMemo(() => {
     const allRoles = [
       { value: "all", label: "All Roles", icon: <People /> },
-      ...Object.entries(ROLE_CONFIG).map(([value, config]) => ({
+      ...EDITABLE_ROLE_KEYS.map((value) => ({
         value,
-        label: config.label,
-        icon: config.icon,
+        label: ROLE_CONFIG[value].label,
+        icon: ROLE_CONFIG[value].icon,
       })),
     ];
-    if (userRole === "Incharge") {
+    if (userRole === "SUPERVISOR") {
       return allRoles.filter(
-        (role) => role.value === "all" || role.value === "TEAM"
+        (role) => role.value === "all" || role.value === "INSTALLER"
       );
     }
-    if (userRole === "ZSM") {
+    if (userRole === "PROJECT_HEAD" || userRole === "MANAGER") {
       return allRoles.filter(
         (role) =>
-          role.value === "all" || ["Incharge", "TEAM"].includes(role.value)
+          role.value === "all" || ["SUPERVISOR", "INSTALLER"].includes(role.value)
       );
     }
     return allRoles;
@@ -2553,14 +2585,14 @@ const UserManagement = () => {
       if (data.success) {
         let fetchedUsers = data.result?.users || [];
 
-        if (userRole === "Admin_panel") {
-          fetchedUsers = fetchedUsers.filter((u) => u.role !== "Admin_panel");
-        } else if (userRole === "ZSM") {
+        if (isAdminRole(userRole)) {
+          fetchedUsers = fetchedUsers.filter((u) => !isAdminRole(u.role));
+        } else if (userRole === "PROJECT_HEAD" || userRole === "MANAGER") {
           fetchedUsers = fetchedUsers.filter((u) =>
-            ["Incharge", "TEAM"].includes(u.role)
+            ["SUPERVISOR", "INSTALLER"].includes(normalizeRole(u.role))
           );
-        } else if (userRole === "Incharge") {
-          fetchedUsers = fetchedUsers.filter((u) => u.role === "TEAM");
+        } else if (userRole === "SUPERVISOR") {
+          fetchedUsers = fetchedUsers.filter((u) => isInstallerRole(u.role));
         }
 
         setUsers(fetchedUsers);
@@ -2584,7 +2616,7 @@ const UserManagement = () => {
     try {
       let allManagers = [];
 
-      if (userRole === "Incharge") {
+      if (userRole === "SUPERVISOR") {
         const params = new URLSearchParams({
           page: "1",
           limit: "100",
@@ -2593,15 +2625,12 @@ const UserManagement = () => {
         const data = await safeFetchAPI(`/user/getAllUsers?${params.toString()}`);
         if (data.success) allManagers = data.result?.users || [];
       } else {
-        const zsmParams = new URLSearchParams({ page: "1", limit: "100", role: "ZSM" });
-        const zsmData = await safeFetchAPI(`/user/getAllUsers?${zsmParams.toString()}`);
-        if (zsmData.success) allManagers = [...(zsmData.result?.users || [])];
-
-        if (userRole === "Admin_panel") {
-          const InchargeParams = new URLSearchParams({ page: "1", limit: "100", role: "Incharge" });
-          const InchargeData = await safeFetchAPI(`/user/getAllUsers?${InchargeParams.toString()}`);
-          if (InchargeData.success)
-            allManagers = [...allManagers, ...(InchargeData.result?.users || [])];
+        const params = new URLSearchParams({ page: "1", limit: "100" });
+        const data = await safeFetchAPI(`/user/getAllUsers?${params.toString()}`);
+        if (data.success) {
+          allManagers = (data.result?.users || []).filter((manager) =>
+            ["PROJECT_HEAD", "MANAGER", "SUPERVISOR", "ZSM", "Incharge"].includes(normalizeRole(manager.role))
+          );
         }
       }
 
@@ -2685,11 +2714,12 @@ const UserManagement = () => {
   const canEditUser = (user) => {
     if (!user || !currentUser) return false;
     if (user._id === currentUser._id) return true;
-    if (currentUser.role === "Admin_panel") return true;
-    const userRoleLevel = ROLE_CONFIG[user.role]?.level || 999;
-    const currentRoleLevel = ROLE_CONFIG[currentUser.role]?.level || 0;
-    if (currentUser.role === "ZSM") return userRoleLevel > currentRoleLevel;
-    if (currentUser.role === "Incharge") return user.role === "TEAM";
+    const currentRole = normalizeRole(currentUser.role);
+    if (isAdminRole(currentRole)) return true;
+    const userRoleLevel = getRoleConfig(user.role)?.level || 999;
+    const currentRoleLevel = getRoleConfig(currentRole)?.level || 0;
+    if (currentRole === "PROJECT_HEAD" || currentRole === "MANAGER") return userRoleLevel > currentRoleLevel;
+    if (currentRole === "SUPERVISOR") return isInstallerRole(user.role);
     return false;
   };
 
@@ -2731,7 +2761,7 @@ const UserManagement = () => {
       return;
     }
 
-    if (userToDelete.role === "Admin_panel") {
+    if (isAdminRole(userToDelete.role)) {
       toast.error("Admin Panel users cannot be deleted.", {
         title: "Action Not Allowed",
       });
@@ -2776,8 +2806,8 @@ const UserManagement = () => {
       return;
     }
 
-    if (userRole === "Incharge" && selectedManager !== currentUser?._id) {
-      toast.error("As an Incharge, you can only assign team members to yourself.", {
+    if (userRole === "SUPERVISOR" && selectedManager !== currentUser?._id) {
+      toast.error("As a Supervisor, you can only assign installers to yourself.", {
         title: "Assignment Restricted",
       });
       return;
@@ -2962,10 +2992,10 @@ const UserManagement = () => {
               variant="body2"
               sx={{ opacity: 0.9, fontSize: { xs: "0.75rem", sm: "0.875rem" } }}
             >
-              {userRole === "Incharge"
-                ? "Manage your team members"
-                : userRole === "ZSM"
-                ? "Manage Incharge and TEAM members in your zone"
+              {userRole === "SUPERVISOR"
+                ? "Manage your installers"
+                : userRole === "PROJECT_HEAD" || userRole === "MANAGER"
+                ? "Manage supervisors and installers"
                 : "Manage users in your head office only"}
             </Typography>
           </Box>
@@ -3300,15 +3330,15 @@ const UserManagement = () => {
                     {filteredUsers
                       .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                       .map((user) => {
-                        const roleConfig = ROLE_CONFIG[user.role] || ROLE_CONFIG.TEAM;
+                        const roleConfig = getRoleConfig(user.role);
                         const statusConfig = STATUS_CONFIG[user.status] || STATUS_CONFIG.active;
                         const canEdit = canEditUser(user);
                         const canAssign =
-                          user.role === "TEAM" &&
-                          ["ZSM", "Incharge", "Admin_panel"].includes(userRole) &&
+                          isInstallerRole(user.role) &&
+                          MANAGER_ROLE_KEYS.includes(userRole) &&
                           !user.supervisor;
                         const canView = canViewPassword;
-                        const canDelete = canDeleteUsers && user.role !== "Admin_panel";
+                        const canDelete = canDeleteUsers && !isAdminRole(user.role);
 
                         return (
                           <TableRow key={user._id} hover>

@@ -53,6 +53,11 @@ const PRIMARY_COLOR = "#3a5ac8";
 const SECONDARY_COLOR = "#2c489e";
 
 const ROLE_CONFIG = {
+  ADMIN: { label: "Admin / Super Admin", icon: <Security />, description: "Full system access and administration rights", color: "#3a5ac8", shortDesc: "Admin Access" },
+  PROJECT_HEAD: { label: "Project Head", icon: <Group />, description: "Project oversight and exception approval", color: "#3a5ac8", shortDesc: "Project Head" },
+  MANAGER: { label: "Manager (Backend / Ops)", icon: <Group />, description: "Manage operations and approvals", color: "#3a5ac8", shortDesc: "Operations Manager" },
+  SUPERVISOR: { label: "Supervisor", icon: <Group />, description: "Supervise installers and approve worksheets", color: "#3a5ac8", shortDesc: "Supervisor" },
+  INSTALLER: { label: "Installer", icon: <Person />, description: "Field work and daily worksheet entry", color: "#3a5ac8", shortDesc: "Field Installer" },
   Admin_panel: {
     label: "Admin Panel",
     icon: <Security />,
@@ -149,12 +154,12 @@ export default function AddUserPage() {
 
   // Determine available roles based on current user's role
   const getAvailableRoles = () => {
-    if (currentUser?.role === "Admin_panel") {
-      return ["Admin_panel", "ZSM", "Incharge", "TEAM"];
-    } else if (currentUser?.role === "ZSM") {
-      return ["Incharge", "TEAM"];
-    } else if (currentUser?.role === "Incharge") {
-      return ["TEAM"];
+    if (["ADMIN", "Admin_panel"].includes(currentUser?.role)) {
+      return ["ADMIN", "PROJECT_HEAD", "MANAGER", "SUPERVISOR", "INSTALLER"];
+    } else if (["PROJECT_HEAD", "MANAGER"].includes(currentUser?.role)) {
+      return ["SUPERVISOR", "INSTALLER"];
+    } else if (currentUser?.role === "SUPERVISOR") {
+      return ["INSTALLER"];
     }
     return [];
   };

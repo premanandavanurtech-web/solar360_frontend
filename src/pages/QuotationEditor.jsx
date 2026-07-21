@@ -605,6 +605,27 @@ export default function QuotationEditor({ initialMode = null }) {
     upsertQuotation(nextQuotation);
 
     if (latestLead?._id) {
+      try {
+        await fetchAPI(`/lead/${latestLead._id}/activity`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "Quotation",
+            title: isCreateMode ? "Quotation created" : "Quotation updated",
+            message: `${nextQuotation.quotationNumber || "Quotation"} saved for ${nextQuotation.leadName || "lead"}`,
+            status: nextQuotation.status || "draft",
+            quotationId: nextQuotation.id,
+            totalCost: nextQuotation.totalCost || nextQuotation.form?.totalCost || "",
+            actionDetails: {
+              quotationNumber: nextQuotation.quotationNumber,
+              systemSize: nextQuotation.systemSize || nextQuotation.form?.systemSize,
+              totalCost: nextQuotation.totalCost || nextQuotation.form?.totalCost,
+            },
+          }),
+        });
+      } catch (error) {
+        console.warn("Failed to sync quotation activity:", error);
+      }
       navigate(`/all-leads/${latestLead._id}`, {
         replace: true,
         state: {

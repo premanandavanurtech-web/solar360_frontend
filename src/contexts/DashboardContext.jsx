@@ -3,7 +3,23 @@ import React, { createContext, useState, useContext, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 
 const DashboardContext = createContext({});
-const normalizeRole = (role) => (role === "Head_office" ? "Admin_panel" : role);
+const normalizeRole = (role) => {
+  const value = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const map = {
+    head_office: "ADMIN",
+    admin_panel: "ADMIN",
+    admin: "ADMIN",
+    super_admin: "ADMIN",
+    zsm: "PROJECT_HEAD",
+    project_head: "PROJECT_HEAD",
+    manager: "MANAGER",
+    incharge: "SUPERVISOR",
+    supervisor: "SUPERVISOR",
+    team: "INSTALLER",
+    installer: "INSTALLER",
+  };
+  return map[value] || role;
+};
 
 export const useDashboard = () => useContext(DashboardContext);
 
@@ -33,16 +49,15 @@ export const DashboardProvider = ({ children }) => {
 
       // Determine API endpoint based on role
       switch (userRole) {
-        case "Admin_panel":
+        case "ADMIN":
+        case "PROJECT_HEAD":
+        case "MANAGER":
           endpoint = "/lead/HeadOfficeDashboard";
           break;
-        case "ZSM":
-          endpoint = "/lead/HeadOfficeDashboard";
-          break;
-        case "Incharge":
+        case "SUPERVISOR":
           endpoint = "/lead/InchargeDashboard";
           break;
-        case "TEAM":
+        case "INSTALLER":
           endpoint = "/lead/TeamDashboard";
           break;
         default:
@@ -95,10 +110,11 @@ export const DashboardProvider = ({ children }) => {
   /** 🔹 Get user role display name */
   const getRoleDisplayName = () => {
     switch (normalizeRole(user?.role)) {
-      case "Admin_panel": return "Admin Panel";
-      case "ZSM": return "Operation Lead";
-      case "Incharge": return "Incharge";
-      case "TEAM": return "Field Executive";
+      case "ADMIN": return "Admin";
+      case "PROJECT_HEAD": return "Project Head";
+      case "MANAGER": return "Manager";
+      case "SUPERVISOR": return "Supervisor";
+      case "INSTALLER": return "Installer";
       default: return "User";
     }
   };

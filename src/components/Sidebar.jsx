@@ -22,10 +22,6 @@ import {
 import {
   Dashboard,
   Groups,
-  PersonAdd,
-  AccountBalance,
-  Description,
-  ReceiptLong,
   TaskAlt,
   Warning,
   CloudUpload,
@@ -33,7 +29,6 @@ import {
   FilterAlt,
   Paid,
   AdminPanelSettings,
-  PendingActions,
   Insights,
   AccountTree,
   Notifications,
@@ -43,6 +38,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExpandMore,
+  CategoryOutlined,
   Inventory2Outlined,
   Menu as MenuIcon,
   Close as CloseIcon,
@@ -72,6 +68,26 @@ const ACTIVE_BG      = BLUE_GLOW;
 
 const SIDEBAR_BG = "#ffffff";
 
+const normalizeRole = (role) => {
+  const value = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const map = {
+    head_office: "ADMIN",
+    admin_panel: "ADMIN",
+    admin: "ADMIN",
+    super_admin: "ADMIN",
+    zsm: "PROJECT_HEAD",
+    project_head: "PROJECT_HEAD",
+    manager: "MANAGER",
+    incharge: "SUPERVISOR",
+    supervisor: "SUPERVISOR",
+    team: "INSTALLER",
+    installer: "INSTALLER",
+  };
+  return map[value] || role;
+};
+
+const TEAM_ATTENDANCE_ROLES = ["ADMIN", "PROJECT_HEAD", "MANAGER", "SUPERVISOR"];
+
 // ─── Width Constants ──────────────────────────────────────────────────────────
 const SIDEBAR_WIDTH    = 268;
 const COLLAPSED_WIDTH  = 68;
@@ -99,6 +115,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
   const effectiveCollapsed =
     !isMobile && (!open || (!isTablet && isCollapsed));
   const { user } = useAuth();
+  const userRole = normalizeRole(user?.role);
 
   // ── Menu items ─────────────────────────────────────────────────────────────
   const menuItems = useMemo(
@@ -108,20 +125,16 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
       { text: "All Leads",       icon: <FilterAlt />,         path: "/all-leads",              roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Projects",        icon: <TaskAlt />,           path: "/projects",               roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Total Visits",    icon: <Groups />,            path: "/total-visits",           roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
-      { text: "Registration",    icon: <PersonAdd />,         path: "/registration",           roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
-      { text: "Document",        icon: <Description />,       path: "/document-submission",    roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
-      { text: "Payment",         icon: <AccountBalance />,    path: "/bank-loan-apply",        roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
-      { text: "Loan Pending",    icon: <PendingActions />,    path: "/bank-at-pending",        roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
-      { text: "Disbursement",    icon: <ReceiptLong />,       path: "/disbursement",           roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
-      { text: "Installation",    icon: <TaskAlt />,           path: "/installation-completion",roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "3D Design",       icon: <ViewInAr />,          path: "/3d-design",              roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
+      { text: "Category",         icon: <CategoryOutlined />, path: "/inventory/category",      roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
+      { text: "Items",            icon: <Inventory2Outlined />,path: "/inventory/items",        roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
       { text: "Add Quotation",   icon: <RequestQuote />,      path: "/quotation/create",       roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "All Quotes",      icon: <RequestQuote />,      path: "/all-quotes",             roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Missed Leads",    icon: <Warning />,           path: "/missed-leads",           roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       {
-        text: ["Admin_panel","ZSM","Incharge"].includes(user?.role) ? "Team Attendance" : "My Attendance",
+        text: TEAM_ATTENDANCE_ROLES.includes(userRole) ? "Team Attendance" : "My Attendance",
         icon: <CalendarMonth />,
-        path: ["Admin_panel","ZSM","Incharge"].includes(user?.role) ? "/team-attendance" : "/attendance",
+        path: TEAM_ATTENDANCE_ROLES.includes(userRole) ? "/team-attendance" : "/attendance",
         roles: ["Admin_panel","ZSM","Incharge","TEAM"],
       },
       { text: "Leave Management",   icon: <EventBusy />,          path: "/leave-management",   roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
@@ -130,21 +143,22 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
       {
         text: "Location Visit",
         icon: <LocationOnIcon />,
-        path: user?.role === "TEAM" ? "/add-visit" : "/team-tracking",
+        path: userRole === "INSTALLER" ? "/add-visit" : "/team-tracking",
         roles: ["Admin_panel","ZSM","Incharge","TEAM"],
       },
       { text: "Expense",       icon: <Paid />,              path: "/expense",          roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Import Leads",  icon: <CloudUpload />,       path: "/import-leads",     roles: ["Admin_panel","ZSM"] },
       { text: "Users",         icon: <AdminPanelSettings />,path: "/user-management",  roles: ["Admin_panel","ZSM","Incharge"] },
       { text: "Reports",       icon: <Insights />,          path: "/reports",          roles: ["Admin_panel","ZSM","Incharge"] },
+      { text: "Installer Work Register", icon: <Insights />, path: "/work-register", roles: ["ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","Admin_panel","ZSM","Incharge"] },
       { text: "Notifications", icon: <Notifications />,     path: "/notifications",    roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
     ],
-    [user?.role],
+    [userRole],
   );
 
   const filteredItems = useMemo(
-    () => menuItems.filter((item) => item.roles.includes(user?.role)),
-    [menuItems, user?.role],
+    () => menuItems.filter((item) => item.roles.map(normalizeRole).includes(userRole)),
+    [menuItems, userRole],
   );
 
   const menuSections = useMemo(
@@ -152,10 +166,11 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
       [
         { text: "Overview",    icon: <Dashboard />,    itemNames: ["Dashboard","Lead Funnel"] },
         { text: "Leads",       icon: <FilterAlt />,    itemNames: ["All Leads","Missed Leads","Import Leads"] },
-        { text: "Projects",    icon: <TaskAlt />,      itemNames: ["Projects","Total Visits","Registration","Document","Payment","Loan Pending","Installation","Disbursement","3D Design","Add Quotation","All Quotes"] },
+        { text: "Projects",    icon: <TaskAlt />,      itemNames: ["Projects","Total Visits","3D Design","Add Quotation","All Quotes"] },
+        { text: "Inventory",   icon: <Inventory2Outlined />, itemNames: ["Category","Items"] },
         { text: "Attendance",  icon: <CalendarMonth />,itemNames: ["Team Attendance","My Attendance","Leave Management","Leave Types","Holiday Management"] },
         { text: "Team",        icon: <Groups />,       itemNames: ["Location Visit","Expense","Users"] },
-        { text: "Insights",    icon: <Insights />,     itemNames: ["Reports","Notifications"] },
+        { text: "Insights",    icon: <Insights />,     itemNames: ["Reports","Installer Work Register","Notifications"] },
       ]
         .map((section) => ({
           ...section,
@@ -171,12 +186,12 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
 
   useEffect(() => {
     const active = menuSections.find((s) =>
-      s.items.some((item) => item.path === location.pathname),
+      s.items.some((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)),
     );
     if (active) setOpenSection(active.text);
   }, [location.pathname, menuSections]);
 
-  const isActive  = (path) => location.pathname === path;
+  const isActive  = (path) => location.pathname === path || location.pathname.startsWith(`${path}/`);
 
   const handleNavigate = useCallback(
     (path) => {

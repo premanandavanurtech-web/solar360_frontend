@@ -6,8 +6,12 @@ import {
   Chip,
   Dialog,
   DialogContent,
+  FormControl,
   IconButton,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Typography,
 } from "@mui/material";
@@ -25,6 +29,8 @@ import { format, isValid, parseISO } from "date-fns";
 const PRIMARY = "#31384d";
 const ACCENT = "#5160d6";
 const ACCENT_LIGHT = "#a6d9cc";
+
+const PROJECT_TYPES = ["Residential", "Commercial", "ULA 1kw On-grid", "Maintenance", "Others"];
 
 const resolveLeadName = (lead) =>
   lead?.customerName ||
@@ -210,11 +216,13 @@ export default function ConvertProjectDialog({
   onContinueWithQuotation,
 }) {
   const [selectedQuotationId, setSelectedQuotationId] = useState("");
+  const [projectType, setProjectType] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setSelectedQuotationId(quotations[0]?.id || "");
-  }, [open, quotations]);
+    setProjectType(PROJECT_TYPES.includes(lead?.projectType) ? lead.projectType : "");
+  }, [open, quotations, lead?.projectType]);
 
   const selectedQuotation = useMemo(
     () => quotations.find((quotation) => quotation.id === selectedQuotationId) || null,
@@ -269,6 +277,32 @@ export default function ConvertProjectDialog({
           </Stack>
 
           <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+            <Box sx={{ mb: 3, maxWidth: 520 }}>
+              <Typography sx={{ fontSize: { xs: "1.35rem", md: "1.65rem" }, fontWeight: 800, color: "#1f2937", mb: 0.8 }}>
+                Select Project Type
+              </Typography>
+              <Typography sx={{ color: "#64748b", fontSize: "0.98rem", mb: 1.8 }}>
+                Choose the project category before converting this lead into a project.
+              </Typography>
+              <FormControl fullWidth required>
+                <InputLabel id="convert-project-type-label">Project Type</InputLabel>
+                <Select
+                  labelId="convert-project-type-label"
+                  value={projectType}
+                  label="Project Type"
+                  onChange={(event) => setProjectType(event.target.value)}
+                  disabled={submitting}
+                  sx={{ borderRadius: 2 }}
+                >
+                  {PROJECT_TYPES.map((type) => (
+                    <MenuItem key={type} value={type}>
+                      {type}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+
             {quotations.length ? (
               <>
                 <Box sx={{ mb: 3 }}>
@@ -317,8 +351,8 @@ export default function ConvertProjectDialog({
                   <Button
                     variant="outlined"
                     startIcon={<ChevronRight />}
-                    onClick={onCreateWithoutQuotation}
-                    disabled={submitting}
+                    onClick={() => onCreateWithoutQuotation({ projectType })}
+                    disabled={submitting || !projectType}
                     sx={{
                       minHeight: 50,
                       px: 2.8,
@@ -334,8 +368,8 @@ export default function ConvertProjectDialog({
                   <Button
                     variant="contained"
                     endIcon={<ArrowForward />}
-                    onClick={() => onContinueWithQuotation(selectedQuotation)}
-                    disabled={!selectedQuotation || submitting}
+                    onClick={() => onContinueWithQuotation(selectedQuotation, { projectType })}
+                    disabled={!selectedQuotation || submitting || !projectType}
                     sx={{
                       minHeight: 50,
                       px: 3,
@@ -412,8 +446,8 @@ export default function ConvertProjectDialog({
                     </Button>
                     <Button
                       variant="contained"
-                      onClick={onCreateWithoutQuotation}
-                      disabled={submitting}
+                      onClick={() => onCreateWithoutQuotation({ projectType })}
+                      disabled={submitting || !projectType}
                       sx={{
                         minHeight: 56,
                         minWidth: 270,

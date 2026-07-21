@@ -146,26 +146,6 @@ export default function CreateLeadPage() {
   // Get user role
   const userRole = getUserRole();
 
-  // Check if user has permission to create leads
-  useEffect(() => {
-    const checkPermission = () => {
-      const allowedRoles = ["Admin_panel", "Incharge", "ZSM", "TEAM"];
-      
-      if (!userRole || !allowedRoles.includes(userRole)) {
-        setAccessDenied(true);
-        showSnackbar(
-          "Access Denied. You don't have permission to create leads.",
-          "error"
-        );
-        
-        setTimeout(() => {
-          navigate("/dashboard");
-        }, 3000);
-      }
-    };
-    
-    checkPermission();
-  }, [userRole, navigate]);
 
   // Show snackbar helper
   const showSnackbar = useCallback((message, severity = "success", duration = 4000) => {

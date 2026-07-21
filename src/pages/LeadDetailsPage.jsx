@@ -109,6 +109,8 @@ const DETAIL_TABS = [
   { key: "reminders",  label: "Reminders"   },
 ];
 
+const PROJECT_TYPES = ["Residential", "Commercial", "ULA 1kw On-grid", "Maintenance", "Others"];
+
 const PIPELINE_STAGES = [
   { key: "New",                    label: "New"                    },
   { key: "Visit",                  label: "Visit"                  },
@@ -1425,7 +1427,7 @@ export default function LeadDetailsPage() {
   const { leadId }       = useParams();
   const navigate         = useNavigate();
   const location         = useLocation();
-  const { fetchAPI, user } = useAuth();
+  const { fetchAPI, safeFetchAPI, user } = useAuth();
 
   const [loading,      setLoading]     = useState(true);
   const [error,        setError]       = useState("");
@@ -1442,6 +1444,10 @@ export default function LeadDetailsPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [projectDialogSubmitting, setProjectDialogSubmitting] = useState(false);
+  const [projectTypeDialogOpen, setProjectTypeDialogOpen] = useState(false);
+  const [revertProjectDialogOpen, setRevertProjectDialogOpen] = useState(false);
+  const [projectRecoverySaving, setProjectRecoverySaving] = useState(false);
+  const [recoveryProjectType, setRecoveryProjectType] = useState("");
   const [pendingUploadSlot, setPendingUploadSlot] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [previewImageZoomed, setPreviewImageZoomed] = useState(false);
@@ -1459,7 +1465,7 @@ export default function LeadDetailsPage() {
   const [quotationEntries, setQuotationEntries] = useState([]);
   const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
   const [snackbar,     setSnackbar]    = useState({ open: false, message: "", severity: "info" });
-  const userRole = localStorage.getItem("userRole") || "TEAM";
+  const userRole = user?.role || "TEAM";
   const fileInputRef = React.useRef(null);
   const lastSyncedLeadIdRef = React.useRef("");
 
@@ -1600,20 +1606,29 @@ export default function LeadDetailsPage() {
   const fallbackSiteVisitUsers = useMemo(() => {
     const seen = new Set();
     const options = [];
+    const normalizeRole = (role) => {
+      const normalized = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+      if (["team", "team_member", "field_executive"].includes(normalized)) return "TEAM";
+      if (normalized === "admin_panel" || normalized === "head_office") return "Admin_panel";
+      if (normalized === "zsm" || normalized === "operation_lead") return "ZSM";
+      if (normalized === "incharge") return "Incharge";
+      return role || "";
+    };
+    const isTeamMember = (person, fallbackRole = "") => normalizeRole(person?.role || fallbackRole) === "TEAM";
     const pushOption = (person, fallbackRole = "") => {
-      if (!person?._id || seen.has(person._id)) return;
+      if (!person?._id || seen.has(person._id) || !isTeamMember(person, fallbackRole)) return;
       seen.add(person._id);
       options.push({
         _id: person._id,
         firstName: person.firstName || "",
         lastName: person.lastName || "",
         email: person.email || "",
-        role: person.role || fallbackRole || "",
+        role: "TEAM",
       });
     };
 
     pushOption(assignedPerson, leadDetails?.assignedUser ? "TEAM" : leadDetails?.assignedManager ? "Incharge" : "");
-    if (user?.role === "TEAM" || user?.role === "Incharge" || userRole === "TEAM" || userRole === "Incharge") {
+    if (normalizeRole(user?.role || userRole) === "TEAM") {
       pushOption(user, user?.role || userRole);
     }
     return options;
@@ -1813,6 +1828,10 @@ export default function LeadDetailsPage() {
   const showInfo = useCallback((msg) => {
     setSnackbar({ open: true, message: msg, severity: "info" });
   }, []);
+  const isTeamRole = useCallback((role) => {
+    const normalized = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    return ["team", "team_member", "field_executive"].includes(normalized);
+  }, []);
   const resetActivityForm = useCallback(() => {
     setActivityForm({
       message: "",
@@ -1846,14 +1865,25 @@ export default function LeadDetailsPage() {
       if (Array.isArray(response.result)) return response.result;
       return response.result ? [response.result] : [];
     };
-    const normalizeUsers = (usersData, expectedRole) => usersData
-      .filter((entry) => entry?._id && entry.status === "active" && (!expectedRole || entry.role === expectedRole))
+    const normalizeRole = (role) => {
+      const normalized = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+      if (["team", "team_member", "field_executive"].includes(normalized)) return "TEAM";
+      if (normalized === "admin_panel" || normalized === "head_office") return "Admin_panel";
+      if (normalized === "zsm" || normalized === "operation_lead") return "ZSM";
+      if (normalized === "incharge") return "Incharge";
+      return role || "";
+    };
+    const normalizeUsers = (usersData, expectedRole = "TEAM") => usersData
+      .filter((entry) => {
+        const status = String(entry?.status || "active").toLowerCase();
+        return entry?._id && status === "active" && normalizeRole(entry.role) === expectedRole;
+      })
       .map((entry) => ({
         _id: entry._id,
         firstName: entry.firstName || "",
         lastName: entry.lastName || "",
         email: entry.email || "",
-        role: entry.role || expectedRole || "",
+        role: expectedRole,
       }));
 
     if (!(userRole === "Admin_panel" || userRole === "ZSM" || userRole === "Incharge")) {
@@ -1868,13 +1898,12 @@ export default function LeadDetailsPage() {
 
       if (userRole === "Admin_panel" || userRole === "ZSM") {
         responses.push(
-          { items: normalizeUsers(extractUsers(await fetchAPI("/user/managerList?page=1&limit=100")), "Incharge") },
-          { items: normalizeUsers(extractUsers(await fetchAPI("/user/getManagerUnderUserList?page=1&limit=100")), "TEAM") },
+          { items: normalizeUsers(extractUsers(await safeFetchAPI("/user/getAllUsers?page=1&limit=100")), "TEAM") },
         );
       } else if (userRole === "Incharge" && user?._id) {
         responses.push({
           items: normalizeUsers(
-            extractUsers(await fetchAPI(`/user/getManagerUnderUserList?page=1&limit=100&supervisorId=${user._id}`)),
+            extractUsers(await safeFetchAPI("/user/getAllUsers?page=1&limit=100")),
             "TEAM",
           ),
         });
@@ -1890,7 +1919,7 @@ export default function LeadDetailsPage() {
 
       setSiteVisitUsers(deduped);
       if (!deduped.length) {
-        setSiteVisitUserError("No active users available for scheduling site visits.");
+        setSiteVisitUserError("No active team members available for scheduling site visits.");
       }
     } catch (error) {
       setSiteVisitUsers(fallbackSiteVisitUsers);
@@ -1898,7 +1927,7 @@ export default function LeadDetailsPage() {
     } finally {
       setSiteVisitUsersLoading(false);
     }
-  }, [fallbackSiteVisitUsers, fetchAPI, user?._id, userRole]);
+  }, [fallbackSiteVisitUsers, safeFetchAPI, user?._id, userRole]);
   const openSiteVisitDialog = useCallback(() => {
     setActivityMode("Site visit");
     setActivityForm((prev) => ({
@@ -1908,11 +1937,11 @@ export default function LeadDetailsPage() {
       location: [leadDetails?.address, leadDetails?.city].filter(Boolean).join(", "),
     }));
     setSiteVisitAssigneeId(
-      assignedPerson?._id || ((user?.role === "TEAM" || user?.role === "Incharge") ? user?._id : "") || "",
+      (isTeamRole(assignedPerson?.role) ? assignedPerson?._id : "") || (isTeamRole(user?.role) ? user?._id : "") || "",
     );
     setSiteVisitUserError("");
     setSiteVisitDialogOpen(true);
-  }, [assignedPerson?._id, leadDetails?.address, leadDetails?.city, user?._id, user?.role]);
+  }, [assignedPerson?._id, assignedPerson?.role, isTeamRole, leadDetails?.address, leadDetails?.city, user?._id, user?.role]);
   const closeSiteVisitDialog = useCallback(() => {
     setSiteVisitDialogOpen(false);
     setActivityMode("Comment");
@@ -2010,11 +2039,6 @@ export default function LeadDetailsPage() {
       payload.visitNotes = message || siteVisitSummary;
     }
 
-    const nextActivities = mergeLeadActivities([customEntry, ...customActivities]);
-    if (activityMode === "Comment" || activityMode === "Log call" || activityMode === "Email") {
-      payload.leadActivities = nextActivities;
-    }
-
     try {
       setSavingActivity(true);
       if (
@@ -2035,17 +2059,41 @@ export default function LeadDetailsPage() {
           body: JSON.stringify(assignPayload),
         });
       }
-      const response = await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (activityMode === "Comment" || activityMode === "Log call" || activityMode === "Email") {
-        setCustomActivities(nextActivities);
-        if (response?.result) setLeadDetails(response.result);
+      let response;
+      if (activityMode === "Comment" || activityMode === "Log call" || activityMode === "Email" || activityMode === "Reminder") {
+        response = await fetchAPI(`/lead/${leadDetails._id}/activity`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: activityMode,
+            title: customEntry.type,
+            message: customEntry.message,
+            subject,
+            location: customEntry.location,
+            scheduledAt: customEntry.scheduledAt,
+            status: activityMode === "Reminder" ? "pending" : leadDetails.status,
+          }),
+        });
       } else {
-        await persistCustomActivities((prev) => [customEntry, ...prev]);
+        response = await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        await fetchAPI(`/lead/${leadDetails._id}/activity`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "Site visit",
+            title: "Site visit scheduled",
+            message: customEntry.message,
+            location: customEntry.location,
+            scheduledAt: customEntry.scheduledAt,
+            status: "Scheduled",
+          }),
+        });
       }
+      if (response?.result) setLeadDetails(response.result);
       resetActivityForm();
       setReminderDialogOpen(false);
       setSiteVisitDialogOpen(false);
@@ -2109,7 +2157,7 @@ export default function LeadDetailsPage() {
     setProjectDialogOpen(false);
   }, [projectDialogSubmitting]);
 
-  const completeProjectConversion = useCallback(async (quotation = null) => {
+  const completeProjectConversion = useCallback(async (quotation = null, projectDetails = {}) => {
     if (!leadDetails?._id) {
       setSnackbar({ open: true, message: "Lead is not ready.", severity: "error" });
       return;
@@ -2125,7 +2173,7 @@ export default function LeadDetailsPage() {
       setProjectDialogSubmitting(true);
       const response = await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
         method: "PUT",
-        body: JSON.stringify({ isProject: true }),
+        body: JSON.stringify({ isProject: true, projectType: projectDetails.projectType }),
       });
       if (response?.success === false) {
         throw new Error(response.message || "Failed to convert lead to project.");
@@ -2182,6 +2230,66 @@ export default function LeadDetailsPage() {
 
     setProjectDialogOpen(true);
   }, [hasSiteSurvey, leadDetails, navigate]);
+
+  const openProjectTypeDialog = useCallback(() => {
+    setRecoveryProjectType(PROJECT_TYPES.includes(leadDetails?.projectType) ? leadDetails.projectType : "");
+    setProjectTypeDialogOpen(true);
+  }, [leadDetails?.projectType]);
+
+  const handleSaveProjectType = useCallback(async () => {
+    if (!leadDetails?._id || !recoveryProjectType) return;
+    try {
+      setProjectRecoverySaving(true);
+      const response = await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
+        method: "PUT",
+        body: JSON.stringify({ projectType: recoveryProjectType }),
+      });
+      if (response?.success === false) {
+        throw new Error(response.message || "Failed to update project type.");
+      }
+      const updatedLead = response?.result || response?.lead || response || {};
+      setLeadDetails((prev) => ({ ...(prev || {}), ...updatedLead, projectType: recoveryProjectType }));
+      setProjectTypeDialogOpen(false);
+      setSnackbar({ open: true, message: "Project type updated.", severity: "success" });
+      await fetchLeadDetails();
+    } catch (error) {
+      setSnackbar({ open: true, message: error.message || "Failed to update project type.", severity: "error" });
+    } finally {
+      setProjectRecoverySaving(false);
+    }
+  }, [fetchAPI, fetchLeadDetails, leadDetails?._id, recoveryProjectType]);
+
+  const handleRevertProjectToLead = useCallback(async () => {
+    if (!leadDetails?._id) return;
+    try {
+      setProjectRecoverySaving(true);
+      const response = await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
+        method: "PUT",
+        body: JSON.stringify({ isProject: false }),
+      });
+      if (response?.success === false) {
+        throw new Error(response.message || "Failed to move project back to lead.");
+      }
+      const updatedLead = response?.result || response?.lead || response || {};
+      setLeadDetails((prev) => ({
+        ...(prev || {}),
+        ...updatedLead,
+        isProject: false,
+        projectType: undefined,
+        projectCode: undefined,
+        projectConvertedAt: null,
+        projectConvertedBy: null,
+      }));
+      setRevertProjectDialogOpen(false);
+      setSnackbar({ open: true, message: "Project moved back to lead.", severity: "success" });
+      await fetchLeadDetails();
+    } catch (error) {
+      setSnackbar({ open: true, message: error.message || "Failed to move project back to lead.", severity: "error" });
+    } finally {
+      setProjectRecoverySaving(false);
+    }
+  }, [fetchAPI, fetchLeadDetails, leadDetails?._id]);
+
   const handleProjectAction = useCallback((actionKey) => {
     closeProjectMenu();
 
@@ -2219,8 +2327,18 @@ export default function LeadDetailsPage() {
 
     if (actionKey === "work-order") {
       setWorkOrderDialogOpen(true);
+      return;
     }
-  }, [closeProjectMenu, leadDetails, navigate, showInfo, siteSurveyRecord]);
+
+    if (actionKey === "change-project-type") {
+      openProjectTypeDialog();
+      return;
+    }
+
+    if (actionKey === "move-back-to-lead") {
+      setRevertProjectDialogOpen(true);
+    }
+  }, [closeProjectMenu, leadDetails, navigate, openProjectTypeDialog, showInfo, siteSurveyRecord]);
   const handleEditSaved = useCallback(async (updatedLead) => {
     setLeadDetails((prev) => ({ ...(prev || {}), ...(updatedLead || {}) }));
     setSnackbar({ open: true, message: "Lead updated successfully", severity: "success" });
@@ -2557,6 +2675,15 @@ export default function LeadDetailsPage() {
           if (entry.type === "Email") return { label: "EMAIL", color: "#7c3aed", bg: alpha("#7c3aed", 0.08), dot: "#a78bfa" };
           return { label: "COMMENT", color: "#2563eb", bg: alpha("#2563eb", 0.08), dot: "#60a5fa" };
         }
+        const activityType = String(entry.activityType || "").toLowerCase();
+        if (activityType === "comment") return { label: "COMMENT", color: "#2563eb", bg: alpha("#2563eb", 0.08), dot: "#60a5fa" };
+        if (activityType === "call") return { label: "CALL", color: "#e11d48", bg: alpha("#e11d48", 0.08), dot: "#fb7185" };
+        if (activityType === "email") return { label: "EMAIL", color: "#7c3aed", bg: alpha("#7c3aed", 0.08), dot: "#a78bfa" };
+        if (activityType === "document") return { label: "DOCUMENT", color: "#0891b2", bg: alpha("#0891b2", 0.08), dot: "#22d3ee" };
+        if (activityType === "site_visit") return { label: "SITE VISIT", color: "#0f9f6e", bg: alpha("#0f9f6e", 0.08), dot: "#4ade80" };
+        if (activityType === "site_survey") return { label: "SITE SURVEY", color: "#0f9f6e", bg: alpha("#0f9f6e", 0.08), dot: "#4ade80" };
+        if (activityType === "quotation") return { label: "QUOTE", color: "#7c3aed", bg: alpha("#7c3aed", 0.08), dot: "#a78bfa" };
+        if (activityType === "reminder") return { label: "REMINDER", color: "#d97706", bg: alpha("#d97706", 0.08), dot: "#fbbf24" };
         const timelineText = `${entry.stage || ""} ${entry.notes || ""}`.toLowerCase();
         if (timelineText.includes("assign")) return { label: "ASSIGNED", color: "#0f9f6e", bg: alpha("#0f9f6e", 0.08), dot: "#4ade80" };
         if (timelineText.includes("schedule") || timelineText.includes("reminder") || timelineText.includes("follow up")) {
@@ -2564,16 +2691,6 @@ export default function LeadDetailsPage() {
         }
         return { label: "UPDATE", color: "#64748b", bg: alpha("#64748b", 0.08), dot: "#94a3b8" };
       };
-      const isWorkActivityTimelineEntry = (entry) => {
-        const timelineText = `${entry.stage || ""} ${entry.notes || ""}`.toLowerCase();
-        return (
-          timelineText.includes("assign") ||
-          timelineText.includes("schedule") ||
-          timelineText.includes("reminder") ||
-          timelineText.includes("follow up")
-        );
-      };
-
       const allEntries = [
         ...customActivities.map((entry) => ({
           ...entry,
@@ -2586,7 +2703,6 @@ export default function LeadDetailsPage() {
           updatedRole: entry.actorRole,
         })),
         ...timelineEntries
-          .filter(isWorkActivityTimelineEntry)
           .map((entry) => ({ ...entry, source: "timeline" })),
       ].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 
@@ -2620,7 +2736,7 @@ export default function LeadDetailsPage() {
             return `${entry.location}${entry.message ? ` · ${entry.message}` : ""}`;
           }
         }
-        return entry.notes || `${entry.stage} updated`;
+        return entry.notes || entry.title || `${entry.stage} updated`;
       };
 
       const groupedEntries = allEntries.reduce((acc, entry) => {
@@ -2795,6 +2911,28 @@ export default function LeadDetailsPage() {
                               Scheduled for {formatDateTime(entry.scheduledAt)}
                             </Typography>
                           ) : null}
+                          {entry.status ? (
+                            <Typography variant="caption" sx={{ color: TOKEN.textMuted, display: "block", mt: 0.45 }}>
+                              Status: {entry.status}
+                            </Typography>
+                          ) : null}
+                          {Array.isArray(entry.attachments) && entry.attachments.length > 0 ? (
+                            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+                              {entry.attachments.map((attachment, attachmentIndex) => (
+                                <Button
+                                  key={`${entry._id || entry.updatedAt}-attachment-${attachmentIndex}`}
+                                  size="small"
+                                  href={attachment.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  variant="outlined"
+                                  sx={{ textTransform: "none", borderRadius: 2 }}
+                                >
+                                  {attachment.name || `Attachment ${attachmentIndex + 1}`}
+                                </Button>
+                              ))}
+                            </Stack>
+                          ) : null}
                         </Box>
                       </Box>
                     );
@@ -2814,9 +2952,19 @@ export default function LeadDetailsPage() {
     }
 
     if (tab === "comments") {
-      const commentEntries = customActivities
-        .filter((entry) => entry.type === "Comment" || isCallActivity(entry))
-        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      const timelineCommentEntries = timelineEntries
+        .filter((entry) => ["comment", "call"].includes(String(entry.activityType || "").toLowerCase()))
+        .map((entry) => ({
+          id: entry._id || entry.updatedAt,
+          type: entry.activityType === "call" ? "Log call" : "Comment",
+          message: entry.notes,
+          actorName: `${entry.updatedBy?.firstName || "System"} ${entry.updatedBy?.lastName || ""}`.trim(),
+          createdAt: entry.updatedAt,
+        }));
+      const commentEntries = [
+        ...customActivities.filter((entry) => entry.type === "Comment" || isCallActivity(entry)),
+        ...timelineCommentEntries,
+      ].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       const latestEntry = commentEntries[0] || null;
 
       return (
@@ -4402,6 +4550,12 @@ export default function LeadDetailsPage() {
         {[ 
           { key: "site-survey", label: "Site Survey Form", icon: <DescriptionOutlined fontSize="small" />, color: "#4ea4ef" },
           { key: "3d-design", label: "3D Design", icon: <GridViewOutlined fontSize="small" />, color: "#5a6cb2" },
+          ...(leadDetails?.isProject
+            ? [
+                { key: "change-project-type", label: "Change Project Type", icon: <Edit fontSize="small" />, color: "#f59f00", dividerBefore: true },
+                { key: "move-back-to-lead", label: "Move Back to Lead", icon: <Workspaces fontSize="small" />, color: "#ef4444" },
+              ]
+            : []),
           { key: "vendor-agreement", label: "Vendor Agreement", icon: <ContentCopy fontSize="small" />, color: "#59c7b4", dividerBefore: true },
           { key: "work-order", label: "Work Order", icon: <AssignmentTurnedIn fontSize="small" />, color: "#59c7b4" },
         ].map((item) => (
@@ -4437,6 +4591,63 @@ export default function LeadDetailsPage() {
         onChange={handleDirectFileSelection}
       />
 
+      <Dialog
+        open={projectTypeDialogOpen}
+        onClose={projectRecoverySaving ? undefined : () => setProjectTypeDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: TOKEN.radius } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Change Project Type</DialogTitle>
+        <Box sx={{ px: 3, pb: 1 }}>
+          <TextField
+            select
+            fullWidth
+            label="Project Type"
+            value={recoveryProjectType}
+            onChange={(event) => setRecoveryProjectType(event.target.value)}
+            disabled={projectRecoverySaving}
+          >
+            {PROJECT_TYPES.map((type) => (
+              <MenuItem key={type} value={type}>
+                {type}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Box>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setProjectTypeDialogOpen(false)} disabled={projectRecoverySaving}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleSaveProjectType} disabled={projectRecoverySaving || !recoveryProjectType}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={revertProjectDialogOpen}
+        onClose={projectRecoverySaving ? undefined : () => setRevertProjectDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: TOKEN.radius } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Move Project Back to Lead?</DialogTitle>
+        <Box sx={{ px: 3, pb: 1 }}>
+          <Typography sx={{ color: TOKEN.textSub, lineHeight: 1.7 }}>
+            This will remove the project conversion from this record and return it to the lead flow. Use this only when the lead was converted by mistake.
+          </Typography>
+        </Box>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setRevertProjectDialogOpen(false)} disabled={projectRecoverySaving}>
+            Cancel
+          </Button>
+          <Button color="error" variant="contained" onClick={handleRevertProjectToLead} disabled={projectRecoverySaving}>
+            Move Back to Lead
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <ConvertProjectDialog
         open={projectDialogOpen}
         lead={leadDetails}
@@ -4444,8 +4655,8 @@ export default function LeadDetailsPage() {
         submitting={projectDialogSubmitting}
         onClose={closeProjectDialog}
         onCreateQuotation={openQuotationBuilder}
-        onCreateWithoutQuotation={() => completeProjectConversion()}
-        onContinueWithQuotation={completeProjectConversion}
+        onCreateWithoutQuotation={(projectDetails) => completeProjectConversion(null, projectDetails)}
+        onContinueWithQuotation={(quotation, projectDetails) => completeProjectConversion(quotation, projectDetails)}
       />
 
       <WorkOrderDialog

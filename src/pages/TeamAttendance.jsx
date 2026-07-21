@@ -8,7 +8,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Box, Typography, Avatar, Chip, TextField, InputAdornment, Button,
   IconButton, Tooltip, LinearProgress, Divider, CircularProgress,
-  Dialog, DialogContent, DialogTitle, DialogActions,
+  Dialog, DialogContent, DialogTitle, DialogActions, MenuItem,
 } from "@mui/material";
 import {
   Search, Refresh, AccessTime, CheckCircle, Cancel, LocationOn, Person,
@@ -35,6 +35,45 @@ const formatTime = (iso) =>
         hour: "2-digit", minute: "2-digit", hour12: true,
       })
     : null;
+
+const normalizeClockValue = (value) => {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return "";
+  const hours = Math.min(Math.max(Number(match[1]), 0), 23);
+  const minutes = Math.min(Math.max(Number(match[2]), 0), 59);
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+};
+
+const formatClockToAmPm = (value) => {
+  const normalized = normalizeClockValue(value);
+  if (!normalized) return "";
+  const [hours, minutes] = normalized.split(":").map(Number);
+  const suffix = hours >= 12 ? "PM" : "AM";
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${String(minutes).padStart(2, "0")} ${suffix}`;
+};
+
+const getClockParts = (value) => {
+  const normalized = normalizeClockValue(value) || "09:00";
+  const [hours, minutes] = normalized.split(":").map(Number);
+  return {
+    hour: String(hours % 12 || 12),
+    minute: String(minutes).padStart(2, "0"),
+    period: hours >= 12 ? "PM" : "AM",
+  };
+};
+
+const clockPartsToValue = ({ hour, minute, period }) => {
+  const displayHour = Math.min(Math.max(Number(hour) || 12, 1), 12);
+  const minutes = Math.min(Math.max(Number(minute) || 0, 0), 59);
+  const hours = period === "PM"
+    ? displayHour === 12 ? 12 : displayHour + 12
+    : displayHour === 12 ? 0 : displayHour;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+};
+
+const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1));
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
 
 const formatHours = (hours) => {
   if (!hours) return null;
@@ -186,6 +225,72 @@ const StatusBadge = ({ member }) => {
         "& .MuiChip-icon": { color: "#dc2626" },
       }}
     />
+  );
+};
+
+const TimeAmPmField = ({ label, value, onChange }) => {
+  const parts = getClockParts(value);
+  const updatePart = (key, nextValue) => {
+    onChange(clockPartsToValue({ ...parts, [key]: nextValue }));
+  };
+  const selectSx = {
+    "& .MuiOutlinedInput-root": {
+      borderRadius: "12px",
+      bgcolor: "#f8fafc",
+    },
+    "& .MuiSelect-select": {
+      fontWeight: 700,
+      color: "#0f172a",
+    },
+  };
+
+  return (
+    <Box>
+      <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: "#475569", mb: 0.8 }}>
+        {label}
+      </Typography>
+      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 1 }}>
+        <TextField
+          select
+          label="Hour"
+          size="small"
+          value={parts.hour}
+          onChange={(e) => updatePart("hour", e.target.value)}
+          sx={selectSx}
+        >
+          {HOUR_OPTIONS.map((hour) => (
+            <MenuItem key={hour} value={hour}>{hour}</MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          label="Minute"
+          size="small"
+          value={parts.minute}
+          onChange={(e) => updatePart("minute", e.target.value)}
+          SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 260 } } } }}
+          sx={selectSx}
+        >
+          {MINUTE_OPTIONS.map((minute) => (
+            <MenuItem key={minute} value={minute}>{minute}</MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          label="AM/PM"
+          size="small"
+          value={parts.period}
+          onChange={(e) => updatePart("period", e.target.value)}
+          sx={selectSx}
+        >
+          <MenuItem value="AM">AM</MenuItem>
+          <MenuItem value="PM">PM</MenuItem>
+        </TextField>
+      </Box>
+      <Typography sx={{ fontSize: "0.72rem", color: "#64748b", mt: 0.7 }}>
+        Selected: {formatClockToAmPm(value)}
+      </Typography>
+    </Box>
   );
 };
 
@@ -607,6 +712,8 @@ const TeamAttendance = () => {
       setAttendanceSettings((prev) => ({
         ...prev,
         ...result,
+        officePunchInTime: normalizeClockValue(result.officePunchInTime || prev.officePunchInTime),
+        officePunchOutTime: normalizeClockValue(result.officePunchOutTime || prev.officePunchOutTime),
         blockEarlyPunchIn: true,
         autoPunchOutEnabled: true,
       }));
@@ -813,6 +920,8 @@ const TeamAttendance = () => {
         `${API}/api/v1/attendance/settings`,
         {
           ...attendanceSettings,
+          officePunchInTime: normalizeClockValue(attendanceSettings.officePunchInTime),
+          officePunchOutTime: normalizeClockValue(attendanceSettings.officePunchOutTime),
           blockEarlyPunchIn: true,
           autoPunchOutEnabled: true,
         },
@@ -822,6 +931,8 @@ const TeamAttendance = () => {
       setAttendanceSettings((prev) => ({
         ...prev,
         ...result,
+        officePunchInTime: normalizeClockValue(result.officePunchInTime || prev.officePunchInTime),
+        officePunchOutTime: normalizeClockValue(result.officePunchOutTime || prev.officePunchOutTime),
         blockEarlyPunchIn: true,
         autoPunchOutEnabled: true,
       }));
@@ -1237,29 +1348,25 @@ const TeamAttendance = () => {
         </DialogTitle>
         <DialogContent sx={{ pt: "8px !important" }}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <TextField
+            <TimeAmPmField
               label="Office Punch In Time"
-              type="time"
-              value={attendanceSettings.officePunchInTime}
-              onChange={(e) =>
+              value={normalizeClockValue(attendanceSettings.officePunchInTime)}
+              onChange={(value) =>
                 setAttendanceSettings((prev) => ({
                   ...prev,
-                  officePunchInTime: e.target.value,
+                  officePunchInTime: value,
                 }))
               }
-              InputLabelProps={{ shrink: true }}
             />
-            <TextField
+            <TimeAmPmField
               label="Office Punch Out Time"
-              type="time"
-              value={attendanceSettings.officePunchOutTime}
-              onChange={(e) =>
+              value={normalizeClockValue(attendanceSettings.officePunchOutTime)}
+              onChange={(value) =>
                 setAttendanceSettings((prev) => ({
                   ...prev,
-                  officePunchOutTime: e.target.value,
+                  officePunchOutTime: value,
                 }))
               }
-              InputLabelProps={{ shrink: true }}
             />
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
               <Chip
