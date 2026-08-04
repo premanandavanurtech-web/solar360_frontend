@@ -1399,41 +1399,7 @@ export default function LiveTrackingMap({
         </div>
       )}
 
-      {mapAuthError && (
-        <div style={{
-          position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center", background: "#0f172a",
-          color: "#ffffff", borderRadius: "inherit", zIndex: 2000, padding: "24px", textAlign: "center",
-        }}>
-          <div style={{ background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.4)", borderRadius: "16px", padding: "20px", maxWidth: "520px" }}>
-            <div style={{ fontSize: "17px", fontWeight: 800, color: "#f87171", marginBottom: "8px" }}>
-              ⚠️ Google Maps Billing Not Enabled
-            </div>
-            <div style={{ fontSize: "13px", color: "#cbd5e1", lineHeight: 1.5, marginBottom: "12px" }}>
-              Google Maps API returned <code>BillingNotEnabledMapError</code> for key <code>{GKEY.slice(0, 10)}...</code>.
-            </div>
-            <div style={{ fontSize: "12px", color: "#94a3b8", textAlign: "left", background: "rgba(0,0,0,0.3)", padding: "12px", borderRadius: "8px", marginBottom: "16px" }}>
-              <b>How to fix:</b>
-              <ol style={{ margin: "6px 0 0 0", paddingLeft: "18px" }}>
-                <li>Go to <b>Google Cloud Console</b> & enable Billing for your project</li>
-                <li>Or update <code>GKEY</code> in <code>src/utils/Livetrackmap.jsx</code> with an active key</li>
-              </ol>
-            </div>
-            <a
-              href="https://console.cloud.google.com/billing"
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                display: "inline-block", background: "#2563eb", color: "#ffffff",
-                fontWeight: 700, fontSize: "13px", padding: "8px 20px", borderRadius: "10px",
-                textDecoration: "none", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.4)"
-              }}
-            >
-              Open Google Cloud Billing Console
-            </a>
-          </div>
-        </div>
-      )}
+
 
       {/* Floating Status Pill */}
       <div style={{

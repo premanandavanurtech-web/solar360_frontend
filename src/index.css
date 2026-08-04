@@ -93,3 +93,18 @@
     padding: 24px;
   }
 }
+
+/* Google Maps overlay cleanup */
+.gm-err-container,
+.gm-err-content,
+.dismissButton,
+div[style*="z-index: 1000001"],
+div[style*="background-color: rgba(0, 0, 0, 0.5)"] {
+  display: none !important;
+}
+
+.gm-style div[style*="opacity: 0.5"],
+.gm-style img[style*="opacity: 0.5"] {
+  opacity: 1 !important;
+  filter: none !important;
+}

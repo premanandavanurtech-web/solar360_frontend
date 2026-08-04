@@ -7,6 +7,7 @@ import {
   CardContent,
   Checkbox,
   Chip,
+  CircularProgress,
   Collapse,
   Dialog,
   DialogActions,
@@ -39,10 +40,12 @@ import {
   Check,
   Close,
   DeleteOutline,
+  DownloadOutlined,
   EditOutlined,
   ErrorOutline,
   ExpandLess,
   ExpandMore,
+  FileUploadOutlined,
   FilterAltOutlined,
   GridView,
   ImageOutlined,
@@ -154,13 +157,23 @@ const getInputSx = (isDark = false) => ({
   },
 });
 
-const StatCard = ({ icon, label, value, color = BLUE, isDark = false }) => (
-  <Card sx={{
-    borderRadius: 3,
-    boxShadow: 'none',
-    border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e2e8f0',
-    backgroundColor: isDark ? '#0b101c' : '#fff',
-  }}>
+const StatCard = ({ icon, label, value, color = BLUE, isDark = false, onClick, active = false }) => (
+  <Card
+    onClick={onClick}
+    sx={{
+      borderRadius: 3,
+      boxShadow: active ? `0 0 0 2px ${color}` : 'none',
+      border: active ? `2px solid ${color}` : isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e2e8f0',
+      backgroundColor: isDark ? '#0b101c' : '#fff',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'all 0.2s ease-in-out',
+      '&:hover': onClick ? {
+        transform: 'translateY(-3px)',
+        boxShadow: isDark ? '0 8px 24px rgba(0,0,0,0.5)' : '0 8px 24px rgba(15,23,42,0.08)',
+        borderColor: color,
+      } : {},
+    }}
+  >
     <CardContent sx={{ p: 2.5 }}>
       <Stack direction="row" alignItems="center" spacing={2.5}>
         <Box sx={{
@@ -362,6 +375,172 @@ function InventoryERP() {
   const [modalCategoryForm, setModalCategoryForm] = useState(emptyCategory);
   const [modalSaving, setModalSaving] = useState(false);
 
+  const [viewMode, setViewMode] = useState("list");
+  const [filterMenuAnchor, setFilterMenuAnchor] = useState(null);
+
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [parsedImportItems, setParsedImportItems] = useState([]);
+  const [importingBulk, setImportingBulk] = useState(false);
+  const [importFileName, setImportFileName] = useState("");
+
+  const handleDownloadSampleFormat = () => {
+    const headers = "Item Name,SKU,Category,Subcategory,Selling Price (Rs),Cost Price (Rs),HSN/SAC Code,Unit,Opening Stock,Low Stock Alert\n";
+    const sampleRows = [
+      "Waaree 540W Mono PERC Panel,WAA-540W-MONO,Waaree Solar Panels,Mono PERC,14500,12000,8541,pcs,100,10",
+      "Havells 5kW 3-Phase Inverter,HAV-5KW-3PH,Havells Solar Inverters,On-Grid String,42000,35000,8504,pcs,50,5",
+      "Polycab 4sqmm DC Solar Cable,POL-4MM-DC,Cables & Wire,DC Cable,65,45,8544,meter,1000,100",
+    ].join("\n");
+    const blob = new Blob([headers + sampleRows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "inventory_items_sample_format.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Downloaded sample format CSV");
+  };
+
+  const parseCSVText = (text) => {
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, "").toLowerCase());
+    const parsedItems = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+      if (cols.length < 1 || !cols[0]) continue;
+
+      const getVal = (possibleNames) => {
+        const idx = headers.findIndex((h) => possibleNames.some((p) => h.includes(p)));
+        return idx !== -1 ? cols[idx] : "";
+      };
+
+      const itemName = getVal(["item name", "item", "name", "title"]) || cols[0];
+      let sku = getVal(["sku", "code"]) || cols[1] || "";
+      if (!sku.trim()) {
+        sku = `SKU-${Date.now().toString().slice(-6)}-${i}`;
+      }
+      const category = getVal(["category", "cat"]) || cols[2] || "General";
+      const subcategory = getVal(["subcategory", "sub category", "sub"]) || cols[3] || "";
+      const sellingPrice = Number(getVal(["selling price", "price", "selling"]) || cols[4] || 0);
+      const purchaseCost = Number(getVal(["cost price", "cost", "purchase"]) || cols[5] || 0);
+      const hsnSacCode = getVal(["hsn", "sac"]) || cols[6] || "";
+      const unit = getVal(["unit"]) || cols[7] || "pcs";
+      const openingStock = Number(getVal(["opening stock", "stock", "qty"]) || cols[8] || 0);
+      const reorderLevel = Number(getVal(["low stock", "alert", "reorder"]) || cols[9] || 10);
+
+      parsedItems.push({
+        itemName,
+        sku,
+        category,
+        subcategory,
+        pricing: { sellingPrice, purchaseCost, taxPercent: 0 },
+        hsnSacCode,
+        unit,
+        openingStock,
+        reorderLevel,
+      });
+    }
+    return parsedItems;
+  };
+
+  const handleCsvFileSelected = (file) => {
+    if (!file) return;
+    setImportFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target.result;
+      const parsed = parseCSVText(content);
+      if (!parsed.length) {
+        showToast("No valid items found in CSV file", "error");
+      } else {
+        setParsedImportItems(parsed);
+        showToast(`Parsed ${parsed.length} items from CSV`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImportBulkItems = async () => {
+    if (!parsedImportItems.length) {
+      showToast("No items to import", "error");
+      return;
+    }
+    setImportingBulk(true);
+    let successCount = 0;
+
+    const isValidObjectId = (id) => typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
+    let validWarehouseId = warehouses.find((w) => isValidObjectId(w?._id))?._id || "";
+
+    try {
+      for (const [idx, item] of parsedImportItems.entries()) {
+        try {
+          const finalSku = item.sku?.trim() || `SKU-${Date.now().toString().slice(-5)}-${idx + 1}`;
+          const hasValidWarehouse = isValidObjectId(item.openingWarehouse) || isValidObjectId(validWarehouseId);
+          const targetWarehouse = isValidObjectId(item.openingWarehouse) ? item.openingWarehouse : (validWarehouseId || undefined);
+
+          const formData = new FormData();
+          formData.append("itemName", item.itemName);
+          formData.append("sku", finalSku);
+          formData.append("category", item.category || "General");
+          if (item.subcategory) formData.append("subcategory", item.subcategory);
+          if (item.hsnSacCode) formData.append("hsnSacCode", item.hsnSacCode);
+          formData.append("unit", item.unit || "pcs");
+          formData.append("pricing", JSON.stringify(item.pricing || { sellingPrice: 0, purchaseCost: 0, taxPercent: 0 }));
+          formData.append("reorderLevel", item.reorderLevel || 10);
+
+          if (hasValidWarehouse && targetWarehouse) {
+            formData.append("openingStock", item.openingStock || 0);
+            formData.append("openingWarehouse", targetWarehouse);
+          }
+
+          await axiosInstance.post("/inventory/items", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          successCount++;
+        } catch (err) {
+          try {
+            const finalSku = item.sku?.trim() || `SKU-${Date.now().toString().slice(-5)}-${idx + 1}`;
+            const hasValidWarehouse = isValidObjectId(item.openingWarehouse) || isValidObjectId(validWarehouseId);
+            const targetWarehouse = isValidObjectId(item.openingWarehouse) ? item.openingWarehouse : (validWarehouseId || undefined);
+
+            const jsonPayload = {
+              itemName: item.itemName,
+              sku: finalSku,
+              category: item.category || "General",
+              subcategory: item.subcategory || "",
+              hsnSacCode: item.hsnSacCode || "",
+              unit: item.unit || "pcs",
+              pricing: item.pricing || { sellingPrice: 0, purchaseCost: 0, taxPercent: 0 },
+              reorderLevel: item.reorderLevel || 10,
+            };
+
+            if (hasValidWarehouse && targetWarehouse) {
+              jsonPayload.openingStock = item.openingStock || 0;
+              jsonPayload.openingWarehouse = targetWarehouse;
+            }
+
+            await axiosInstance.post("/inventory/items", jsonPayload);
+            successCount++;
+          } catch (jsonErr) {
+            console.error("Bulk item import failed:", item.itemName, jsonErr?.response?.data || jsonErr?.message);
+          }
+        }
+      }
+      await fetchItems();
+      showToast(`Successfully imported ${successCount} inventory items!`);
+      setImportModalOpen(false);
+      setParsedImportItems([]);
+      setImportFileName("");
+    } catch (err) {
+      showToast("Failed to complete bulk import", "error");
+    } finally {
+      setImportingBulk(false);
+    }
+  };
+
   const [openSection, setOpenSection] = useState("details");
 
   const toggleSection = (sectionId) => {
@@ -466,29 +645,11 @@ function InventoryERP() {
     }
   }, []);
 
-  const fetchWarehouses = useCallback(async () => {
-    try {
-      const response = await axiosInstance.get("/warehouses");
-      setWarehouses(getResult(response, []));
-    } catch (error) {
-      // non-fatal
-    }
-  }, []);
-
-  const fetchVendors = useCallback(async () => {
-    try {
-      const response = await axiosInstance.get("/vendors");
-      setVendors(getResult(response, []));
-    } catch (error) {
-      // non-fatal
-    }
-  }, []);
-
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchCategories(), fetchItems(), fetchSummary(), fetchWarehouses(), fetchVendors()]);
+    await Promise.all([fetchCategories(), fetchItems()]);
     setLoading(false);
-  }, [fetchCategories, fetchItems, fetchSummary, fetchWarehouses, fetchVendors]);
+  }, [fetchCategories, fetchItems]);
 
   useEffect(() => {
     fetchAll();
@@ -669,8 +830,16 @@ function InventoryERP() {
   };
 
   const saveItem = async () => {
-    if (!itemForm.itemName.trim() || !itemForm.sku.trim() || !itemForm.category) {
-      showToast("Item name, SKU, and category are required", "error");
+    if (!itemForm.itemName.trim()) {
+      showToast("Item Name is required", "error");
+      return;
+    }
+    if (!itemForm.sku.trim()) {
+      showToast("SKU Code is required", "error");
+      return;
+    }
+    if (!itemForm.category) {
+      showToast("Item Category is required", "error");
       return;
     }
     if (Number(itemForm.openingStock) > 0 && !itemForm.openingWarehouse) {
@@ -727,6 +896,35 @@ function InventoryERP() {
       showToast(error?.response?.data?.message || "Failed to delete item", "error");
     }
   };
+
+  const realSummaryStats = useMemo(() => {
+    const totalCount = pagination.total || items.length;
+    let totalVal = 0;
+    let lowCount = 0;
+    let outCount = 0;
+
+    items.forEach((item) => {
+      const stock = getAvailableStock(item);
+      const price = Number(item.pricing?.sellingPrice || 0);
+
+      if (stock > 0 && price > 0) {
+        totalVal += stock * price;
+      }
+
+      if (stock <= 0) {
+        outCount++;
+      } else if (stock <= Number(item.reorderLevel || 10)) {
+        lowCount++;
+      }
+    });
+
+    return {
+      totalItems: totalCount,
+      totalValue: totalVal,
+      lowStock: lowCount,
+      outOfStock: outCount,
+    };
+  }, [items, pagination.total]);
 
   const visibleItems = useMemo(() => {
     if (itemFilter === "low") {
@@ -865,6 +1063,181 @@ function InventoryERP() {
         </Button>
         <Button startIcon={<Check />} variant="contained" onClick={handleSaveModalSubcategory} disabled={modalSubSaving} sx={{ bgcolor: INDIGO, fontWeight: 900, px: 2.5 }}>
           {modalSubSaving ? "Saving..." : "Add Subcategory"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
+  const importModalNode = (
+    <Dialog
+      open={importModalOpen}
+      onClose={() => {
+        if (!importingBulk) {
+          setImportModalOpen(false);
+          setParsedImportItems([]);
+          setImportFileName("");
+        }
+      }}
+      maxWidth="md"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          bgcolor: isDark ? "#0b101c" : "#ffffff",
+          color: isDark ? "#f8fafc" : "#0f172a",
+          backgroundImage: "none",
+          border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e5e7eb",
+        },
+      }}
+    >
+      <DialogTitle sx={{ m: 0, p: 2.5, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Box sx={{ width: 38, height: 38, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: alpha(INDIGO, isDark ? 0.2 : 0.08), color: isDark ? "#60a5fa" : INDIGO }}>
+            <FileUploadOutlined fontSize="small" />
+          </Box>
+          <Box>
+            <Typography variant="h6" fontWeight={900}>
+              Import Bulk Inventory Items
+            </Typography>
+            <Typography variant="caption" color={isDark ? "#94a3b8" : MUTED}>
+              Upload a CSV file to import multiple inventory items
+            </Typography>
+          </Box>
+        </Stack>
+        <IconButton
+          onClick={() => {
+            if (!importingBulk) setImportModalOpen(false);
+          }}
+          size="small"
+          sx={{ color: isDark ? "#94a3b8" : "inherit" }}
+        >
+          <Close />
+        </IconButton>
+      </DialogTitle>
+      <Divider sx={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }} />
+      <DialogContent sx={{ p: 3 }}>
+        <Stack spacing={2.5}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              borderRadius: 2.5,
+              bgcolor: isDark ? "rgba(30, 41, 59, 0.6)" : "#f8fafc",
+              border: `1px dashed ${isDark ? "rgba(255,255,255,0.18)" : "#cbd5e1"}`,
+              textAlign: "center",
+            }}
+          >
+            <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : "#1e293b"} sx={{ mb: 0.5 }}>
+              Need the CSV Template Format?
+            </Typography>
+            <Typography variant="body2" color={isDark ? "#94a3b8" : MUTED} sx={{ mb: 1.5 }}>
+              Download our sample CSV template pre-configured with required columns (Item Name, SKU, Category, Subcategory, Price, Stock).
+            </Typography>
+            <Button
+              startIcon={<DownloadOutlined />}
+              variant="outlined"
+              onClick={handleDownloadSampleFormat}
+              sx={{ borderColor: isDark ? "#60a5fa" : BLUE, color: isDark ? "#60a5fa" : BLUE, fontWeight: 800, textTransform: "none" }}
+            >
+              Download Sample CSV Format
+            </Button>
+          </Paper>
+
+          <Box
+            sx={{
+              border: `2px dashed ${isDark ? "#3b82f6" : INDIGO}`,
+              borderRadius: 3,
+              p: 3.5,
+              textAlign: "center",
+              bgcolor: isDark ? "rgba(59, 130, 246, 0.04)" : alpha(INDIGO, 0.02),
+            }}
+          >
+            <FileUploadOutlined sx={{ fontSize: 42, color: isDark ? "#60a5fa" : INDIGO, mb: 1 }} />
+            <Typography fontWeight={900} variant="subtitle1" color={isDark ? "#f8fafc" : "#0f172a"}>
+              {importFileName ? `Selected: ${importFileName}` : "Upload CSV File"}
+            </Typography>
+            <Typography variant="caption" color={isDark ? "#94a3b8" : MUTED} display="block" sx={{ my: 1 }}>
+              Select a .csv file formatted with your product inventory columns
+            </Typography>
+            <Button
+              component="label"
+              variant="contained"
+              sx={{ bgcolor: INDIGO, borderRadius: 2, fontWeight: 900, mt: 1 }}
+            >
+              Browse CSV File
+              <input
+                hidden
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    handleCsvFileSelected(e.target.files[0]);
+                  }
+                }}
+              />
+            </Button>
+          </Box>
+
+          {parsedImportItems.length > 0 && (
+            <Box>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+                <Typography fontWeight={900} variant="subtitle2" color={isDark ? "#f8fafc" : "#0f172a"}>
+                  Parsed Items Preview ({parsedImportItems.length})
+                </Typography>
+                <Chip size="small" label={`${parsedImportItems.length} items ready`} color="success" sx={{ fontWeight: 800 }} />
+              </Stack>
+              <TableContainer component={Paper} elevation={0} sx={{ maxHeight: 220, border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e2e8f0" }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Item Name</TableCell>
+                      <TableCell>SKU</TableCell>
+                      <TableCell>Category</TableCell>
+                      <TableCell>Subcategory</TableCell>
+                      <TableCell>Price</TableCell>
+                      <TableCell>Stock</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {parsedImportItems.slice(0, 15).map((row, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell><Typography variant="body2" fontWeight={800}>{row.itemName}</Typography></TableCell>
+                        <TableCell>{row.sku || "-"}</TableCell>
+                        <TableCell>{row.category}</TableCell>
+                        <TableCell>{row.subcategory || "-"}</TableCell>
+                        <TableCell>₹{(row.pricing?.sellingPrice || 0).toLocaleString("en-IN")}</TableCell>
+                        <TableCell>{row.openingStock || 0} pcs</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              {parsedImportItems.length > 15 && (
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                  + showing 15 of {parsedImportItems.length} parsed items
+                </Typography>
+              )}
+            </Box>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5, pt: 1 }}>
+        <Button
+          variant="outlined"
+          onClick={() => setImportModalOpen(false)}
+          disabled={importingBulk}
+          sx={{ borderColor: isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : "#000", fontWeight: 800 }}
+        >
+          Cancel
+        </Button>
+        <Button
+          startIcon={importingBulk ? <CircularProgress size={18} color="inherit" /> : <Check />}
+          variant="contained"
+          onClick={handleImportBulkItems}
+          disabled={importingBulk || !parsedImportItems.length}
+          sx={{ bgcolor: INDIGO, fontWeight: 900, px: 3 }}
+        >
+          {importingBulk ? "Importing..." : `Import ${parsedImportItems.length || 0} Items`}
         </Button>
       </DialogActions>
     </Dialog>
@@ -1287,15 +1660,6 @@ function InventoryERP() {
                       <Field isDark={isDark} label="Opening Stock" placeholder="e.g. 100" type="number" value={itemForm.openingStock || ""} onChange={(value) => updateItem("openingStock", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Field isDark={isDark} select label="Opening Warehouse" value={itemForm.openingWarehouse || ""} onChange={(value) => updateItem("openingWarehouse", value)} disabled={!warehouses.length}>
-                        {warehouses.map((warehouse) => (
-                          <MenuItem key={warehouse._id} value={warehouse._id}>
-                            {warehouse.name} {warehouse.code ? `(${warehouse.code})` : ""}
-                          </MenuItem>
-                        ))}
-                      </Field>
-                    </Grid>
-                    <Grid item xs={12} md={6}>
                       <Field isDark={isDark} label="Low Stock Alert" placeholder="e.g. 10" type="number" value={itemForm.reorderLevel} onChange={(value) => updateItem("reorderLevel", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
@@ -1432,31 +1796,6 @@ function InventoryERP() {
                         <Field isDark={isDark} label=" " type="number" value={itemForm.discount || 0} onChange={(value) => updateItem("discount", value)} />
                       </Grid>
                     </Grid>
-                  </Stack>
-                </SectionCard>
-
-                <SectionCard isDark={isDark} icon={<UploadFileOutlined />} title="Purchase info" color="#f97316" isOpen={openSection === "purchase"} onToggle={() => toggleSection("purchase")}>
-                  <Stack spacing={2}>
-                    <Field
-                      isDark={isDark}
-                      select
-                      label="Preferred Vendor"
-                      value={itemForm.purchaseInfo.vendor || ""}
-                      onChange={(value) => {
-                        const vendor = vendors.find((entry) => entry._id === value);
-                        updateItem("purchaseInfo.vendor", value);
-                        updateItem("purchaseInfo.vendorName", vendor?.name || "");
-                      }}
-                      disabled={!vendors.length}
-                    >
-                      {vendors.map((vendor) => (
-                        <MenuItem key={vendor._id} value={vendor._id}>
-                          {vendor.name}
-                        </MenuItem>
-                      ))}
-                    </Field>
-                    <Field isDark={isDark} label="Sales Description" placeholder="Used on sales invoices..." multiline minRows={3} value={itemForm.salesDescription || ""} onChange={(value) => updateItem("salesDescription", value)} />
-                    <Field isDark={isDark} label="Purchase Description" placeholder="Used on purchase orders..." multiline minRows={3} value={itemForm.purchaseDescription || ""} onChange={(value) => updateItem("purchaseDescription", value)} />
                   </Stack>
                 </SectionCard>
               </Stack>
@@ -1640,7 +1979,23 @@ function InventoryERP() {
                 <Typography color={isDark ? "#94a3b8" : MUTED}>Manage your product inventory and track stock levels</Typography>
               </Box>
             </Stack>
-            <Stack direction="row" spacing={1} justifyContent="flex-end">
+            <Stack direction="row" spacing={1} justifyContent="flex-end" flexWrap="wrap">
+              <Button
+                startIcon={<DownloadOutlined />}
+                variant="outlined"
+                onClick={handleDownloadSampleFormat}
+                sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.15)" : "#cbd5e1", color: isDark ? "#f8fafc" : "#1e293b", fontWeight: 800 }}
+              >
+                Download Format
+              </Button>
+              <Button
+                startIcon={<FileUploadOutlined />}
+                variant="outlined"
+                onClick={() => setImportModalOpen(true)}
+                sx={{ borderColor: isDark ? "rgba(59, 130, 246, 0.5)" : alpha(BLUE, 0.5), color: isDark ? "#60a5fa" : BLUE, fontWeight: 800 }}
+              >
+                Import Data
+              </Button>
               <Button startIcon={<Refresh />} variant="outlined" onClick={fetchAll} sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : "#000", fontWeight: 800 }}>Refresh</Button>
               <Button
                 startIcon={<Add />}
@@ -1657,10 +2012,49 @@ function InventoryERP() {
           </Stack>
 
           <Grid container spacing={2}>
-            <Grid item xs={12} md={3}><StatCard isDark={isDark} icon={<Inventory2 />} label="Total Items" value={summary.totalItems || items.length} /></Grid>
-            <Grid item xs={12} md={3}><StatCard isDark={isDark} icon={<TrendingUp />} label="Total Value" value={formatCurrency(summary.inventoryValue)} color={SUCCESS} /></Grid>
-            <Grid item xs={12} md={3}><StatCard isDark={isDark} icon={<ErrorOutline />} label="Low Stock" value={summary.lowStock || 0} color={WARNING} /></Grid>
-            <Grid item xs={12} md={3}><StatCard isDark={isDark} icon={<ErrorOutline />} label="Out of Stock" value={summary.outOfStock || 0} color={DANGER} /></Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <StatCard
+                isDark={isDark}
+                icon={<Inventory2 />}
+                label="Total Items"
+                value={realSummaryStats.totalItems}
+                active={!itemFilter}
+                onClick={() => setItemFilter("")}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <StatCard
+                isDark={isDark}
+                icon={<TrendingUp />}
+                label="Total Value"
+                value={formatCurrency(realSummaryStats.totalValue)}
+                color={SUCCESS}
+                active={!itemFilter}
+                onClick={() => setItemFilter("")}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <StatCard
+                isDark={isDark}
+                icon={<ErrorOutline />}
+                label="Low Stock"
+                value={realSummaryStats.lowStock}
+                color={WARNING}
+                active={itemFilter === "low"}
+                onClick={() => setItemFilter(itemFilter === "low" ? "" : "low")}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <StatCard
+                isDark={isDark}
+                icon={<ErrorOutline />}
+                label="Out of Stock"
+                value={realSummaryStats.outOfStock}
+                color={DANGER}
+                active={itemFilter === "out"}
+                onClick={() => setItemFilter(itemFilter === "out" ? "" : "out")}
+              />
+            </Grid>
           </Grid>
 
           <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems="center">
@@ -1676,68 +2070,236 @@ function InventoryERP() {
               sx={getInputSx(isDark)}
             />
             <Stack direction="row" spacing={1}>
-              <IconButton sx={{ border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #e5e7eb", bgcolor: INDIGO, color: "#fff", borderRadius: 2 }}><ListAlt /></IconButton>
-              <IconButton sx={{ border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #e5e7eb", color: isDark ? "#cbd5e1" : "inherit", borderRadius: 2 }}><GridView /></IconButton>
-              <Button startIcon={<FilterAltOutlined />} variant="outlined" sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : "#000", fontWeight: 900 }}>Filters</Button>
+              <IconButton
+                onClick={() => setViewMode("list")}
+                sx={{
+                  border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #e5e7eb",
+                  bgcolor: viewMode === "list" ? INDIGO : "transparent",
+                  color: viewMode === "list" ? "#fff" : isDark ? "#cbd5e1" : "inherit",
+                  borderRadius: 2,
+                }}
+              >
+                <ListAlt />
+              </IconButton>
+              <IconButton
+                onClick={() => setViewMode("grid")}
+                sx={{
+                  border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #e5e7eb",
+                  bgcolor: viewMode === "grid" ? INDIGO : "transparent",
+                  color: viewMode === "grid" ? "#fff" : isDark ? "#cbd5e1" : "inherit",
+                  borderRadius: 2,
+                }}
+              >
+                <GridView />
+              </IconButton>
+              <Button
+                startIcon={<FilterAltOutlined />}
+                variant={itemFilter ? "contained" : "outlined"}
+                onClick={(event) => setFilterMenuAnchor(event.currentTarget)}
+                sx={{
+                  borderColor: itemFilter ? undefined : isDark ? "rgba(255, 255, 255, 0.15)" : "#e5e7eb",
+                  bgcolor: itemFilter ? INDIGO : undefined,
+                  color: itemFilter ? "#fff" : isDark ? "#f8fafc" : "#000",
+                  fontWeight: 900,
+                }}
+              >
+                Filters {itemFilter ? `(${itemFilter})` : ""}
+              </Button>
+              <Menu
+                anchorEl={filterMenuAnchor}
+                open={Boolean(filterMenuAnchor)}
+                onClose={() => setFilterMenuAnchor(null)}
+                PaperProps={{
+                  sx: {
+                    mt: 1,
+                    minWidth: 200,
+                    borderRadius: 2,
+                    bgcolor: isDark ? "#121929" : "#fff",
+                    color: isDark ? "#f8fafc" : "inherit",
+                    border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e5e7eb",
+                  },
+                }}
+              >
+                <MenuItem
+                  onClick={() => {
+                    setItemFilter("");
+                    setFilterMenuAnchor(null);
+                  }}
+                  selected={!itemFilter}
+                >
+                  All Items
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    setItemFilter("low");
+                    setFilterMenuAnchor(null);
+                  }}
+                  selected={itemFilter === "low"}
+                >
+                  Low Stock
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    setItemFilter("out");
+                    setFilterMenuAnchor(null);
+                  }}
+                  selected={itemFilter === "out"}
+                >
+                  Out of Stock
+                </MenuItem>
+                {categories.length > 0 && <Divider sx={{ my: 1, borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }} />}
+                {categories.map((entry) => (
+                  <MenuItem
+                    key={entry.category}
+                    onClick={() => {
+                      setItemFilter(entry.category);
+                      setFilterMenuAnchor(null);
+                    }}
+                    selected={itemFilter === entry.category}
+                  >
+                    {entry.category}
+                  </MenuItem>
+                ))}
+              </Menu>
             </Stack>
           </Stack>
 
-          <Stack direction="row" spacing={1} flexWrap="wrap">
-            <Chip label="Low Stock" onClick={() => setItemFilter(itemFilter === "low" ? "" : "low")} color={itemFilter === "low" ? "warning" : "default"} variant={itemFilter === "low" ? "filled" : "outlined"} sx={{ fontWeight: 800, borderRadius: 1.5, color: itemFilter === "low" ? undefined : isDark ? "#cbd5e1" : undefined, borderColor: itemFilter === "low" ? undefined : isDark ? "rgba(255,255,255,0.15)" : undefined }} />
-            <Chip label="Out of Stock" onClick={() => setItemFilter(itemFilter === "out" ? "" : "out")} color={itemFilter === "out" ? "error" : "default"} variant={itemFilter === "out" ? "filled" : "outlined"} sx={{ fontWeight: 800, borderRadius: 1.5, color: itemFilter === "out" ? undefined : isDark ? "#cbd5e1" : undefined, borderColor: itemFilter === "out" ? undefined : isDark ? "rgba(255,255,255,0.15)" : undefined }} />
-            {categories.slice(0, 4).map((entry) => (
-              <Chip
-                key={entry.category}
-                label={entry.category}
-                onClick={() => {
-                  setItemFilter(itemFilter === entry.category ? "" : entry.category);
-                  setPage(1);
-                }}
-                color={itemFilter === entry.category ? "primary" : "default"}
-                variant={itemFilter === entry.category ? "filled" : "outlined"}
-                sx={{ fontWeight: 800, borderRadius: 1.5, color: itemFilter === entry.category ? undefined : isDark ? "#cbd5e1" : undefined, borderColor: itemFilter === entry.category ? undefined : isDark ? "rgba(255,255,255,0.15)" : undefined }}
-              />
-            ))}
-          </Stack>
-
-          <TableCard
-            isDark={isDark}
-            columns={["", "Item", "Category", "Price", "HSN/SAC", "Unit", "Stock", "Status", "Actions"]}
-            rows={visibleItems.map((item) => {
-              const stock = getAvailableStock(item);
-              const imageUrl = toBackendAssetUrl(item.imageUrl);
-              return [
-                <Checkbox size="small" sx={{ color: isDark ? "#64748b" : undefined }} />,
-                <Stack direction="row" spacing={1.5} alignItems="center">
-                  <Box sx={{ width: 50, height: 42, borderRadius: 1.5, bgcolor: isDark ? "rgba(255,255,255,0.05)" : "#f8fafc", display: "grid", placeItems: "center", color: isDark ? "#64748b" : "#94a3b8" }}>
-                    {imageUrl ? <img src={imageUrl} alt={item.itemName} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} /> : <ImageOutlined />}
-                  </Box>
+          {viewMode === "grid" ? (
+            <Grid container spacing={2}>
+              {visibleItems.length === 0 ? (
+                <Grid item xs={12}>
+                  <Paper sx={{ ...getSoftCard(isDark), p: 4, textAlign: "center" }}>
+                    <Typography color={isDark ? "#94a3b8" : MUTED}>
+                      {loading ? "Loading inventory items..." : "No inventory items found."}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              ) : (
+                visibleItems.map((item) => {
+                  const stock = getAvailableStock(item);
+                  const imageUrl = toBackendAssetUrl(item.imageUrl);
+                  return (
+                    <Grid item xs={12} sm={6} md={4} lg={3} key={item._id || item.itemName}>
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          ...getSoftCard(isDark),
+                          p: 2,
+                          borderRadius: 3,
+                          display: "flex",
+                          flexDirection: "column",
+                          height: "100%",
+                          transition: "transform 0.2s, box-shadow 0.2s",
+                          "&:hover": {
+                            transform: "translateY(-3px)",
+                            boxShadow: isDark ? "0 10px 25px rgba(0,0,0,0.5)" : "0 10px 25px rgba(15,23,42,0.08)",
+                          },
+                        }}
+                      >
+                        <Box sx={{ position: "relative", width: "100%", height: 130, borderRadius: 2, overflow: "hidden", bgcolor: isDark ? "rgba(255,255,255,0.04)" : "#f8fafc", mb: 1.5, display: "grid", placeItems: "center" }}>
+                          {imageUrl ? (
+                            <img src={imageUrl} alt={item.itemName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : (
+                            <ImageOutlined sx={{ fontSize: 40, color: isDark ? "#475569" : "#cbd5e1" }} />
+                          )}
+                          <Chip
+                            size="small"
+                            label={stock <= 0 ? "Out of Stock" : `${stock} ${item.unit || "pcs"}`}
+                            sx={{
+                              position: "absolute",
+                              top: 8,
+                              right: 8,
+                              bgcolor: stock <= 0 ? alpha(DANGER, 0.9) : stock <= Number(item.reorderLevel || 0) ? alpha(WARNING, 0.9) : alpha(SUCCESS, 0.9),
+                              color: "#fff",
+                              fontWeight: 900,
+                              fontSize: 11,
+                            }}
+                          />
+                        </Box>
+                        <Chip
+                          size="small"
+                          label={item.category || "General"}
+                          sx={{
+                            alignSelf: "flex-start",
+                            bgcolor: alpha(BLUE, isDark ? 0.25 : 0.12),
+                            color: isDark ? "#60a5fa" : BLUE,
+                            fontWeight: 800,
+                            mb: 0.5,
+                          }}
+                        />
+                        <Typography variant="subtitle1" fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a", fontSize: 15, lineHeight: 1.3, mb: 0.5, flexGrow: 1 }}>
+                          {item.itemName}
+                        </Typography>
+                        <Typography variant="caption" color={isDark ? "#94a3b8" : MUTED} sx={{ mb: 1 }}>
+                          SKU: {item.sku || "-"}
+                        </Typography>
+                        <Divider sx={{ my: 1, borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }} />
+                        <Stack direction="row" alignItems="center" justifyContent="space-between">
+                          <Box>
+                            <Typography variant="caption" color={isDark ? "#94a3b8" : MUTED} display="block">Price</Typography>
+                            <Typography variant="subtitle1" fontWeight={900} color={isDark ? "#f8fafc" : "#0f172a"}>
+                              {formatCurrency(item.pricing?.sellingPrice)}
+                            </Typography>
+                          </Box>
+                          <Stack direction="row" spacing={0.5}>
+                            <Tooltip title="Edit">
+                              <IconButton size="small" onClick={() => startEditItem(item)} sx={{ color: isDark ? "#60a5fa" : BLUE }}>
+                                <EditOutlined fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Delete">
+                              <IconButton size="small" onClick={() => deleteItem(item)} sx={{ color: DANGER }}>
+                                <DeleteOutline fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                        </Stack>
+                      </Paper>
+                    </Grid>
+                  );
+                })
+              )}
+            </Grid>
+          ) : (
+            <TableCard
+              isDark={isDark}
+              columns={["", "Item", "Category", "Price", "HSN/SAC", "Unit", "Stock", "Status", "Actions"]}
+              rows={visibleItems.map((item) => {
+                const stock = getAvailableStock(item);
+                const imageUrl = toBackendAssetUrl(item.imageUrl);
+                return [
+                  <Checkbox size="small" sx={{ color: isDark ? "#64748b" : undefined }} />,
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <Box sx={{ width: 50, height: 42, borderRadius: 1.5, bgcolor: isDark ? "rgba(255,255,255,0.05)" : "#f8fafc", display: "grid", placeItems: "center", color: isDark ? "#64748b" : "#94a3b8" }}>
+                      {imageUrl ? <img src={imageUrl} alt={item.itemName} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} /> : <ImageOutlined />}
+                    </Box>
+                    <Box>
+                      <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{item.itemName}</Typography>
+                      <Typography variant="body2" color={isDark ? "#94a3b8" : MUTED}>{item.description || item.sku}</Typography>
+                    </Box>
+                  </Stack>,
+                  <Stack direction="row" spacing={0.7}>
+                    <Chip size="small" label={item.category || "-"} sx={{ bgcolor: alpha(BLUE, isDark ? 0.25 : 0.12), color: isDark ? "#60a5fa" : BLUE }} />
+                    {item.subcategory && <Chip size="small" label={item.subcategory} sx={{ bgcolor: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9", color: isDark ? "#cbd5e1" : "inherit" }} />}
+                  </Stack>,
                   <Box>
-                    <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{item.itemName}</Typography>
-                    <Typography variant="body2" color={isDark ? "#94a3b8" : MUTED}>{item.description || item.sku}</Typography>
-                  </Box>
-                </Stack>,
-                <Stack direction="row" spacing={0.7}>
-                  <Chip size="small" label={item.category || "-"} sx={{ bgcolor: alpha(BLUE, isDark ? 0.25 : 0.12), color: isDark ? "#60a5fa" : BLUE }} />
-                  {item.subcategory && <Chip size="small" label={item.subcategory} sx={{ bgcolor: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9", color: isDark ? "#cbd5e1" : "inherit" }} />}
-                </Stack>,
-                <Box>
-                  <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{formatCurrency(item.pricing?.sellingPrice)}</Typography>
-                  <Typography variant="caption" color={isDark ? "#94a3b8" : MUTED}>Cost: {formatCurrency(item.pricing?.purchaseCost)}</Typography>
-                </Box>,
-                <Typography variant="body2" sx={{ color: isDark ? "#e2e8f0" : "inherit" }}>{item.hsnSacCode || "-"}</Typography>,
-                <Typography variant="body2" sx={{ color: isDark ? "#e2e8f0" : "inherit" }}>{item.unit || "pcs"}</Typography>,
-                <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{stock} {item.unit || "pcs"}</Typography>,
-                <Chip size="small" label={stock <= 0 ? "Out" : "Active"} sx={{ bgcolor: alpha(stock <= 0 ? DANGER : SUCCESS, isDark ? 0.25 : 0.12), color: stock <= 0 ? DANGER : isDark ? "#4ade80" : SUCCESS, fontWeight: 800 }} />,
-                <Stack direction="row" spacing={0.5}>
-                  <Tooltip title="View"><IconButton size="small" sx={{ color: isDark ? "#60a5fa" : BLUE }}><VisibilityOutlined fontSize="small" /></IconButton></Tooltip>
-                  <Tooltip title="Edit"><IconButton size="small" onClick={() => startEditItem(item)} sx={{ color: isDark ? "#60a5fa" : BLUE }}><EditOutlined fontSize="small" /></IconButton></Tooltip>
-                  <Tooltip title="Delete"><IconButton size="small" onClick={() => deleteItem(item)} sx={{ color: DANGER }}><DeleteOutline fontSize="small" /></IconButton></Tooltip>
-                </Stack>,
-              ];
-            })}
-            empty={loading ? "Loading inventory items..." : "No inventory items found."}
-          />
+                    <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{formatCurrency(item.pricing?.sellingPrice)}</Typography>
+                    <Typography variant="caption" color={isDark ? "#94a3b8" : MUTED}>Cost: {formatCurrency(item.pricing?.purchaseCost)}</Typography>
+                  </Box>,
+                  <Typography variant="body2" sx={{ color: isDark ? "#e2e8f0" : "inherit" }}>{item.hsnSacCode || "-"}</Typography>,
+                  <Typography variant="body2" sx={{ color: isDark ? "#e2e8f0" : "inherit" }}>{item.unit || "pcs"}</Typography>,
+                  <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{stock} {item.unit || "pcs"}</Typography>,
+                  <Chip size="small" label={stock <= 0 ? "Out" : "Active"} sx={{ bgcolor: alpha(stock <= 0 ? DANGER : SUCCESS, isDark ? 0.25 : 0.12), color: stock <= 0 ? DANGER : isDark ? "#4ade80" : SUCCESS, fontWeight: 800 }} />,
+                  <Stack direction="row" spacing={0.5}>
+                    <Tooltip title="View"><IconButton size="small" sx={{ color: isDark ? "#60a5fa" : BLUE }}><VisibilityOutlined fontSize="small" /></IconButton></Tooltip>
+                    <Tooltip title="Edit"><IconButton size="small" onClick={() => startEditItem(item)} sx={{ color: isDark ? "#60a5fa" : BLUE }}><EditOutlined fontSize="small" /></IconButton></Tooltip>
+                    <Tooltip title="Delete"><IconButton size="small" onClick={() => deleteItem(item)} sx={{ color: DANGER }}><DeleteOutline fontSize="small" /></IconButton></Tooltip>
+                  </Stack>,
+                ];
+              })}
+              empty={loading ? "Loading inventory items..." : "No inventory items found."}
+            />
+          )}
           <Paper sx={{ ...getSoftCard(isDark), p: 2 }}>
             <Stack direction={{ xs: "column", sm: "row" }} alignItems="center" justifyContent="space-between" spacing={2}>
               <Stack direction="row" alignItems="center" spacing={1}>
@@ -1806,6 +2368,7 @@ function InventoryERP() {
 
       {categoryModalNode}
       {subCategoryModalNode}
+      {importModalNode}
       {toastSnackbarNode}
     </Box>
   );
