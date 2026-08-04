@@ -536,9 +536,10 @@ export default function LiveTrackingMap({
       try {
         mapDivRef.current.innerHTML = "";
         const lMap = L.map(mapDivRef.current).setView([20.29044, 85.86197], 15);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-          attribution: "© OpenStreetMap contributors",
+        L.tileLayer("https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+          maxZoom: 20,
+          subdomains: ["mt0", "mt1", "mt2", "mt3"],
+          attribution: "Google Maps",
         }).addTo(lMap);
         leafletMapRef.current = lMap;
         setMapLoaded(true);

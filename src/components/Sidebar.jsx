@@ -466,7 +466,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         }}
       >
         <Box
-          component="img" src={sidebarLogo} alt="Solar 360"
+          component="img" src={sidebarLogo} alt="Solar CRM"
           onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = sidebarLogo; }}
           sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.4 }}
         />
@@ -478,7 +478,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
             Vanurtech Pvt Ltd
           </Typography>
           <Typography variant="caption" sx={{ color: textSec, fontSize: "0.68rem" }}>
-            Solar Software Inc
+            Solar CRM
           </Typography>
         </Box>
       )}
@@ -503,7 +503,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
           border: `1px solid ${borderCol}`,
           boxShadow: "0 6px 16px rgba(30,64,175,0.14)",
         }}>
-          <Box component="img" src={sidebarLogo} alt="Solar 360"
+          <Box component="img" src={sidebarLogo} alt="Solar CRM"
             onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = sidebarLogo; }}
             sx={{ height: "85%", width: "auto", maxWidth: "100%", objectFit: "contain" }}
           />
@@ -513,7 +513,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
             Vanurtech Pvt Ltd
           </Typography>
           <Typography variant="caption" sx={{ color: textSec, fontSize: "0.68rem" }}>
-            Solar Software Inc
+            Solar CRM
           </Typography>
         </Box>
       </Box>

@@ -78,7 +78,7 @@ import {
   resolveVisitStatus,
 } from "../utils/visitStatus";
 import ConvertProjectDialog from "../components/ConvertProjectDialog";
-import { EditLeadModal, ROLE_PERMISSIONS } from "./LeadOverview";
+import { EditLeadModal, ROLE_PERMISSIONS, normalizeUserRole } from "./LeadOverview";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const TOKEN = {
@@ -1443,8 +1443,10 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, s
   const [showRoleSelection, setShowRoleSelection] = useState(false);
   const [availableRoles, setAvailableRoles] = useState([]);
 
-  const permissions = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.TEAM;
-  const canAssign = permissions?.assign;
+  const activeRole = userRole || user?.role;
+  const normalizedRole = typeof normalizeUserRole === "function" ? normalizeUserRole(activeRole) : activeRole;
+  const permissions = ROLE_PERMISSIONS[activeRole] || ROLE_PERMISSIONS[normalizedRole] || ROLE_PERMISSIONS.Admin_panel;
+  const canAssign = permissions?.assign !== false;
 
   const resetModal = useCallback(() => {
     setInchargeUsers([]); setTeamUsers([]); setSelectedUserId(""); setError(null);
@@ -5421,15 +5423,43 @@ export default function LeadDetailsPage() {
         maxWidth="xs"
         fullWidth
         PaperProps={{
-          sx: { borderRadius: TOKEN.radius, p: 1 },
+          sx: {
+            borderRadius: "16px",
+            p: 0,
+            overflow: "hidden",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
+            bgcolor: "#ffffff",
+          },
         }}
       >
-        <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Box sx={{ p: 1, borderRadius: "50%", bgcolor: alpha("#ef4444", 0.1), color: "#dc2626", display: "grid", placeItems: "center" }}>
+        <DialogTitle
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            px: 3,
+            py: 2,
+            bgcolor: alpha("#ef4444", 0.05),
+            borderBottom: `1px solid ${alpha("#ef4444", 0.12)}`,
+          }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box
+              sx={{
+                width: 34,
+                height: 34,
+                borderRadius: "50%",
+                bgcolor: alpha("#ef4444", 0.12),
+                color: "#dc2626",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
               <Cancel sx={{ fontSize: 20 }} />
             </Box>
-            <Typography variant="h6" fontWeight={800} fontSize="1.1rem" color={TOKEN.text}>
+            <Typography variant="h6" fontWeight={700} fontSize="1.05rem" color="#1e293b">
               Mark Lead as Lost
             </Typography>
           </Stack>
@@ -5437,8 +5467,8 @@ export default function LeadDetailsPage() {
             <Close sx={{ fontSize: 18 }} />
           </IconButton>
         </DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.5 }}>
+        <DialogContent sx={{ px: 3, pt: 2.5, pb: 1 }}>
+          <Typography variant="body2" color="#475569" sx={{ mb: 2, lineHeight: 1.6, fontSize: "0.875rem" }}>
             Are you sure you want to mark <strong>{leadDetails?.firstName} {leadDetails?.lastName}</strong> as lost? This will update the lead status to <strong>Missed Leads</strong>.
           </Typography>
           <TextField
@@ -5451,14 +5481,29 @@ export default function LeadDetailsPage() {
             onChange={(e) => setLoseReason(e.target.value)}
             variant="outlined"
             size="small"
-            sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: "10px",
+                bgcolor: "#f8fafc",
+                fontSize: "0.875rem",
+              },
+            }}
           />
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, pt: 1 }}>
+        <DialogActions sx={{ px: 3, py: 2, borderTop: "1px solid #f1f5f9", bgcolor: "#fafafa", gap: 1 }}>
           <Button
             onClick={() => setLoseLeadDialogOpen(false)}
             disabled={submittingLoseLead}
-            sx={{ textTransform: "none", fontWeight: 700, color: TOKEN.textSub }}
+            variant="outlined"
+            sx={{
+              textTransform: "none",
+              fontWeight: 600,
+              color: "#64748b",
+              borderColor: "#cbd5e1",
+              borderRadius: "8px",
+              px: 2,
+              "&:hover": { borderColor: "#94a3b8", bgcolor: "#f1f5f9" },
+            }}
           >
             Cancel
           </Button>
@@ -5469,10 +5514,11 @@ export default function LeadDetailsPage() {
             sx={{
               bgcolor: "#dc2626",
               color: "#fff",
-              fontWeight: 800,
+              fontWeight: 700,
               textTransform: "none",
-              borderRadius: 2,
+              borderRadius: "8px",
               px: 2.5,
+              boxShadow: "0 4px 12px rgba(220, 38, 38, 0.25)",
               "&:hover": { bgcolor: "#b91c1c" },
             }}
           >

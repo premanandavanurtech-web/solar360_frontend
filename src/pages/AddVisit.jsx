@@ -36,6 +36,7 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useLocation, useNavigate } from "react-router-dom";
+import { Autocomplete } from "@react-google-maps/api";
 
 // Fix default Leaflet icon paths
 delete L.Icon.Default.prototype._getIconUrl;
@@ -506,7 +507,7 @@ function SuccessDialog({ open, onClose, leadName }) {
   );
 }
 
-// ========== LEAFLET MAP PICKER ==========
+// ========== LEAFLET MAP PICKER (GOOGLE MAPS TILES) ==========
 const LeafletMapPicker = ({ center, markerPosition, onMapPick }) => {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -521,14 +522,36 @@ const LeafletMapPicker = ({ center, markerPosition, onMapPick }) => {
     if (!mapRef.current) {
       const map = L.map(containerRef.current, {
         center: [lat, lng],
-        zoom: markerPosition?.lat ? 16 : 6,
+        zoom: markerPosition?.lat ? 17 : 14,
         zoomControl: true,
       });
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "© OpenStreetMap contributors",
-      }).addTo(map);
+      const googleStreets = L.tileLayer(
+        "https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+        {
+          maxZoom: 20,
+          subdomains: ["mt0", "mt1", "mt2", "mt3"],
+          attribution: "Google Maps",
+        }
+      );
+
+      const googleHybrid = L.tileLayer(
+        "https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
+        {
+          maxZoom: 20,
+          subdomains: ["mt0", "mt1", "mt2", "mt3"],
+          attribution: "Google Satellite",
+        }
+      );
+
+      googleStreets.addTo(map);
+
+      const baseMaps = {
+        "Google Map": googleStreets,
+        "Google Satellite": googleHybrid,
+      };
+
+      L.control.layers(baseMaps, null, { position: "topright" }).addTo(map);
 
       const marker = L.marker([lat, lng], { draggable: true }).addTo(map);
 
@@ -545,8 +568,12 @@ const LeafletMapPicker = ({ center, markerPosition, onMapPick }) => {
 
       mapRef.current = map;
       markerRef.current = marker;
+
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 300);
     } else {
-      mapRef.current.setView([lat, lng], mapRef.current.getZoom());
+      mapRef.current.setView([lat, lng], mapRef.current.getZoom() || 17);
       if (markerRef.current) {
         markerRef.current.setLatLng([lat, lng]);
       }
@@ -586,7 +613,7 @@ export default function VisitDetails({ onClose, onSave }) {
   const currentUserRole = getUserRole?.() || null;
   const restoredDraftRef = useRef(canUseRestoredDraft && Boolean(restoredDraft));
 
-  const isGoogleMapLoaded = true;
+  const isGoogleMapLoaded = typeof window !== "undefined" && Boolean(window.google?.maps?.places);
   const googleMapLoadError = false;
 
   const [currentStep, setCurrentStep] = useState(() =>
@@ -1611,7 +1638,7 @@ export default function VisitDetails({ onClose, onSave }) {
             {/* Search bar */}
             <Grid container spacing={1.5} alignItems="flex-start" sx={{ mb: 2 }}>
               <Grid item xs={12} sm>
-                {isGoogleMapLoaded ? (
+                {isGoogleMapLoaded && typeof window !== "undefined" && Boolean(window.google?.maps?.places?.Autocomplete) ? (
                   <Autocomplete
                     onLoad={handleAutocompleteLoad}
                     onPlaceChanged={handlePlaceChanged}
@@ -1681,45 +1708,11 @@ export default function VisitDetails({ onClose, onSave }) {
                 mb: 1.25,
               }}
             >
-              {googleMapLoadError ? (
-                <Box
-                  sx={{
-                    height: "100%",
-                    display: "grid",
-                    placeItems: "center",
-                    bgcolor: "#fff8f7",
-                    color: ERROR_COLOR,
-                    textAlign: "center",
-                    px: 2,
-                  }}
-                >
-                  <Typography sx={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                    Google Map could not be loaded.
-                  </Typography>
-                </Box>
-              ) : !isGoogleMapLoaded ? (
-                <Box
-                  sx={{
-                    height: "100%",
-                    display: "grid",
-                    placeItems: "center",
-                    bgcolor: "#fffaf7",
-                  }}
-                >
-                  <Stack spacing={1.25} alignItems="center">
-                    <CircularProgress size={22} sx={{ color: PRIMARY }} />
-                    <Typography sx={{ fontSize: "0.8rem", color: TEXT_SUB }}>
-                      Loading map…
-                    </Typography>
-                  </Stack>
-                </Box>
-              ) : (
-                <LeafletMapPicker
-                  center={mapCenter}
-                  markerPosition={markerPosition}
-                  onMapPick={(lat, lng) => handleMapPick(lat, lng)}
-                />
-              )}
+              <LeafletMapPicker
+                center={mapCenter}
+                markerPosition={markerPosition}
+                onMapPick={(lat, lng) => handleMapPick(lat, lng)}
+              />
             </Box>
 
             <Typography sx={{ fontSize: "0.74rem", color: TEXT_MUTED, mb: 2 }}>

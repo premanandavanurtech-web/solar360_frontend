@@ -173,27 +173,62 @@ const PERIOD_OPTIONS = [
   { value: "All", label: "All time", icon: <DateRange /> },  // ← only this skips date filter
 ];
 
+export const normalizeUserRole = (role) => {
+  const r = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (["admin", "admin_panel", "head_office", "super_admin", "superadmin", "owner"].includes(r)) {
+    return "Admin_panel";
+  }
+  if (["zsm", "project_head", "manager", "operation_lead", "operations_lead"].includes(r)) {
+    return "ZSM";
+  }
+  if (["incharge", "supervisor", "lead_incharge"].includes(r)) {
+    return "Incharge";
+  }
+  return "TEAM";
+};
+
+const adminPerms = {
+  view: true, edit: true, assign: true, delete: true, bulkActions: true,
+  export: true, settings: true, color: PRIMARY_COLOR,
+  icon: <AdminPanelSettings />, label: "Admin Panel", level: 1, canAssignTo: ["Incharge", "TEAM"],
+};
+
+const zsmPerms = {
+  view: true, edit: true, assign: true, delete: false, bulkActions: true,
+  export: true, settings: false, color: PRIMARY_COLOR,
+  icon: <WorkspacePremium />, label: "Operation Lead", level: 2, canAssignTo: ["Incharge", "TEAM"],
+};
+
+const inchargePerms = {
+  view: true, edit: true, assign: true, delete: false, bulkActions: true,
+  export: false, settings: false, color: PRIMARY_COLOR,
+  icon: <SupervisorAccount />, label: "Incharge", level: 3, canAssignTo: ["TEAM"],
+};
+
+const teamPerms = {
+  view: true, edit: true, assign: false, delete: false, bulkActions: false,
+  export: false, settings: false, color: PRIMARY_COLOR,
+  icon: <Groups />, label: "Team Member", level: 4, canAssignTo: [],
+};
+
 export const ROLE_PERMISSIONS = {
-  Admin_panel: {
-    view: true, edit: true, assign: true, delete: true, bulkActions: true,
-    export: true, settings: true, color: PRIMARY_COLOR,
-    icon: <AdminPanelSettings />, label: "Admin Panel", level: 1, canAssignTo: ["Incharge", "TEAM"],
-  },
-  ZSM: {
-    view: true, edit: true, assign: true, delete: false, bulkActions: true,
-    export: true, settings: false, color: PRIMARY_COLOR,
-    icon: <WorkspacePremium />, label: "Operation Lead", level: 2, canAssignTo: ["Incharge", "TEAM"],
-  },
-  Incharge: {
-    view: true, edit: true, assign: true, delete: false, bulkActions: true,
-    export: false, settings: false, color: PRIMARY_COLOR,
-    icon: <SupervisorAccount />, label: "Incharge", level: 3, canAssignTo: ["TEAM"],
-  },
-  TEAM: {
-    view: true, edit: true, assign: false, delete: false, bulkActions: false,
-    export: false, settings: false, color: PRIMARY_COLOR,
-    icon: <Groups />, label: "Team Member", level: 4, canAssignTo: [],
-  },
+  Admin_panel: adminPerms,
+  ADMIN: adminPerms,
+  Admin: adminPerms,
+  admin: adminPerms,
+  HEAD_OFFICE: adminPerms,
+  head_office: adminPerms,
+  SUPER_ADMIN: adminPerms,
+  super_admin: adminPerms,
+  ZSM: zsmPerms,
+  PROJECT_HEAD: zsmPerms,
+  Incharge: inchargePerms,
+  INCHARGE: inchargePerms,
+  SUPERVISOR: inchargePerms,
+  supervisor: inchargePerms,
+  TEAM: teamPerms,
+  team: teamPerms,
+  INSTALLER: teamPerms,
 };
 
 const getStatusColor = (status) => {
@@ -1546,13 +1581,15 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
   const [showRoleSelection, setShowRoleSelection] = useState(false);
   const [availableRoles, setAvailableRoles] = useState([]);
 
-  const permissions = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.TEAM;
-  const canAssign = permissions.assign;
+  const activeRole = userRole || user?.role;
+  const normalizedRole = normalizeUserRole(activeRole);
+  const permissions = ROLE_PERMISSIONS[activeRole] || ROLE_PERMISSIONS[normalizedRole] || ROLE_PERMISSIONS.Admin_panel;
+  const canAssign = permissions.assign !== false;
 
   useEffect(() => {
     if (open && canAssign) {
       resetModal();
-      const roles = permissions.canAssignTo;
+      const roles = permissions.canAssignTo || ["Incharge", "TEAM"];
       setAvailableRoles(roles);
       if (roles.length > 1) { setShowRoleSelection(true); setAssignToRole(""); }
       else if (roles.length === 1) { setAssignToRole(roles[0]); setShowRoleSelection(false); fetchUsers(roles[0]); }
@@ -1569,9 +1606,10 @@ const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, i
     try {
       setFetchingUsers(true); setError(null);
       let endpoint = "", queryParams = "?page=1&limit=100";
-      if (userRole === "Admin_panel" || userRole === "ZSM") {
+      const normRole = normalizeUserRole(userRole || user?.role);
+      if (normRole === "Admin_panel" || normRole === "ZSM" || permissions.assign) {
         endpoint = roleToFetch === "Incharge" ? "/user/managerList" : "/user/getManagerUnderUserList";
-      } else if (userRole === "Incharge" && roleToFetch === "TEAM") {
+      } else if (normRole === "Incharge" && roleToFetch === "TEAM") {
         endpoint = "/user/getManagerUnderUserList";
         queryParams = `?page=1&limit=100&supervisorId=${user._id}`;
       }
@@ -2050,8 +2088,10 @@ const LeadOverview = () => {
 
   const hasFilters = useMemo(() => searchTerm || statusFilter !== "all" || period !== "All" || quickFilter, [searchTerm, statusFilter, period, quickFilter]);
   const selectedCount = useMemo(() => selectedLeads.length, [selectedLeads]);
-  const userRole = user?.role || "TEAM";
-  const permissions = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.TEAM;
+  const activeRole = user?.role || "Admin_panel";
+  const normalizedRole = normalizeUserRole(activeRole);
+  const userRole = normalizedRole;
+  const permissions = ROLE_PERMISSIONS[activeRole] || ROLE_PERMISSIONS[normalizedRole] || ROLE_PERMISSIONS.Admin_panel;
   const selectedLeadsData = useMemo(() => leads.filter((lead) => selectedLeads.includes(lead._id)), [leads, selectedLeads]);
   const periodRange = useMemo(() => getPeriodDateRange(period), [period]);
   const activeFilterCount = useMemo(() => {
@@ -2513,7 +2553,33 @@ const LeadOverview = () => {
               >
                 + Assign
               </Button>
-            ) : <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Unassigned</Typography>;
+            ) : (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => openAssignDialog(lead)}
+                sx={{
+                  minWidth: 100,
+                  px: 1.5,
+                  py: 0.5,
+                  borderRadius: 2,
+                  borderStyle: "dashed",
+                  borderColor: isDark ? "rgba(59, 130, 246, 0.5)" : alpha(PRIMARY_COLOR, 0.5),
+                  color: isDark ? "#60a5fa" : PRIMARY_COLOR,
+                  bgcolor: isDark ? "rgba(59, 130, 246, 0.08)" : alpha(PRIMARY_COLOR, 0.04),
+                  fontWeight: 700,
+                  fontSize: "0.8rem",
+                  textTransform: "none",
+                  "&:hover": {
+                    borderStyle: "dashed",
+                    borderColor: isDark ? "#60a5fa" : PRIMARY_COLOR,
+                    bgcolor: isDark ? "rgba(59, 130, 246, 0.18)" : alpha(PRIMARY_COLOR, 0.12),
+                  },
+                }}
+              >
+                + Assign
+              </Button>
+            );
           })()}
         </TableCell>
         <TableCell><Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "inherit" }}>{formatDate(lead.createdAt, "MMM dd, yyyy")}</Typography></TableCell>

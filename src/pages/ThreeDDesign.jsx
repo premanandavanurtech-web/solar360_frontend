@@ -4284,35 +4284,55 @@ const LeafletRoofMap = ({ center, roofPoints, onMapClick }) => {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const lat = center?.lat || 20.2961;
-    const lng = center?.lng || 85.8245;
+    const lat = Number(center?.lat) || 20.2961;
+    const lng = Number(center?.lng) || 85.8245;
 
     if (!mapRef.current) {
       const map = L.map(containerRef.current, {
         center: [lat, lng],
-        zoom: 19,
+        zoom: 18,
         zoomControl: true,
       });
 
-      L.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      const googleSat = L.tileLayer(
+        "https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
         {
-          maxZoom: 19,
-          attribution: "Esri World Imagery",
+          maxZoom: 20,
+          subdomains: ["mt0", "mt1", "mt2", "mt3"],
+          attribution: "Google Satellite",
         }
-      ).addTo(map);
+      );
+
+      googleSat.addTo(map);
 
       map.on("click", (e) => {
         if (onMapClick) {
-          onMapClick({ latLng: { lat: () => e.latlng.lat, lng: () => e.latlng.lng } });
+          onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
         }
       });
 
       mapRef.current = map;
+
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 300);
     } else {
-      mapRef.current.setView([lat, lng]);
+      mapRef.current.setView([lat, lng], 18);
+      setTimeout(() => {
+        mapRef.current?.invalidateSize();
+      }, 100);
     }
   }, [center?.lat, center?.lng]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -4378,6 +4398,7 @@ const ThreeDDesign = () => {
   const stateDesign =
     shouldRestoreOutline && location.state?.design?.points?.length ? location.state.design : null;
   const sourceLeadDesign = stateDesign || sourceLead?.threeDDesign || null;
+
   useEffect(() => {
     if (!sourceLead?._id) return;
     try {
@@ -4387,6 +4408,99 @@ const ThreeDDesign = () => {
     }
   }, [sourceLead]);
 
+  const [roofPoints, setRoofPoints] = useState(() => sourceLeadDesign?.points || []);
+
+  const [center, setCenter] = useState(() => {
+    const lat = Number(sourceLead?.address?.lat || sourceLead?.lat || sourceLeadDesign?.center?.lat || DEFAULT_CENTER.lat);
+    const lng = Number(sourceLead?.address?.lng || sourceLead?.lng || sourceLeadDesign?.center?.lng || DEFAULT_CENTER.lng);
+    return {
+      lat: Number.isFinite(lat) && lat !== 0 ? lat : DEFAULT_CENTER.lat,
+      lng: Number.isFinite(lng) && lng !== 0 ? lng : DEFAULT_CENTER.lng,
+    };
+  });
+
+  const handleMapClick = useCallback((latlng) => {
+    setRoofPoints((prev) => [...prev, latlng]);
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setRoofPoints([]);
+  }, []);
+
+  const undoPoint = useCallback(() => {
+    setRoofPoints((prev) => prev.slice(0, -1));
+  }, []);
+
+  const generateModel = useCallback(() => {
+    if (!roofPoints || roofPoints.length < 3) return;
+    const sanitized = sanitizeRoofPoints(roofPoints);
+    const calculatedCenter = getCentroid(sanitized) || center;
+    const design = {
+      points: sanitized,
+      center: calculatedCenter,
+      leadId: sourceLead?._id,
+    };
+    try {
+      sessionStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(design));
+      if (sourceLead?._id) {
+        sessionStorage.setItem(DESIGN_LEAD_STORAGE_KEY, JSON.stringify({ _id: sourceLead._id, lead: sourceLead }));
+      }
+    } catch (e) {
+      console.warn("Error saving design to session storage", e);
+    }
+    navigate("/3d-design/preview", {
+      state: {
+        lead: sourceLead,
+        design,
+        returnTo: returnTo || (sourceLead?._id ? `/all-leads/${sourceLead._id}` : "/3d-design"),
+      },
+    });
+  }, [roofPoints, center, sourceLead, returnTo, navigate]);
+  const [searchText, setSearchText] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchResultsOpen, setSearchResultsOpen] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(true);
+  const [status, setStatus] = useState(() => sourceLead?.address?.city || sourceLead?.address?.state || "Outline Roof Boundary");
+
+  const handleSearch = useCallback(async () => {
+    if (!searchText.trim()) return;
+    try {
+      setIsSearching(true);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchText.trim())}`);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const results = data.slice(0, 5).map((item) => ({
+          id: item.place_id,
+          title: item.display_name.split(",")[0],
+          subtitle: item.display_name,
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lon),
+        }));
+        setSearchResults(results);
+        setSearchResultsOpen(true);
+        if (results[0]?.lat && results[0]?.lng) {
+          setCenter({ lat: results[0].lat, lng: results[0].lng });
+        }
+      } else {
+        setSearchResults([]);
+        setSearchResultsOpen(false);
+      }
+    } catch (err) {
+      console.warn("Geocoding error", err);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [searchText]);
+
+  const selectSearchResult = useCallback((result) => {
+    if (!result?.lat || !result?.lng) return;
+    setSearchResultsOpen(false);
+    setSearchText(result.title);
+    setStatus(result.title);
+    setCenter({ lat: result.lat, lng: result.lng });
+  }, []);
+
   return (
     <Box sx={{ position: "relative", width: "100%", height: "100vh", overflow: "hidden" }}>
       <LeafletRoofMap
@@ -4395,18 +4509,18 @@ const ThreeDDesign = () => {
         onMapClick={handleMapClick}
       />
       <Paper
-        elevation={3}
+        elevation={4}
         sx={{
           position: "absolute",
-          zIndex: 2,
+          zIndex: 1000,
           top: 16,
           left: 16,
           right: 16,
           p: { xs: 1.2, md: 1.5 },
-          borderRadius: 2,
-          border: "1px solid rgba(255,255,255,0.65)",
-          backdropFilter: "blur(8px)",
-          bgcolor: "rgba(255,255,255,0.94)",
+          borderRadius: 3,
+          border: "1px solid rgba(0,0,0,0.12)",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+          bgcolor: "#ffffff",
         }}
       >
         <Stack
