@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   Alert, Autocomplete, Box, Button, Chip, Divider, FormControl,
   IconButton, InputLabel, MenuItem, Paper, Select, Stack, Switch,
-  TextField, Typography, Tooltip,
+  TextField, Typography, Tooltip, useTheme,
 } from "@mui/material";
 import {
   Add, ArrowBack, BuildCircleOutlined, CalculateOutlined, DeleteOutline,
@@ -78,45 +78,53 @@ const initialTermsGroups = [
   { heading: "Cancellation Policy", points: ["Order cancellation before material dispatch: 5% of advance amount will be retained as processing charges.","Cancellation post material dispatch: 30% of project value will be retained to cover material, logistics, and engineering costs, and material needs to be returned."] },
 ];
 
-// ─── design tokens ───────────────────────────────────────────────────────────
-const inputSx = {
+// ─── design tokens & theme helper ──────────────────────────────────────────
+const getInputSx = (isDark) => ({
   "& .MuiOutlinedInput-root": {
     borderRadius: 2,
-    bgcolor: "#fff",
+    bgcolor: isDark ? "#0f172a" : "#fff",
+    color: isDark ? "#f1f5f9" : "#1f2937",
     fontSize: "0.875rem",
-    "& fieldset": { borderColor: "rgba(0,0,0,0.14)" },
-    "&:hover fieldset": { borderColor: BRAND },
-    "&.Mui-focused fieldset": { borderColor: BRAND, borderWidth: 1.5 },
+    "& fieldset": { borderColor: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.14)" },
+    "&:hover fieldset": { borderColor: isDark ? "#60a5fa" : BRAND },
+    "&.Mui-focused fieldset": { borderColor: isDark ? "#60a5fa" : BRAND, borderWidth: 1.5 },
+    "& .MuiSelect-icon": { color: isDark ? "#94a3b8" : "inherit" },
   },
-  "& .MuiInputLabel-root.Mui-focused": { color: BRAND },
-  "& .MuiInputLabel-root": { fontSize: "0.875rem" },
-};
-
-const blockSx = {
-  p: 2.5,
-  mb: 2,
-  borderRadius: 3,
-  border: "0.5px solid rgba(0,0,0,0.09)",
-  bgcolor: "#fff",
-  boxShadow: "none",
-};
-
-const blockLabelSx = {
-  fontSize: "0.7rem",
-  fontWeight: 700,
-  letterSpacing: "0.07em",
-  textTransform: "uppercase",
-  color: "#94a3b8",
-  mb: 1.75,
-};
-
-const sectionBg = "#f5f7fa";
+  "& .MuiInputLabel-root.Mui-focused": { color: isDark ? "#60a5fa" : BRAND },
+  "& .MuiInputLabel-root": { fontSize: "0.875rem", color: isDark ? "#94a3b8" : "inherit" },
+});
 
 // ─── shared small components ─────────────────────────────────────────────────
 function Block({ label, children, sx }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   return (
-    <Paper elevation={0} sx={{ ...blockSx, ...sx }}>
-      {label && <Typography sx={blockLabelSx}>{label}</Typography>}
+    <Paper
+      elevation={0}
+      sx={{
+        p: 2.5,
+        mb: 2,
+        borderRadius: 3,
+        border: isDark ? "1px solid rgba(255,255,255,0.08)" : "0.5px solid rgba(0,0,0,0.09)",
+        bgcolor: isDark ? "#1e293b" : "#fff",
+        boxShadow: "none",
+        ...sx,
+      }}
+    >
+      {label && (
+        <Typography
+          sx={{
+            fontSize: "0.7rem",
+            fontWeight: 700,
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            color: isDark ? "#94a3b8" : "#94a3b8",
+            mb: 1.75,
+          }}
+        >
+          {label}
+        </Typography>
+      )}
       {children}
     </Paper>
   );
@@ -124,101 +132,258 @@ function Block({ label, children, sx }) {
 
 function G({ cols = 4, children, sx }) {
   return (
-    <Box sx={{
-      display: "grid",
-      gridTemplateColumns: { xs: "1fr", sm: `repeat(${Math.min(cols, 2)}, minmax(0,1fr))`, md: `repeat(${cols}, minmax(0,1fr))` },
-      gap: 2,
-      ...sx,
-    }}>
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", sm: `repeat(${Math.min(cols, 2)}, minmax(0,1fr))`, md: `repeat(${cols}, minmax(0,1fr))` },
+        gap: 2,
+        ...sx,
+      }}
+    >
       {children}
     </Box>
   );
 }
 
 function F({ label, children, span, hint }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   return (
     <Box sx={span ? { gridColumn: `span ${span}` } : {}}>
       {children}
-      {hint && <Typography variant="caption" sx={{ color: "#94a3b8", mt: 0.5, display: "block" }}>{hint}</Typography>}
+      {hint && (
+        <Typography variant="caption" sx={{ color: isDark ? "#64748b" : "#94a3b8", mt: 0.5, display: "block" }}>
+          {hint}
+        </Typography>
+      )}
     </Box>
   );
 }
 
-function TF({ label, ...props }) {
-  return <TextField label={label} size="small" fullWidth sx={inputSx} {...props} />;
+function TF({ label, sx, ...props }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  return <TextField label={label} size="small" fullWidth sx={{ ...getInputSx(isDark), ...sx }} {...props} />;
 }
 
 function Sel({ label, value, onChange, options }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   return (
-    <FormControl fullWidth size="small" sx={inputSx}>
-      <InputLabel sx={{ fontSize: "0.875rem" }}>{label}</InputLabel>
-      <Select value={value} label={label} onChange={onChange}
-        sx={{ borderRadius: 2, fontSize: "0.875rem", bgcolor: "#fff" }}>
-        {options.map((o) => <MenuItem key={o} value={o} sx={{ fontSize: "0.875rem" }}>{o === "None" ? "— None —" : o}</MenuItem>)}
+    <FormControl fullWidth size="small" sx={getInputSx(isDark)}>
+      <InputLabel sx={{ fontSize: "0.875rem", color: isDark ? "#94a3b8" : undefined }}>{label}</InputLabel>
+      <Select
+        value={value}
+        label={label}
+        onChange={onChange}
+        sx={{
+          borderRadius: 2,
+          fontSize: "0.875rem",
+          bgcolor: isDark ? "#0f172a" : "#fff",
+          color: isDark ? "#f1f5f9" : "#1f2937",
+          "& .MuiSelect-icon": { color: isDark ? "#94a3b8" : undefined },
+        }}
+        MenuProps={{
+          PaperProps: {
+            sx: {
+              bgcolor: isDark ? "#1e293b" : "#fff",
+              color: isDark ? "#f1f5f9" : "#1f2937",
+              "& .MuiMenuItem-root": {
+                "&:hover": { bgcolor: isDark ? "rgba(255,255,255,0.08)" : undefined },
+                "&.Mui-selected": { bgcolor: isDark ? "rgba(59,130,246,0.2)" : undefined },
+              },
+            },
+          },
+        }}
+      >
+        {options.map((o) => (
+          <MenuItem key={o} value={o} sx={{ fontSize: "0.875rem" }}>
+            {o === "None" ? "— None —" : o}
+          </MenuItem>
+        ))}
       </Select>
     </FormControl>
   );
 }
 
 function ChipAC({ label, value, options, onChange, freeSolo, placeholder }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   return (
     <Autocomplete
-      multiple freeSolo={freeSolo} options={options}
+      multiple
+      freeSolo={freeSolo}
+      options={options}
       value={value ? [value] : []}
       onChange={(_, vals) => onChange(vals[vals.length - 1] || "")}
       onInputChange={freeSolo ? (_, v) => onChange(v || "") : undefined}
-      filterSelectedOptions fullWidth size="small"
+      filterSelectedOptions
+      fullWidth
+      size="small"
       renderTags={(vals, getTagProps) =>
-        vals.map((opt, i) => <Chip {...getTagProps({ index: i })} key={opt} label={opt} size="small" sx={{ borderRadius: 1.5 }} />)
+        vals.map((opt, i) => (
+          <Chip
+            {...getTagProps({ index: i })}
+            key={opt}
+            label={opt}
+            size="small"
+            sx={{
+              borderRadius: 1.5,
+              bgcolor: isDark ? "rgba(59,130,246,0.2)" : undefined,
+              color: isDark ? "#93c5fd" : undefined,
+            }}
+          />
+        ))
       }
-      renderInput={(params) => <TextField {...params} label={label} placeholder={placeholder} sx={inputSx} />}
+      renderInput={(params) => <TextField {...params} label={label} placeholder={placeholder} sx={getInputSx(isDark)} />}
+      PaperComponent={(props) => (
+        <Paper
+          {...props}
+          sx={{
+            bgcolor: isDark ? "#1e293b" : "#fff",
+            color: isDark ? "#f1f5f9" : "#1f2937",
+            border: isDark ? "1px solid rgba(255,255,255,0.1)" : undefined,
+            "& .MuiAutocomplete-option": {
+              "&:hover": { bgcolor: isDark ? "rgba(255,255,255,0.08)" : undefined },
+              "&[aria-selected='true']": { bgcolor: isDark ? "rgba(59,130,246,0.2)" : undefined },
+            },
+          }}
+        />
+      )}
     />
   );
 }
 
 function SectionHeader({ icon, title }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   return (
     <Box sx={{ mb: 2.5 }}>
       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
-        <Box sx={{ width: 36, height: 36, borderRadius: 2.5, bgcolor: BRAND_LIGHT, display: "flex", alignItems: "center", justifyContent: "center", color: BRAND, flexShrink: 0 }}>
+        <Box
+          sx={{
+            width: 36,
+            height: 36,
+            borderRadius: 2.5,
+            bgcolor: isDark ? "rgba(59, 130, 246, 0.2)" : BRAND_LIGHT,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: isDark ? "#60a5fa" : BRAND,
+            flexShrink: 0,
+          }}
+        >
           {icon}
         </Box>
-        <Typography sx={{ fontSize: "1.05rem", fontWeight: 700, color: "#1f2937" }}>{title}</Typography>
+        <Typography sx={{ fontSize: "1.05rem", fontWeight: 700, color: isDark ? "#f8fafc" : "#1f2937" }}>
+          {title}
+        </Typography>
       </Stack>
-      <Divider />
+      <Divider sx={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : undefined }} />
     </Box>
   );
 }
 
 function BlockLabel({ title, hint }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   return (
-    <Typography sx={blockLabelSx}>
+    <Typography
+      sx={{
+        fontSize: "0.7rem",
+        fontWeight: 700,
+        letterSpacing: "0.07em",
+        textTransform: "uppercase",
+        color: isDark ? "#94a3b8" : "#94a3b8",
+        mb: 1.75,
+      }}
+    >
       {title}
-      {hint && <Box component="span" sx={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: "#b0bec5", ml: 0.75 }}>— {hint}</Box>}
+      {hint && (
+        <Box component="span" sx={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: isDark ? "#64748b" : "#b0bec5", ml: 0.75 }}>
+          — {hint}
+        </Box>
+      )}
     </Typography>
   );
 }
 
 function ToggleRow({ label, checked, onChange }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   return (
-    <Box sx={{ border: "0.5px solid rgba(0,0,0,0.1)", borderRadius: 999, px: 2, py: 1.1, display: "flex", alignItems: "center", justifyContent: "space-between", bgcolor: "#fff" }}>
-      <Typography sx={{ fontSize: "0.875rem", color: "#475569" }}>{label}</Typography>
-      <Switch checked={checked} onChange={onChange} size="small"
-        sx={{ "& .MuiSwitch-thumb": { width: 14, height: 14 }, "& .Mui-checked .MuiSwitch-thumb": { bgcolor: BRAND }, "& .Mui-checked + .MuiSwitch-track": { bgcolor: BRAND } }} />
+    <Box
+      sx={{
+        border: isDark ? "1px solid rgba(255,255,255,0.1)" : "0.5px solid rgba(0,0,0,0.1)",
+        borderRadius: 999,
+        px: 2,
+        py: 1.1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        bgcolor: isDark ? "#0f172a" : "#fff",
+      }}
+    >
+      <Typography sx={{ fontSize: "0.875rem", color: isDark ? "#e2e8f0" : "#475569" }}>{label}</Typography>
+      <Switch
+        checked={checked}
+        onChange={onChange}
+        size="small"
+        sx={{
+          "& .MuiSwitch-thumb": { width: 14, height: 14 },
+          "& .Mui-checked .MuiSwitch-thumb": { bgcolor: isDark ? "#60a5fa" : BRAND },
+          "& .Mui-checked + .MuiSwitch-track": { bgcolor: isDark ? "#3b82f6" : BRAND },
+        }}
+      />
     </Box>
   );
 }
 
 function FooterActions({ onCancel, onSave, saveLabel }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   return (
-    <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1.5, mt: 2, pt: 2.5, borderTop: "0.5px solid rgba(0,0,0,0.08)" }}>
-      <Button variant="outlined" onClick={onCancel}
-        sx={{ borderRadius: 2, px: 3, textTransform: "none", borderColor: "rgba(0,0,0,0.18)", color: "#475569", "&:hover": { borderColor: BRAND, color: BRAND, bgcolor: BRAND_LIGHT } }}>
+    <Box
+      sx={{
+        display: "flex",
+        justifyContent: "flex-end",
+        gap: 1.5,
+        mt: 2,
+        pt: 2.5,
+        borderTop: isDark ? "1px solid rgba(255,255,255,0.08)" : "0.5px solid rgba(0,0,0,0.08)",
+      }}
+    >
+      <Button
+        variant="outlined"
+        onClick={onCancel}
+        sx={{
+          borderRadius: 2,
+          px: 3,
+          textTransform: "none",
+          borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.18)",
+          color: isDark ? "#cbd5e1" : "#475569",
+          "&:hover": {
+            borderColor: isDark ? "#60a5fa" : BRAND,
+            color: isDark ? "#60a5fa" : BRAND,
+            bgcolor: isDark ? "rgba(59,130,246,0.15)" : BRAND_LIGHT,
+          },
+        }}
+      >
         Cancel
       </Button>
-      <Button variant="contained" startIcon={<CheckCircleOutline fontSize="small" />}
+      <Button
+        variant="contained"
+        startIcon={<CheckCircleOutline fontSize="small" />}
         onClick={onSave}
-        sx={{ borderRadius: 2, px: 3, textTransform: "none", bgcolor: BRAND, boxShadow: "none", "&:hover": { bgcolor: "#1d4ed8", boxShadow: "none" } }}>
+        sx={{
+          borderRadius: 2,
+          px: 3,
+          textTransform: "none",
+          bgcolor: isDark ? "#2563eb" : BRAND,
+          boxShadow: "none",
+          "&:hover": { bgcolor: "#1d4ed8", boxShadow: "none" },
+        }}
+      >
         {saveLabel}
       </Button>
     </Box>
@@ -227,6 +392,10 @@ function FooterActions({ onCancel, onSave, saveLabel }) {
 
 // ─── step renderers ──────────────────────────────────────────────────────────
 function StepCustomer({ form, updateField, updateValue, pricePerKw }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const inputSx = getInputSx(isDark);
+
   return (
     <Stack spacing={0}>
       <SectionHeader icon={<TuneOutlined />} title="Customer & system" />
@@ -235,7 +404,19 @@ function StepCustomer({ form, updateField, updateValue, pricePerKw }) {
         <G cols={4} sx={{ mb: 2 }}>
           <TF label="System size (kW) *" value={form.systemSize} onChange={updateField("systemSize")} />
           <TF label="Total cost (₹) *" value={form.totalCost} onChange={updateField("totalCost")} />
-          <TF label="Price per kW" value={pricePerKw} InputProps={{ readOnly: true }} sx={{ ...inputSx, "& .MuiOutlinedInput-root": { ...inputSx["& .MuiOutlinedInput-root"], bgcolor: "#f8fafc", color: "#64748b" } }} />
+          <TF
+            label="Price per kW"
+            value={pricePerKw}
+            InputProps={{ readOnly: true }}
+            sx={{
+              ...inputSx,
+              "& .MuiOutlinedInput-root": {
+                ...inputSx["& .MuiOutlinedInput-root"],
+                bgcolor: isDark ? "#0f172a" : "#f8fafc",
+                color: isDark ? "#94a3b8" : "#64748b",
+              },
+            }}
+          />
           <F hint="Leave blank to match system size">
             <TF label="Structure capacity (kW)" value={form.structureCapacity} onChange={updateField("structureCapacity")} placeholder="Defaults to system size" />
           </F>
@@ -261,8 +442,18 @@ function StepCustomer({ form, updateField, updateValue, pricePerKw }) {
           <TF label="Qty" value={form.batteryQty} onChange={updateField("batteryQty")} />
           <TF label="Wty (yr)" value={form.batteryWarranty} onChange={updateField("batteryWarranty")} />
         </Box>
-        <Alert severity="info" icon={<InfoOutlined fontSize="small" />}
-          sx={{ borderRadius: 2, bgcolor: BRAND_LIGHT, color: BRAND_TEXT, border: `0.5px solid #b5d4f4`, fontSize: "0.8rem", "& .MuiAlert-icon": { color: BRAND_TEXT } }}>
+        <Alert
+          severity="info"
+          icon={<InfoOutlined fontSize="small" />}
+          sx={{
+            borderRadius: 2,
+            bgcolor: isDark ? "rgba(59, 130, 246, 0.15)" : BRAND_LIGHT,
+            color: isDark ? "#93c5fd" : BRAND_TEXT,
+            border: isDark ? "1px solid rgba(59, 130, 246, 0.3)" : "0.5px solid #b5d4f4",
+            fontSize: "0.8rem",
+            "& .MuiAlert-icon": { color: isDark ? "#93c5fd" : BRAND_TEXT },
+          }}
+        >
           Site survey incomplete. Missing equipment fields must be filled manually.
         </Alert>
       </Block>
@@ -280,6 +471,9 @@ function StepCustomer({ form, updateField, updateValue, pricePerKw }) {
 }
 
 function StepComponents({ form, updateField, updateValue }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
   return (
     <Stack spacing={0}>
       <SectionHeader icon={<LayersOutlined />} title="Components" />
@@ -310,11 +504,26 @@ function StepComponents({ form, updateField, updateValue }) {
           <ChipAC label="Cable brand" options={cableBrands} value={form.cableBrand} onChange={updateValue("cableBrand")} />
           <TF label="DC cable spec" value={form.dcCableSpec} onChange={updateField("dcCableSpec")} />
           <TF label="AC cable spec" value={form.acCableSpec} onChange={updateField("acCableSpec")} />
-          <Autocomplete freeSolo options={structureTypes} value={form.structureType}
+          <Autocomplete
+            freeSolo
+            options={structureTypes}
+            value={form.structureType}
             onChange={(_, v) => updateValue("structureType")(v || "")}
             onInputChange={(_, v) => updateValue("structureType")(v)}
-            size="small" fullWidth
-            renderInput={(p) => <TextField {...p} label="Structure type" placeholder="Select or type..." sx={inputSx} />} />
+            size="small"
+            fullWidth
+            renderInput={(p) => <TextField {...p} label="Structure type" placeholder="Select or type..." sx={getInputSx(isDark)} />}
+            PaperComponent={(props) => (
+              <Paper
+                {...props}
+                sx={{
+                  bgcolor: isDark ? "#1e293b" : "#fff",
+                  color: isDark ? "#f1f5f9" : "#1f2937",
+                  border: isDark ? "1px solid rgba(255,255,255,0.1)" : undefined,
+                }}
+              />
+            )}
+          />
         </G>
         <G cols={4}>
           <ChipAC label="Structure size" options={structureSizes} value={form.structureSize} onChange={updateValue("structureSize")} />
@@ -378,6 +587,10 @@ function StepFinancial({ form, updateField }) {
 }
 
 function StepPayment({ paymentMilestones, updateMilestone, addMilestone, removeMilestone, paymentTotal, form, updateField }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const inputSx = getInputSx(isDark);
+
   return (
     <Stack spacing={0}>
       <SectionHeader icon={<PaymentsOutlined />} title="Payment schedule" />
@@ -385,33 +598,63 @@ function StepPayment({ paymentMilestones, updateMilestone, addMilestone, removeM
       <Block>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
           <BlockLabel title="Payment milestones" />
-          <Chip label={`Total: ${paymentTotal}%`}
-            sx={{ bgcolor: paymentTotal === 100 ? "#e6f8f4" : "#fff3e0", color: paymentTotal === 100 ? "#085041" : "#854f0b", fontWeight: 700, borderRadius: 2, height: 26, fontSize: "0.78rem" }} />
+          <Chip
+            label={`Total: ${paymentTotal}%`}
+            sx={{
+              bgcolor: paymentTotal === 100
+                ? (isDark ? "rgba(16, 185, 129, 0.2)" : "#e6f8f4")
+                : (isDark ? "rgba(245, 158, 11, 0.2)" : "#fff3e0"),
+              color: paymentTotal === 100
+                ? (isDark ? "#34d399" : "#085041")
+                : (isDark ? "#fbbf24" : "#854f0b"),
+              fontWeight: 700,
+              borderRadius: 2,
+              height: 26,
+              fontSize: "0.78rem",
+            }}
+          />
         </Box>
         <Stack spacing={1}>
           {paymentMilestones.map((item, i) => (
             <Stack key={i} direction="row" spacing={1} alignItems="center">
-              <Typography sx={{ width: 20, color: "#94a3b8", fontSize: "0.8rem", textAlign: "center", flexShrink: 0 }}>{i + 1}</Typography>
+              <Typography sx={{ width: 20, color: isDark ? "#64748b" : "#94a3b8", fontSize: "0.8rem", textAlign: "center", flexShrink: 0 }}>{i + 1}</Typography>
               <TF value={item.label} onChange={(e) => updateMilestone(i, "label", e.target.value)} />
               <TF value={item.percent} onChange={(e) => updateMilestone(i, "percent", e.target.value)} sx={{ ...inputSx, width: 90, flexShrink: 0 }} />
-              <Typography sx={{ color: "#94a3b8", fontWeight: 700, flexShrink: 0 }}>%</Typography>
+              <Typography sx={{ color: isDark ? "#64748b" : "#94a3b8", fontWeight: 700, flexShrink: 0 }}>%</Typography>
               <IconButton onClick={() => removeMilestone(i)} size="small" sx={{ color: "#f9735b", flexShrink: 0 }}>
                 <HighlightOff fontSize="small" />
               </IconButton>
             </Stack>
           ))}
         </Stack>
-        <Button variant="outlined" startIcon={<Add />} onClick={addMilestone}
-          sx={{ mt: 1.5, borderRadius: 2, textTransform: "none", borderColor: "rgba(0,0,0,0.18)", color: "#475569" }}>
+        <Button
+          variant="outlined"
+          startIcon={<Add />}
+          onClick={addMilestone}
+          sx={{
+            mt: 1.5,
+            borderRadius: 2,
+            textTransform: "none",
+            borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.18)",
+            color: isDark ? "#cbd5e1" : "#475569",
+          }}
+        >
           Add milestone
         </Button>
       </Block>
 
       <Block>
         <BlockLabel title="GST / payment note" hint="Shown below the milestones" />
-        <TextField multiline minRows={2} fullWidth size="small"
+        <TextField
+          multiline
+          minRows={2}
+          fullWidth
+          size="small"
           placeholder="e.g. GST is included in the quoted amount. Leave blank to use the standard GST note."
-          value={form.paymentNote} onChange={updateField("paymentNote")} sx={inputSx} />
+          value={form.paymentNote}
+          onChange={updateField("paymentNote")}
+          sx={inputSx}
+        />
       </Block>
     </Stack>
   );
@@ -434,6 +677,10 @@ function StepSections({ sectionsToShow, toggle }) {
 }
 
 function StepInstallation({ steps: isteps, update, add, remove }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const inputSx = getInputSx(isDark);
+
   return (
     <Stack spacing={0}>
       <SectionHeader icon={<BuildCircleOutlined />} title="Installation process" />
@@ -441,11 +688,31 @@ function StepInstallation({ steps: isteps, update, add, remove }) {
         <BlockLabel title="Installation steps" hint="Shown on the quotation" />
         <Stack spacing={1.5}>
           {isteps.map((step, i) => (
-            <Paper key={i} variant="outlined" sx={{ p: 2, borderRadius: 2.5, borderColor: "rgba(0,0,0,0.09)", display: "grid", gridTemplateColumns: "1fr auto", gap: 1.5 }}>
+            <Paper
+              key={i}
+              variant="outlined"
+              sx={{
+                p: 2,
+                borderRadius: 2.5,
+                borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.09)",
+                bgcolor: isDark ? "#0f172a" : "#fff",
+                display: "grid",
+                gridTemplateColumns: "1fr auto",
+                gap: 1.5,
+              }}
+            >
               <Stack spacing={1.25}>
                 <TF value={step.title} onChange={(e) => update(i, "title", e.target.value)} label="Step title" />
-                <TextField multiline minRows={2} fullWidth size="small" label="Description"
-                  value={step.description} onChange={(e) => update(i, "description", e.target.value)} sx={inputSx} />
+                <TextField
+                  multiline
+                  minRows={2}
+                  fullWidth
+                  size="small"
+                  label="Description"
+                  value={step.description}
+                  onChange={(e) => update(i, "description", e.target.value)}
+                  sx={inputSx}
+                />
               </Stack>
               <IconButton onClick={() => remove(i)} size="small" sx={{ color: "#f9735b", alignSelf: "flex-start", mt: 0.5 }}>
                 <HighlightOff fontSize="small" />
@@ -453,8 +720,18 @@ function StepInstallation({ steps: isteps, update, add, remove }) {
             </Paper>
           ))}
         </Stack>
-        <Button variant="outlined" startIcon={<Add />} onClick={add}
-          sx={{ mt: 1.5, borderRadius: 2, textTransform: "none", borderColor: "rgba(0,0,0,0.18)", color: "#475569" }}>
+        <Button
+          variant="outlined"
+          startIcon={<Add />}
+          onClick={add}
+          sx={{
+            mt: 1.5,
+            borderRadius: 2,
+            textTransform: "none",
+            borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.18)",
+            color: isDark ? "#cbd5e1" : "#475569",
+          }}
+        >
           Add step
         </Button>
       </Block>
@@ -463,6 +740,9 @@ function StepInstallation({ steps: isteps, update, add, remove }) {
 }
 
 function StepTerms({ termsGroups, updateHeading, updatePoint, addPoint, removePoint, addGroup, removeGroup }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
   return (
     <Stack spacing={0}>
       <SectionHeader icon={<DescriptionOutlined />} title="Terms & conditions" />
@@ -470,7 +750,16 @@ function StepTerms({ termsGroups, updateHeading, updatePoint, addPoint, removePo
         <BlockLabel title="Terms groups" hint="Groups of bullet points shown on the quotation" />
         <Stack spacing={2}>
           {termsGroups.map((group, gi) => (
-            <Paper key={gi} variant="outlined" sx={{ p: 2, borderRadius: 2.5, borderColor: "rgba(0,0,0,0.09)" }}>
+            <Paper
+              key={gi}
+              variant="outlined"
+              sx={{
+                p: 2,
+                borderRadius: 2.5,
+                borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.09)",
+                bgcolor: isDark ? "#0f172a" : "#fff",
+              }}
+            >
               <Stack spacing={1.25}>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <TF value={group.heading} onChange={(e) => updateHeading(gi, e.target.value)} label="Group heading" />
@@ -480,23 +769,37 @@ function StepTerms({ termsGroups, updateHeading, updatePoint, addPoint, removePo
                 </Stack>
                 {group.points.map((pt, pi) => (
                   <Stack key={pi} direction="row" spacing={1} alignItems="center">
-                    <Typography sx={{ color: "#94a3b8", fontSize: "1.2rem", lineHeight: 1, flexShrink: 0 }}>·</Typography>
+                    <Typography sx={{ color: isDark ? "#64748b" : "#94a3b8", fontSize: "1.2rem", lineHeight: 1, flexShrink: 0 }}>·</Typography>
                     <TF value={pt} onChange={(e) => updatePoint(gi, pi, e.target.value)} />
                     <IconButton onClick={() => removePoint(gi, pi)} size="small" sx={{ color: "#f9735b", flexShrink: 0 }}>
                       <HighlightOff fontSize="small" />
                     </IconButton>
                   </Stack>
                 ))}
-                <Button variant="text" startIcon={<Add fontSize="small" />} onClick={() => addPoint(gi)}
-                  sx={{ alignSelf: "flex-start", textTransform: "none", color: "#64748b", fontSize: "0.8rem" }}>
+                <Button
+                  variant="text"
+                  startIcon={<Add fontSize="small" />}
+                  onClick={() => addPoint(gi)}
+                  sx={{ alignSelf: "flex-start", textTransform: "none", color: isDark ? "#94a3b8" : "#64748b", fontSize: "0.8rem" }}
+                >
                   Add point
                 </Button>
               </Stack>
             </Paper>
           ))}
         </Stack>
-        <Button variant="outlined" startIcon={<Add />} onClick={addGroup}
-          sx={{ mt: 1.5, borderRadius: 2, textTransform: "none", borderColor: "rgba(0,0,0,0.18)", color: "#475569" }}>
+        <Button
+          variant="outlined"
+          startIcon={<Add />}
+          onClick={addGroup}
+          sx={{
+            mt: 1.5,
+            borderRadius: 2,
+            textTransform: "none",
+            borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.18)",
+            color: isDark ? "#cbd5e1" : "#475569",
+          }}
+        >
           Add terms group
         </Button>
       </Block>
@@ -506,6 +809,10 @@ function StepTerms({ termsGroups, updateHeading, updatePoint, addPoint, removePo
 
 // ─── main component ───────────────────────────────────────────────────────────
 export default function QuotationEditor({ initialMode = null }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const sectionBg = isDark ? "#0f172a" : "#f5f7fa";
+
   const navigate = useNavigate();
   const location = useLocation();
   const { fetchAPI } = useAuth();
@@ -663,64 +970,152 @@ export default function QuotationEditor({ initialMode = null }) {
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: sectionBg, p: { xs: 1.5, md: 2.5 } }}>
-      <Paper elevation={0} sx={{ minHeight: "calc(100vh - 40px)", borderRadius: 4, border: "0.5px solid rgba(0,0,0,0.09)", overflow: "hidden", bgcolor: "#fff" }}>
-
+      <Paper
+        elevation={0}
+        sx={{
+          minHeight: "calc(100vh - 40px)",
+          borderRadius: 4,
+          border: isDark ? "1px solid rgba(255,255,255,0.08)" : "0.5px solid rgba(0,0,0,0.09)",
+          overflow: "hidden",
+          bgcolor: isDark ? "#1e293b" : "#fff",
+        }}
+      >
         {/* ── top bar ── */}
-        <Stack direction="row" alignItems="center" justifyContent="space-between"
-          sx={{ px: { xs: 2, md: 3 }, py: 2, borderBottom: "0.5px solid rgba(0,0,0,0.08)", bgcolor: "#fff" }}>
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          sx={{
+            px: { xs: 2, md: 3 },
+            py: 2,
+            borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : "0.5px solid rgba(0,0,0,0.08)",
+            bgcolor: isDark ? "#1e293b" : "#fff",
+          }}
+        >
           <Stack direction="row" spacing={1.5} alignItems="center">
-            <IconButton onClick={() => navigate(-1)}
-              sx={{ border: "0.5px solid rgba(0,0,0,0.16)", borderRadius: 2, color: "#1f2937", p: 0.75 }}>
+            <IconButton
+              onClick={() => navigate(-1)}
+              sx={{
+                border: isDark ? "1px solid rgba(255,255,255,0.16)" : "0.5px solid rgba(0,0,0,0.16)",
+                borderRadius: 2,
+                color: isDark ? "#f1f5f9" : "#1f2937",
+                p: 0.75,
+              }}
+            >
               <ArrowBack fontSize="small" />
             </IconButton>
             <Box>
-              <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", color: "#1f2937" }}>
-                {pageTitle} - <Box component="span" sx={{ color: BRAND }}>{quotationTitle}</Box>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", color: isDark ? "#f8fafc" : "#1f2937" }}>
+                {pageTitle} - <Box component="span" sx={{ color: isDark ? "#60a5fa" : BRAND }}>{quotationTitle}</Box>
               </Typography>
-              <Typography variant="caption" sx={{ color: "#6b7280" }}>
+              <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#6b7280" }}>
                 {helperText}
-              </Typography>
-            </Box>
-            <Box sx={{ display: "none" }}>
-              <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", color: "#1f2937" }}>
-                Edit quotation — <Box component="span" sx={{ color: BRAND }}>{quotationTitle}</Box>
-              </Typography>
-              <Typography variant="caption" sx={{ color: "#6b7280" }}>
-                Update the quotation fields shown in the proposal editor
               </Typography>
             </Box>
           </Stack>
           <Stack direction="row" spacing={1}>
-            <Button variant="outlined" onClick={() => navigate(-1)}
-              sx={{ borderRadius: 2, textTransform: "none", borderColor: "rgba(0,0,0,0.18)", color: "#475569", fontSize: "0.85rem" }}>
+            <Button
+              variant="outlined"
+              onClick={() => navigate(-1)}
+              sx={{
+                borderRadius: 2,
+                textTransform: "none",
+                borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.18)",
+                color: isDark ? "#cbd5e1" : "#475569",
+                fontSize: "0.85rem",
+              }}
+            >
               Cancel
             </Button>
-            <Button variant="contained" startIcon={<CheckCircleOutline fontSize="small" />}
+            <Button
+              variant="contained"
+              startIcon={<CheckCircleOutline fontSize="small" />}
               onClick={saveQuotation}
-              sx={{ borderRadius: 2, textTransform: "none", bgcolor: BRAND, boxShadow: "none", fontSize: "0.85rem", "&:hover": { bgcolor: "#1d4ed8", boxShadow: "none" } }}>
+              sx={{
+                borderRadius: 2,
+                textTransform: "none",
+                bgcolor: isDark ? "#2563eb" : BRAND,
+                boxShadow: "none",
+                fontSize: "0.85rem",
+                "&:hover": { bgcolor: "#1d4ed8", boxShadow: "none" },
+              }}
+            >
               {saveLabel}
             </Button>
           </Stack>
         </Stack>
 
         <Box sx={{ display: "flex", minHeight: "calc(100vh - 72px)", flexDirection: { xs: "column", md: "row" } }}>
-
           {/* ── sidebar ── */}
-          <Box sx={{ width: { xs: "100%", md: 230 }, borderRight: { xs: "none", md: "0.5px solid rgba(0,0,0,0.08)" }, borderBottom: { xs: "0.5px solid rgba(0,0,0,0.08)", md: "none" }, p: { xs: 1.5, md: 2 }, bgcolor: "#fff", flexShrink: 0 }}>
+          <Box
+            sx={{
+              width: { xs: "100%", md: 230 },
+              borderRight: { xs: "none", md: isDark ? "1px solid rgba(255,255,255,0.08)" : "0.5px solid rgba(0,0,0,0.08)" },
+              borderBottom: { xs: isDark ? "1px solid rgba(255,255,255,0.08)" : "0.5px solid rgba(0,0,0,0.08)", md: "none" },
+              p: { xs: 1.5, md: 2 },
+              bgcolor: isDark ? "#1e293b" : "#fff",
+              flexShrink: 0,
+            }}
+          >
             <Stack spacing={0.5}>
               {steps.map((step) => {
                 const active = step.id === activeStep;
                 return (
-                  <Button key={step.id} fullWidth variant="text" onClick={() => setActiveStep(step.id)}
+                  <Button
+                    key={step.id}
+                    fullWidth
+                    variant="text"
+                    onClick={() => setActiveStep(step.id)}
                     startIcon={
                       <Stack direction="row" spacing={1} alignItems="center">
-                        <Box sx={{ width: 22, height: 22, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 700, flexShrink: 0, bgcolor: active ? BRAND : "rgba(0,0,0,0.06)", color: active ? "#fff" : "#64748b", transition: "all .15s" }}>
+                        <Box
+                          sx={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: "50%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "0.7rem",
+                            fontWeight: 700,
+                            flexShrink: 0,
+                            bgcolor: active
+                              ? (isDark ? "#3b82f6" : BRAND)
+                              : (isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)"),
+                            color: active ? "#fff" : (isDark ? "#94a3b8" : "#64748b"),
+                            transition: "all .15s",
+                          }}
+                        >
                           {step.id}
                         </Box>
-                        <Box sx={{ color: active ? BRAND : "#94a3b8", display: "flex", alignItems: "center" }}>{step.icon}</Box>
+                        <Box sx={{ color: active ? (isDark ? "#60a5fa" : BRAND) : (isDark ? "#64748b" : "#94a3b8"), display: "flex", alignItems: "center" }}>
+                          {step.icon}
+                        </Box>
                       </Stack>
                     }
-                    sx={{ justifyContent: "flex-start", textTransform: "none", py: 1.25, px: 1.5, borderRadius: 2.5, bgcolor: active ? BRAND_LIGHT : "transparent", color: active ? BRAND_TEXT : "#64748b", fontSize: "0.825rem", fontWeight: active ? 700 : 500, "& .MuiButton-startIcon": { mr: 1 }, "&:hover": { bgcolor: active ? "#dfe9ff" : "rgba(0,0,0,0.04)" }, transition: "all .15s" }}>
+                    sx={{
+                      justifyContent: "flex-start",
+                      textTransform: "none",
+                      py: 1.25,
+                      px: 1.5,
+                      borderRadius: 2.5,
+                      bgcolor: active
+                        ? (isDark ? "rgba(59,130,246,0.2)" : BRAND_LIGHT)
+                        : "transparent",
+                      color: active
+                        ? (isDark ? "#93c5fd" : BRAND_TEXT)
+                        : (isDark ? "#94a3b8" : "#64748b"),
+                      fontSize: "0.825rem",
+                      fontWeight: active ? 700 : 500,
+                      "& .MuiButton-startIcon": { mr: 1 },
+                      "&:hover": {
+                        bgcolor: active
+                          ? (isDark ? "rgba(59,130,246,0.25)" : "#dfe9ff")
+                          : (isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
+                      },
+                      transition: "all .15s",
+                    }}
+                  >
                     {step.label}
                   </Button>
                 );

@@ -53,39 +53,57 @@ const PRIMARY_COLOR = "#3a5ac8";
 const SECONDARY_COLOR = "#2c489e";
 
 const ROLE_CONFIG = {
-  ADMIN: { label: "Admin / Super Admin", icon: <Security />, description: "Full system access and administration rights", color: "#3a5ac8", shortDesc: "Admin Access" },
-  PROJECT_HEAD: { label: "Project Head", icon: <Group />, description: "Project oversight and exception approval", color: "#3a5ac8", shortDesc: "Project Head" },
-  MANAGER: { label: "Manager (Backend / Ops)", icon: <Group />, description: "Manage operations and approvals", color: "#3a5ac8", shortDesc: "Operations Manager" },
+  ADMIN: { label: "Admin", icon: <Security />, description: "Full system access and administration rights", color: "#3a5ac8", shortDesc: "Admin" },
+  MANAGER: { label: "Manager", icon: <Group />, description: "Manage operations and approvals", color: "#3a5ac8", shortDesc: "Manager" },
   SUPERVISOR: { label: "Supervisor", icon: <Group />, description: "Supervise installers and approve worksheets", color: "#3a5ac8", shortDesc: "Supervisor" },
-  INSTALLER: { label: "Installer", icon: <Person />, description: "Field work and daily worksheet entry", color: "#3a5ac8", shortDesc: "Field Installer" },
+  INSTALLER: { label: "Installer", icon: <Person />, description: "Field work and daily worksheet entry", color: "#3a5ac8", shortDesc: "Installer" },
   Admin_panel: {
-    label: "Admin Panel",
+    label: "Admin",
     icon: <Security />,
     description: "Full system access and administration rights",
     color: "#3a5ac8",
-    shortDesc: "Admin Access",
+    shortDesc: "Admin",
   },
   ZSM: {
-    label: "Operation Lead",
+    label: "Manager",
     icon: <Group />,
     description: "Manage regional teams and operations",
     color: "#3a5ac8",
-    shortDesc: "Regional Manager",
+    shortDesc: "Manager",
   },
   Incharge: {
-    label: "Incharge",
+    label: "Supervisor",
     icon: <Group />,
     description: "Manage local teams and field operations",
     color: "#3a5ac8",
-    shortDesc: "Incharge",
+    shortDesc: "Supervisor",
   },
   TEAM: {
-    label: "Team Member",
+    label: "Installer",
     icon: <Person />,
     description: "Field operations and lead management",
     color: "#3a5ac8",
-    shortDesc: "Field Executive",
+    shortDesc: "Installer",
   },
+};
+
+const normalizeRole = (role) => {
+  const key = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const map = {
+    admin: "Admin_panel",
+    admin_panel: "Admin_panel",
+    head_office: "Admin_panel",
+    headoffice: "Admin_panel",
+    project_head: "ZSM",
+    manager: "ZSM",
+    zsm: "ZSM",
+    operation_lead: "ZSM",
+    supervisor: "Incharge",
+    incharge: "Incharge",
+    installer: "TEAM",
+    team: "TEAM",
+  };
+  return map[key] || role;
 };
 
 // Form steps for mobile stepper
@@ -154,12 +172,13 @@ export default function AddUserPage() {
 
   // Determine available roles based on current user's role
   const getAvailableRoles = () => {
-    if (["ADMIN", "Admin_panel"].includes(currentUser?.role)) {
-      return ["ADMIN", "PROJECT_HEAD", "MANAGER", "SUPERVISOR", "INSTALLER"];
-    } else if (["PROJECT_HEAD", "MANAGER"].includes(currentUser?.role)) {
-      return ["SUPERVISOR", "INSTALLER"];
-    } else if (currentUser?.role === "SUPERVISOR") {
-      return ["INSTALLER"];
+    const currentRole = normalizeRole(currentUser?.role);
+    if (currentRole === "Admin_panel") {
+      return ["Admin_panel", "ZSM", "Incharge", "TEAM"];
+    } else if (currentRole === "ZSM") {
+      return ["Incharge", "TEAM"];
+    } else if (currentRole === "Incharge") {
+      return ["TEAM"];
     }
     return [];
   };
@@ -178,17 +197,18 @@ export default function AddUserPage() {
       const data = await fetchAPI(`/user/getAllUsers?page=1&limit=100`);
       if (data.success) {
         let filteredSupervisors = [];
-        if (currentUser?.role === "Admin_panel") {
+        const currentRole = normalizeRole(currentUser?.role);
+        if (currentRole === "Admin_panel") {
           filteredSupervisors = data.result.users.filter((u) =>
-            ["Admin_panel", "ZSM", "Incharge"].includes(u.role),
+            ["Admin_panel", "ZSM", "Incharge"].includes(normalizeRole(u.role)),
           );
-        } else if (currentUser?.role === "ZSM") {
+        } else if (currentRole === "ZSM") {
           filteredSupervisors = data.result.users.filter((u) =>
-            ["ZSM", "Incharge"].includes(u.role),
+            ["ZSM", "Incharge"].includes(normalizeRole(u.role)),
           );
-        } else if (currentUser?.role === "Incharge") {
+        } else if (currentRole === "Incharge") {
           filteredSupervisors = data.result.users.filter(
-            (u) => u.role === "Incharge",
+            (u) => normalizeRole(u.role) === "Incharge",
           );
         }
         setSupervisors(filteredSupervisors);
@@ -952,10 +972,12 @@ export default function AddUserPage() {
                   Role Hierarchy
                 </Typography>
                 <Typography variant="body2">
-                  {currentUser.role === "Admin_panel" &&
-                    "Admin Panel -> Operation Lead -> Incharge -> TEAM"}
-                  {currentUser.role === "ZSM" && "Operation Lead -> Incharge -> TEAM"}
-                  {currentUser.role === "Incharge" && "Incharge -> TEAM"}
+                  {normalizeRole(currentUser.role) === "Admin_panel" &&
+                    "Admin -> Manager -> Supervisor -> Installer"}
+                  {normalizeRole(currentUser.role) === "ZSM" &&
+                    "Manager -> Supervisor -> Installer"}
+                  {normalizeRole(currentUser.role) === "Incharge" &&
+                    "Supervisor -> Installer"}
                 </Typography>
                 <Typography variant="caption" sx={{ mt: 1, display: "block" }}>
                   You can only manage roles below your own in the hierarchy.

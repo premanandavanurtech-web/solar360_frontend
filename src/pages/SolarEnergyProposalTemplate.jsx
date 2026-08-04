@@ -46,7 +46,7 @@ export const solarProposalData = {
   company_name: "VanurTech Solar Energy Pvt. Ltd.",
   company_email: "proposal@vanurtechsolar.in",
   company_phone: "+91 98765 00000",
-  company_logo_url: "/solar-crm-logo.png",
+  company_logo_url: "/solar360-logo.png",
   company_tagline: "Engineering reliable clean-energy outcomes for Indian rooftops.",
 
   quote_ref: "VSE/ON-GRID/2026/0142",

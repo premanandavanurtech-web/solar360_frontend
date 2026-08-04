@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
@@ -13,6 +13,7 @@ import {
   Divider,
   Dialog,
   DialogActions,
+  DialogContent,
   DialogTitle,
   IconButton,
   LinearProgress,
@@ -26,6 +27,8 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import {
   Add,
@@ -34,6 +37,7 @@ import {
   AssignmentTurnedIn,
   AccessTime,
   CameraAltOutlined,
+  Cancel,
   CheckCircle,
   ChevronRight,
   Close,
@@ -55,6 +59,7 @@ import {
   PictureAsPdfOutlined,
   PlaceOutlined,
   RemoveRedEye,
+  Restore,
   WhatsApp,
   Workspaces,
 } from "@mui/icons-material";
@@ -73,7 +78,7 @@ import {
   resolveVisitStatus,
 } from "../utils/visitStatus";
 import ConvertProjectDialog from "../components/ConvertProjectDialog";
-import { EditLeadModal } from "./LeadOverview";
+import { EditLeadModal, ROLE_PERMISSIONS } from "./LeadOverview";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const TOKEN = {
@@ -106,6 +111,7 @@ const DETAIL_TABS = [
   { key: "siteVisits", label: "Site visits" },
   { key: "siteSurvey", label: "Site survey" },
   { key: "quotations", label: "Quotations"  },
+  { key: "threeDDesign", label: "3D Design"  },
   { key: "reminders",  label: "Reminders"   },
 ];
 
@@ -1422,6 +1428,159 @@ const card = (extra = {}) => ({
   },
 });
 
+const AssignLeadModal = React.memo(({ open, onClose, lead, onAssign, userRole, showSnackbar }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { fetchAPI, user } = useAuth();
+
+  const [loading, setLoading] = useState(false);
+  const [inchargeUsers, setInchargeUsers] = useState([]);
+  const [teamUsers, setTeamUsers] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [fetchingUsers, setFetchingUsers] = useState(false);
+  const [error, setError] = useState(null);
+  const [assignToRole, setAssignToRole] = useState("");
+  const [showRoleSelection, setShowRoleSelection] = useState(false);
+  const [availableRoles, setAvailableRoles] = useState([]);
+
+  const permissions = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.TEAM;
+  const canAssign = permissions?.assign;
+
+  const resetModal = useCallback(() => {
+    setInchargeUsers([]); setTeamUsers([]); setSelectedUserId(""); setError(null);
+    setAssignToRole(""); setShowRoleSelection(false); setAvailableRoles([]);
+  }, []);
+
+  const fetchUsers = useCallback(async (roleToFetch = assignToRole) => {
+    if (!canAssign || !roleToFetch) return;
+    try {
+      setFetchingUsers(true); setError(null);
+      let endpoint = "", queryParams = "?page=1&limit=100";
+      if (userRole === "Admin_panel" || userRole === "ZSM") {
+        endpoint = roleToFetch === "Incharge" ? "/user/managerList" : "/user/getManagerUnderUserList";
+      } else if (userRole === "Incharge" && roleToFetch === "TEAM") {
+        endpoint = "/user/getManagerUnderUserList";
+        queryParams = `?page=1&limit=100&supervisorId=${user?._id}`;
+      }
+      if (!endpoint) { setError(`No endpoint configured for ${roleToFetch} from ${userRole}`); return; }
+      const response = await fetchAPI(`${endpoint}${queryParams}`);
+      if (response?.success) {
+        let usersData = response.result?.users || (Array.isArray(response.result) ? response.result : response.result?.data || (response.result ? [response.result] : []));
+        const filteredUsers = usersData.filter((u) => {
+          const hasRole = u.role === roleToFetch, isActive = u.status === "active";
+          let supervised = true;
+          if (userRole === "Incharge" && roleToFetch === "TEAM") supervised = u.supervisor?._id === user?._id || u.supervisorId === user?._id || u.supervisor === user?._id;
+          return hasRole && isActive && supervised;
+        });
+        if (roleToFetch === "Incharge") setInchargeUsers(filteredUsers);
+        else if (roleToFetch === "TEAM") setTeamUsers(filteredUsers);
+        if (filteredUsers.length === 0) setError(`No active ${roleToFetch === "Incharge" ? "Incharges" : "team members"} available.`);
+        else setError(null);
+      } else setError(response?.message || `Failed to load ${roleToFetch} users.`);
+    } catch (error) { setError(error.message || "Failed to load users. Please try again."); }
+    finally { setFetchingUsers(false); }
+  }, [assignToRole, canAssign, fetchAPI, user?._id, userRole]);
+
+  useEffect(() => {
+    if (open && canAssign) {
+      resetModal();
+      const roles = permissions?.canAssignTo || [];
+      setAvailableRoles(roles);
+      if (roles.length > 1) { setShowRoleSelection(true); setAssignToRole(""); }
+      else if (roles.length === 1) { setAssignToRole(roles[0]); setShowRoleSelection(false); fetchUsers(roles[0]); }
+    } else { resetModal(); }
+  }, [open, canAssign, permissions, resetModal, fetchUsers]);
+
+  const handleRoleChange = async (event) => {
+    const role = event.target.value;
+    setAssignToRole(role); setSelectedUserId("");
+    if (role === "Incharge") setInchargeUsers([]); else if (role === "TEAM") setTeamUsers([]);
+    setError(null); await fetchUsers(role);
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedUserId) { setError("Please select a user to assign"); return; }
+    if (!assignToRole) { setError("Please select a role to assign to"); return; }
+    setLoading(true);
+    try {
+      const assignData = { leadId: lead?._id, targetId: selectedUserId, targetRole: assignToRole };
+      if (assignToRole === "Incharge") assignData.managerId = selectedUserId;
+      else if (assignToRole === "TEAM") assignData.userId = selectedUserId;
+      const response = await fetchAPI("/lead/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(assignData) });
+      if (response?.success) { onAssign?.(response.result); onClose(); showSnackbar?.("Lead assigned successfully", "success"); }
+      else throw new Error(response?.message || "Failed to assign lead");
+    } catch (error) { setError(error.message); showSnackbar?.(error.message || "Failed to assign lead", "error"); }
+    finally { setLoading(false); }
+  };
+
+  const getAvailableUsers = () => assignToRole === "Incharge" ? inchargeUsers : assignToRole === "TEAM" ? teamUsers : [];
+
+  if (!canAssign) return null;
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={isMobile}
+      PaperProps={{ sx: { borderRadius: isMobile ? 0 : 3, overflow: "hidden" } }}>
+      <Box sx={{ p: 2.5, bgcolor: "#0f172a", color: "#fff" }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Typography variant="h6" fontWeight={700}>Assign Lead</Typography>
+          <IconButton onClick={onClose} sx={{ color: "#fff" }}><Close /></IconButton>
+        </Stack>
+      </Box>
+      <DialogContent sx={{ py: 3, px: 3 }}>
+        {error && !fetchingUsers && (
+          <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} action={<Button color="inherit" size="small" onClick={() => fetchUsers(assignToRole)}>Retry</Button>}>{error}</Alert>
+        )}
+        {fetchingUsers ? (
+          <Box display="flex" flexDirection="column" alignItems="center" py={4} gap={1.5}>
+            <CircularProgress size={32} />
+            <Typography variant="body2">Loading available users...</Typography>
+          </Box>
+        ) : (
+          <Stack spacing={2.5}>
+            {showRoleSelection && (
+              <Box>
+                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>Assign To Role</Typography>
+                <Stack direction="row" spacing={1.5}>
+                  {availableRoles.map((role) => (
+                    <Box key={role} onClick={() => handleRoleChange({ target: { value: role } })}
+                      sx={{ flex: 1, p: 1.5, borderRadius: 2, border: `2px solid ${assignToRole === role ? "#f97316" : "#cbd5e1"}`, cursor: "pointer" }}>
+                      <Typography variant="body2" fontWeight={700}>{role}</Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            )}
+            {(assignToRole || !showRoleSelection) && (
+              <Box>
+                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>Select User</Typography>
+                <Stack spacing={1} sx={{ maxHeight: 220, overflow: "auto" }}>
+                  {getAvailableUsers().map((u) => (
+                    <Box key={u._id} onClick={() => setSelectedUserId(u._id)}
+                      sx={{ p: 1.5, borderRadius: 2, border: `2px solid ${selectedUserId === u._id ? "#f97316" : "#e2e8f0"}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 1.5 }}>
+                      <Avatar sx={{ bgcolor: "#f97316", width: 32, height: 32, fontSize: 13 }}>{u.firstName?.[0]}</Avatar>
+                      <Box flex={1}>
+                        <Typography variant="body2" fontWeight={600}>{u.firstName} {u.lastName}</Typography>
+                        <Typography variant="caption" color="text.secondary">{u.email}</Typography>
+                      </Box>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            )}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ p: 2.5 }}>
+        <Button onClick={onClose} variant="outlined">Cancel</Button>
+        <Button onClick={handleSubmit} variant="contained" disabled={loading || !selectedUserId} sx={{ bgcolor: "#f97316", "&:hover": { bgcolor: "#ea580c" } }}>
+          {loading ? "Assigning..." : "Assign Lead"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+});
+AssignLeadModal.displayName = "AssignLeadModal";
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function LeadDetailsPage() {
   const { leadId }       = useParams();
@@ -1442,6 +1601,9 @@ export default function LeadDetailsPage() {
     location: "",
   });
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const openAssignDialog = useCallback(() => setAssignDialogOpen(true), []);
+  const closeAssignDialog = useCallback(() => setAssignDialogOpen(false), []);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [projectDialogSubmitting, setProjectDialogSubmitting] = useState(false);
   const [projectTypeDialogOpen, setProjectTypeDialogOpen] = useState(false);
@@ -1464,6 +1626,9 @@ export default function LeadDetailsPage() {
   const [processingReminderId, setProcessingReminderId] = useState("");
   const [quotationEntries, setQuotationEntries] = useState([]);
   const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
+  const [loseLeadDialogOpen, setLoseLeadDialogOpen] = useState(false);
+  const [loseReason, setLoseReason] = useState("");
+  const [submittingLoseLead, setSubmittingLoseLead] = useState(false);
   const [snackbar,     setSnackbar]    = useState({ open: false, message: "", severity: "info" });
   const userRole = user?.role || "TEAM";
   const fileInputRef = React.useRef(null);
@@ -1815,6 +1980,8 @@ export default function LeadDetailsPage() {
     return customReminderEntries.sort((a, b) => new Date(a.sortAt || 0) - new Date(b.sortAt || 0));
   }, [customActivities, leadDetails?._id, leadDetails?.followUpDate, leadDetails?.followUpNotes]);
 
+  const hasThreeDDesign = Boolean(leadDetails?.threeDDesign && Array.isArray(leadDetails.threeDDesign.points) && leadDetails.threeDDesign.points.length >= 3);
+
   const tabCounts = useMemo(() => ({
     activity: timelineEntries.length + customActivities.length,
     comments: customActivities.filter((item) => item.type === "Comment" || isCallActivity(item)).length,
@@ -1822,8 +1989,9 @@ export default function LeadDetailsPage() {
     siteVisits: siteVisitEntries.length,
     siteSurvey: hasSiteSurvey ? 1 : 0,
     quotations: quotationEntries.length,
+    threeDDesign: hasThreeDDesign ? 1 : 0,
     reminders: reminderEntries.length,
-  }), [customActivities, hasSiteSurvey, quotationEntries.length, reminderEntries.length, siteVisitEntries.length, timelineEntries.length, uploadedDocumentCount]);
+  }), [customActivities, hasSiteSurvey, hasThreeDDesign, quotationEntries.length, reminderEntries.length, siteVisitEntries.length, timelineEntries.length, uploadedDocumentCount]);
 
   const showInfo = useCallback((msg) => {
     setSnackbar({ open: true, message: msg, severity: "info" });
@@ -2290,6 +2458,38 @@ export default function LeadDetailsPage() {
     }
   }, [fetchAPI, fetchLeadDetails, leadDetails?._id]);
 
+  const openThreeDDesign = useCallback(() => {
+    if (!leadDetails?._id) return;
+    navigate("/3d-design/new", {
+      state: {
+        lead: leadDetails,
+        returnTo: `/all-leads/${leadDetails._id}`,
+        initialLocation:
+          siteSurveyRecord?.latitude && siteSurveyRecord?.longitude
+            ? {
+                lat: Number(siteSurveyRecord.latitude),
+                lng: Number(siteSurveyRecord.longitude),
+                locationName:
+                  siteSurveyRecord.locationName ||
+                  leadDetails?.address ||
+                  [leadDetails?.city, leadDetails?.state, leadDetails?.pincode]
+                    .filter(Boolean)
+                    .join(", "),
+              }
+            : null,
+      },
+    });
+  }, [leadDetails, navigate, siteSurveyRecord]);
+  const viewThreeDDesignPreview = useCallback(() => {
+    if (!leadDetails?._id || !leadDetails?.threeDDesign) return;
+    navigate("/3d-design/preview", {
+      state: {
+        design: leadDetails.threeDDesign,
+        lead: leadDetails,
+        returnTo: `/all-leads/${leadDetails._id}`,
+      },
+    });
+  }, [leadDetails, navigate]);
   const handleProjectAction = useCallback((actionKey) => {
     closeProjectMenu();
 
@@ -2299,24 +2499,7 @@ export default function LeadDetailsPage() {
     }
 
     if (actionKey === "3d-design") {
-      navigate("/3d-design/new", {
-        state: {
-          lead: leadDetails,
-          initialLocation:
-            siteSurveyRecord?.latitude && siteSurveyRecord?.longitude
-              ? {
-                  lat: Number(siteSurveyRecord.latitude),
-                  lng: Number(siteSurveyRecord.longitude),
-                  locationName:
-                    siteSurveyRecord.locationName ||
-                    leadDetails?.address ||
-                    [leadDetails?.city, leadDetails?.state, leadDetails?.pincode]
-                      .filter(Boolean)
-                      .join(", "),
-                }
-              : null,
-        },
-      });
+      openThreeDDesign();
       return;
     }
 
@@ -2337,8 +2520,98 @@ export default function LeadDetailsPage() {
 
     if (actionKey === "move-back-to-lead") {
       setRevertProjectDialogOpen(true);
+      return;
     }
-  }, [closeProjectMenu, leadDetails, navigate, openProjectTypeDialog, showInfo, siteSurveyRecord]);
+
+    if (actionKey === "mark-as-lost") {
+      if (leadDetails?.status === "Missed Leads") {
+        handleReopenLead();
+      } else {
+        setLoseReason("");
+        setLoseLeadDialogOpen(true);
+      }
+    }
+  }, [closeProjectMenu, leadDetails, openProjectTypeDialog, openThreeDDesign, showInfo]);
+
+  const handleMarkAsLost = useCallback(async () => {
+    if (!leadDetails?._id) return;
+    try {
+      setSubmittingLoseLead(true);
+      const payload = {
+        status: "Missed Leads",
+      };
+      if (loseReason.trim()) {
+        payload.reason = loseReason.trim();
+        payload.notes = loseReason.trim();
+      }
+      const response = await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (response?.success === false) {
+        throw new Error(response.message || "Failed to mark lead as lost.");
+      }
+
+      try {
+        await fetchAPI(`/lead/${leadDetails._id}/activity`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "Comment",
+            title: "Lead Marked as Lost",
+            message: loseReason.trim() ? `Lead marked as lost. Reason: ${loseReason.trim()}` : "Lead marked as lost.",
+          }),
+        });
+      } catch (e) {
+        console.error("Failed to add activity log for lead loss", e);
+      }
+
+      setLeadDetails((prev) => ({ ...(prev || {}), status: "Missed Leads" }));
+      setLoseLeadDialogOpen(false);
+      setLoseReason("");
+      setSnackbar({ open: true, message: "Lead marked as lost.", severity: "warning" });
+      await fetchLeadDetails();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "Failed to mark lead as lost.", severity: "error" });
+    } finally {
+      setSubmittingLoseLead(false);
+    }
+  }, [fetchAPI, fetchLeadDetails, leadDetails?._id, loseReason]);
+
+  const handleReopenLead = useCallback(async () => {
+    if (!leadDetails?._id) return;
+    try {
+      const response = await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "New" }),
+      });
+      if (response?.success === false) {
+        throw new Error(response.message || "Failed to reopen lead.");
+      }
+
+      try {
+        await fetchAPI(`/lead/${leadDetails._id}/activity`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "Comment",
+            title: "Lead Reopened",
+            message: "Lead reopened from Missed Leads.",
+          }),
+        });
+      } catch (e) {
+        console.error("Failed to add activity log", e);
+      }
+
+      setLeadDetails((prev) => ({ ...(prev || {}), status: "New" }));
+      setSnackbar({ open: true, message: "Lead reopened successfully.", severity: "success" });
+      await fetchLeadDetails();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "Failed to reopen lead.", severity: "error" });
+    }
+  }, [fetchAPI, fetchLeadDetails, leadDetails?._id]);
   const handleEditSaved = useCallback(async (updatedLead) => {
     setLeadDetails((prev) => ({ ...(prev || {}), ...(updatedLead || {}) }));
     setSnackbar({ open: true, message: "Lead updated successfully", severity: "success" });
@@ -4070,6 +4343,120 @@ export default function LeadDetailsPage() {
         </Paper>
       );
     }
+    if (tab === "threeDDesign") {
+      const design = leadDetails?.threeDDesign || null;
+      const pointCount = Array.isArray(design?.points) ? design.points.length : 0;
+      const panelCount = Number(design?.solarLayout?.count || 0);
+      const updatedAt = design?.updatedAt ? new Date(design.updatedAt) : null;
+      const updatedLabel = updatedAt && !Number.isNaN(updatedAt.getTime()) ? format(updatedAt, "dd MMM yyyy, hh:mm a") : "Not saved yet";
+
+      return (
+        <Paper {...card({ p: 0, minHeight: 355, overflow: "hidden" })}>
+          <Stack sx={{ minHeight: 355 }}>
+            <Box sx={{ display: "flex", justifyContent: "flex-end", px: 2.5, pt: 2.25 }}>
+              <Button
+                variant="contained"
+                disableElevation
+                startIcon={<GridViewOutlined sx={{ fontSize: 17 }} />}
+                onClick={openThreeDDesign}
+                sx={{
+                  borderRadius: 2.5,
+                  px: 2.1,
+                  py: 1.1,
+                  bgcolor: TOKEN.primary,
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: "0.96rem",
+                  textTransform: "none",
+                  boxShadow: "0 12px 28px rgba(59, 91, 219, 0.22)",
+                  "&:hover": { bgcolor: TOKEN.primaryLight },
+                }}
+              >
+                {hasThreeDDesign ? "Open 3D Design" : "Create 3D Design"}
+              </Button>
+            </Box>
+
+            <Box sx={{ flex: 1, px: 3.5, pb: 3.5, pt: 1.5 }}>
+              {hasThreeDDesign ? (
+                <Stack direction={{ xs: "column", md: "row" }} spacing={2.5} alignItems="stretch">
+                  <Box
+                    sx={{
+                      width: { xs: "100%", md: 320 },
+                      minHeight: 190,
+                      borderRadius: 3,
+                      border: `1px solid ${TOKEN.border}`,
+                      bgcolor: TOKEN.surfaceAlt,
+                      overflow: "hidden",
+                      display: "grid",
+                      placeItems: "center",
+                    }}
+                  >
+                    {design?.captureImage ? (
+                      <Box component="img" src={design.captureImage} alt="Saved 3D design" sx={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      <Stack spacing={1} alignItems="center" sx={{ color: TOKEN.textMuted }}>
+                        <GridViewOutlined sx={{ fontSize: 42 }} />
+                        <Typography variant="body2" fontWeight={700}>3D design saved</Typography>
+                      </Stack>
+                    )}
+                  </Box>
+
+                  <Stack spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="h6" sx={{ color: TOKEN.text, fontWeight: 900 }}>
+                      Saved 3D Solar Design
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: TOKEN.textSub }}>
+                      This design is stored with this lead and can be opened again from here.
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      <Chip size="small" label={`${pointCount} roof points`} />
+                      <Chip size="small" label={`${panelCount} solar panels`} />
+                      <Chip size="small" label={design?.status || "saved"} />
+                    </Stack>
+                    <Typography variant="caption" sx={{ color: TOKEN.textMuted }}>
+                      Last saved: {updatedLabel}
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        disableElevation
+                        startIcon={<RemoveRedEye sx={{ fontSize: 16 }} />}
+                        onClick={viewThreeDDesignPreview}
+                        sx={{ borderRadius: 2, bgcolor: TOKEN.primary, textTransform: "none", fontWeight: 800, "&:hover": { bgcolor: TOKEN.primaryLight } }}
+                      >
+                        View 3D Preview
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<Edit sx={{ fontSize: 16 }} />}
+                        onClick={openThreeDDesign}
+                        sx={{ borderRadius: 2, borderColor: TOKEN.border, color: TOKEN.text, textTransform: "none", fontWeight: 800 }}
+                      >
+                        Edit Design
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </Stack>
+              ) : (
+                <Box sx={{ minHeight: 250, display: "grid", placeItems: "center", textAlign: "center" }}>
+                  <Stack spacing={1.4} alignItems="center">
+                    <Box sx={{ width: 54, height: 54, borderRadius: "50%", bgcolor: TOKEN.primaryMuted, color: TOKEN.primary, display: "grid", placeItems: "center" }}>
+                      <GridViewOutlined sx={{ fontSize: 28 }} />
+                    </Box>
+                    <Typography variant="h6" sx={{ color: TOKEN.text, fontWeight: 900 }}>No 3D design saved yet</Typography>
+                    <Typography variant="body2" sx={{ color: TOKEN.textSub, maxWidth: 420 }}>
+                      Create a 3D solar design for this lead. After you click Save in the 3D designer, it will be stored here.
+                    </Typography>
+                  </Stack>
+                </Box>
+              )}
+            </Box>
+          </Stack>
+        </Paper>
+      );
+    }
     if (tab === "reminders") {
       const getReminderStatus = (scheduledAt) => {
         const scheduledDate = scheduledAt ? new Date(scheduledAt) : null;
@@ -4332,25 +4719,105 @@ export default function LeadDetailsPage() {
 
             <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap sx={{ justifyContent: { xs: "flex-start", lg: "flex-end" } }}>
               <Button
-                variant="contained"
+                variant="outlined"
                 startIcon={<Edit sx={{ fontSize: 13 }} />}
                 onClick={openEditDialog}
-                sx={{ height: 36, borderRadius: TOKEN.radiusSm, px: 1.75, bgcolor: "rgba(255,255,255,0.08)", border: "0.5px solid rgba(255,255,255,0.16)", color: "#fff", fontWeight: 500, fontSize: "0.78rem", textTransform: "none", boxShadow: "none", "&:hover": { bgcolor: "rgba(255,255,255,0.14)", boxShadow: "none" } }}
+                sx={{
+                  height: 36,
+                  borderRadius: 999,
+                  px: 2,
+                  borderColor: "#f97316",
+                  color: "#f97316",
+                  bgcolor: "rgba(249, 115, 22, 0.08)",
+                  fontWeight: 700,
+                  fontSize: "0.78rem",
+                  textTransform: "none",
+                  "&:hover": {
+                    borderColor: "#ea580c",
+                    bgcolor: "rgba(249, 115, 22, 0.16)",
+                  },
+                }}
               >
                 Edit
               </Button>
+              {leadDetails?.status === "Missed Leads" ? (
+                <Button
+                  variant="outlined"
+                  startIcon={<Restore sx={{ fontSize: 13 }} />}
+                  onClick={handleReopenLead}
+                  sx={{
+                    height: 36,
+                    borderRadius: 999,
+                    px: 2,
+                    borderColor: "#10b981",
+                    color: "#10b981",
+                    bgcolor: "rgba(16, 185, 129, 0.08)",
+                    fontWeight: 700,
+                    fontSize: "0.78rem",
+                    textTransform: "none",
+                    "&:hover": {
+                      borderColor: "#059669",
+                      bgcolor: "rgba(16, 185, 129, 0.16)",
+                    },
+                  }}
+                >
+                  Reopen
+                </Button>
+              ) : (
+                <Button
+                  variant="outlined"
+                  startIcon={<Cancel sx={{ fontSize: 13 }} />}
+                  onClick={() => {
+                    setLoseReason("");
+                    setLoseLeadDialogOpen(true);
+                  }}
+                  sx={{
+                    height: 36,
+                    borderRadius: 999,
+                    px: 2,
+                    borderColor: "#ef4444",
+                    color: "#ef4444",
+                    bgcolor: "rgba(239, 68, 68, 0.08)",
+                    fontWeight: 700,
+                    fontSize: "0.78rem",
+                    textTransform: "none",
+                    "&:hover": {
+                      borderColor: "#dc2626",
+                      bgcolor: "rgba(239, 68, 68, 0.16)",
+                    },
+                  }}
+                >
+                  Lose
+                </Button>
+              )}
               <Button
                 variant="contained"
                 disableElevation
                 endIcon={<ArrowForward sx={{ fontSize: 15 }} />}
                 onClick={handleConvertToProject}
-                sx={{ height: 36, minWidth: { xs: 196, sm: 216 }, borderRadius: TOKEN.radiusSm, px: 2.25, bgcolor: "#fff", color: TOKEN.text, border: "0.5px solid rgba(255,255,255,0.6)", fontWeight: 600, fontSize: "0.78rem", textTransform: "none", "&:hover": { bgcolor: "#f1f5f9" }, "& .MuiButton-endIcon": { color: TOKEN.primary, ml: 0.75 } }}
+                sx={{
+                  height: 36,
+                  minWidth: { xs: 196, sm: 216 },
+                  borderRadius: 999,
+                  px: 2.25,
+                  background: "linear-gradient(45deg, #f97316 0%, #ea580c 100%)",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: "0.78rem",
+                  textTransform: "none",
+                  boxShadow: "0 4px 14px rgba(249, 115, 22, 0.35)",
+                  "&:hover": {
+                    background: "linear-gradient(45deg, #ea580c 0%, #c2410c 100%)",
+                    boxShadow: "0 6px 18px rgba(249, 115, 22, 0.45)",
+                  },
+                  "& .MuiButton-endIcon": { color: "#fff", ml: 0.75 },
+                }}
               >
                 {leadDetails?.isProject ? "Open project" : "Convert to project"}
               </Button>
               <IconButton
                 onClick={openProjectMenu}
-                sx={{ width: 36, height: 36, borderRadius: TOKEN.radiusSm, color: "#fff", bgcolor: "rgba(255,255,255,0.08)", border: "0.5px solid rgba(255,255,255,0.16)", "&:hover": { bgcolor: "rgba(255,255,255,0.14)" } }}
+                sx={{ width: 36, height: 36, borderRadius: 999, color: "#fff", bgcolor: "rgba(255,255,255,0.08)", border: "0.5px solid rgba(255,255,255,0.16)", "&:hover": { bgcolor: "rgba(255,255,255,0.14)" } }}
               >
                 <MoreVert sx={{ fontSize: 16 }} />
               </IconButton>
@@ -4441,15 +4908,21 @@ export default function LeadDetailsPage() {
             ) : (
               <Box sx={{ px: 2, py: 1.5 }}>
                 <Box
+                  onClick={openAssignDialog}
                   sx={{
-                    px: 1.25,
+                    px: 1.5,
                     py: 1,
                     borderRadius: TOKEN.radiusSm,
-                    bgcolor: alpha("#ef4444", 0.08),
-                    border: `1px solid ${alpha("#ef4444", 0.28)}`,
+                    bgcolor: "rgba(249, 115, 22, 0.08)",
+                    border: "1px solid #ea580c",
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                    "&:hover": {
+                      bgcolor: "rgba(249, 115, 22, 0.16)",
+                    },
                   }}
                 >
-                  <Typography sx={{ fontSize: "0.82rem", color: "#b91c1c", fontWeight: 800 }}>
+                  <Typography sx={{ fontSize: "0.82rem", color: "#ea580c", fontWeight: 800, textAlign: "center" }}>
                     Assign the lead
                   </Typography>
                 </Box>
@@ -4558,6 +5031,7 @@ export default function LeadDetailsPage() {
             : []),
           { key: "vendor-agreement", label: "Vendor Agreement", icon: <ContentCopy fontSize="small" />, color: "#59c7b4", dividerBefore: true },
           { key: "work-order", label: "Work Order", icon: <AssignmentTurnedIn fontSize="small" />, color: "#59c7b4" },
+          { key: "mark-as-lost", label: leadDetails?.status === "Missed Leads" ? "Reopen Lead" : "Mark Lead as Lost", icon: leadDetails?.status === "Missed Leads" ? <Restore fontSize="small" /> : <Cancel fontSize="small" />, color: leadDetails?.status === "Missed Leads" ? "#10b981" : "#ef4444", dividerBefore: true },
         ].map((item) => (
           <Box key={item.key}>
             {item.dividerBefore && <Divider sx={{ my: 1, borderColor: TOKEN.border }} />}
@@ -4930,6 +5404,82 @@ export default function LeadDetailsPage() {
         onSave={handleEditSaved}
         userRole={userRole}
       />
+
+      <AssignLeadModal
+        open={assignDialogOpen}
+        onClose={closeAssignDialog}
+        lead={leadDetails}
+        onAssign={fetchLeadDetails}
+        userRole={userRole}
+        showSnackbar={(msg, sev) => setSnackbar({ open: true, message: msg, severity: sev })}
+      />
+
+      {/* Lose Lead Confirmation Dialog */}
+      <Dialog
+        open={loseLeadDialogOpen}
+        onClose={() => !submittingLoseLead && setLoseLeadDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: TOKEN.radius, p: 1 },
+        }}
+      >
+        <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Box sx={{ p: 1, borderRadius: "50%", bgcolor: alpha("#ef4444", 0.1), color: "#dc2626", display: "grid", placeItems: "center" }}>
+              <Cancel sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h6" fontWeight={800} fontSize="1.1rem" color={TOKEN.text}>
+              Mark Lead as Lost
+            </Typography>
+          </Stack>
+          <IconButton size="small" onClick={() => setLoseLeadDialogOpen(false)} disabled={submittingLoseLead}>
+            <Close sx={{ fontSize: 18 }} />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.5 }}>
+            Are you sure you want to mark <strong>{leadDetails?.firstName} {leadDetails?.lastName}</strong> as lost? This will update the lead status to <strong>Missed Leads</strong>.
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            label="Reason for loss (Optional)"
+            placeholder="e.g. Budget constraints, selected competitor, lost interest..."
+            value={loseReason}
+            onChange={(e) => setLoseReason(e.target.value)}
+            variant="outlined"
+            size="small"
+            sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, pt: 1 }}>
+          <Button
+            onClick={() => setLoseLeadDialogOpen(false)}
+            disabled={submittingLoseLead}
+            sx={{ textTransform: "none", fontWeight: 700, color: TOKEN.textSub }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleMarkAsLost}
+            variant="contained"
+            disabled={submittingLoseLead}
+            sx={{
+              bgcolor: "#dc2626",
+              color: "#fff",
+              fontWeight: 800,
+              textTransform: "none",
+              borderRadius: 2,
+              px: 2.5,
+              "&:hover": { bgcolor: "#b91c1c" },
+            }}
+          >
+            {submittingLoseLead ? "Marking..." : "Confirm Lose"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

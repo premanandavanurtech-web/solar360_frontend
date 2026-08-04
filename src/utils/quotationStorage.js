@@ -1,5 +1,5 @@
-export const CURRENT_QUOTATION_STORAGE_KEY = "solar-crm-current-quotation";
-export const QUOTATION_LIBRARY_STORAGE_KEY = "solar-crm-quotations";
+export const CURRENT_QUOTATION_STORAGE_KEY = "solar360-current-quotation";
+export const QUOTATION_LIBRARY_STORAGE_KEY = "solar360-quotations";
 
 const QUOTATION_VALIDITY_DAYS = 14;
 
@@ -13,7 +13,14 @@ const parseStoredValue = (rawValue, fallbackValue) => {
 
 const readStorage = (key, fallbackValue) => {
   try {
-    return parseStoredValue(localStorage.getItem(key), fallbackValue);
+    const val = localStorage.getItem(key);
+    if (val !== null) return parseStoredValue(val, fallbackValue);
+    const legacyKey = key.replace(/^solar360-/, "solar-crm-");
+    if (legacyKey !== key) {
+      const legacyVal = localStorage.getItem(legacyKey);
+      if (legacyVal !== null) return parseStoredValue(legacyVal, fallbackValue);
+    }
+    return fallbackValue;
   } catch {
     return fallbackValue;
   }

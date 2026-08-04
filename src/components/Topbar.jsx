@@ -28,6 +28,7 @@ import {
   Stack,
   Alert,
   InputAdornment,
+  useTheme,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -43,6 +44,8 @@ import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
   Edit as EditIcon,
+  DarkMode as DarkModeIcon,
+  LightMode as LightModeIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from "../contexts/AuthContext";
@@ -59,6 +62,8 @@ const getToken = () =>
 
 const getAvatarUrl = (avatar) => toBackendAssetUrl(avatar);
 
+const isAdminRole = (role) => ["ADMIN", "Admin_panel"].includes(role);
+
 const Topbar = ({ 
   toggleDrawer, 
   isMobile, 
@@ -67,6 +72,8 @@ const Topbar = ({
   sidebarWidth = 280,
   collapsedWidth = 70 
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
   const [notificationAnchor, setNotificationAnchor] = useState(null);
@@ -185,7 +192,7 @@ const Topbar = ({
   }, [profileOpen, user]);
 
   useEffect(() => {
-    if (!profileOpen || user?.role !== 'Admin_panel' || !user?._id) return;
+    if (!profileOpen || !isAdminRole(user?.role) || !user?._id) return;
 
     const fetchAdminPassword = async () => {
       try {
@@ -224,7 +231,7 @@ const Topbar = ({
       if (profileForm.newPassword) {
         formData.append(
           'currentPassword',
-          user?.role === 'Admin_panel' ? adminCurrentPassword : profileForm.currentPassword
+          isAdminRole(user?.role) ? adminCurrentPassword : profileForm.currentPassword
         );
         formData.append('newPassword', profileForm.newPassword);
       }
@@ -417,8 +424,8 @@ const Topbar = ({
         position="fixed"
         elevation={0}
         sx={{
-          bgcolor: '#ffffff',
-          borderBottom: '1px solid #e0e0e0',
+          bgcolor: isDark ? '#080c14' : '#ffffff',
+          borderBottom: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e0e0e0',
           width: getAppBarWidth,
           ml: isMobile ? 0 : (drawerOpen ? `${sidebarWidth}px` : `${collapsedWidth}px`),
           zIndex: (theme) => theme.zIndex.drawer + 1,
@@ -437,8 +444,8 @@ const Topbar = ({
                 <IconButton 
                   onClick={toggleDrawer} 
                   sx={{ 
-                    color: '#0f1f3d',
-                    '&:hover': { bgcolor: alpha('#0f1f3d', 0.1) },
+                    color: isDark ? '#f8fafc' : '#0f1f3d',
+                    '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.1)' : alpha('#0f1f3d', 0.1) },
                   }}
                 >
                   <MenuIcon />
@@ -454,21 +461,21 @@ const Topbar = ({
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
-                  bgcolor: '#f5f5f5',
+                  bgcolor: isDark ? '#0e1628' : '#f5f5f5',
                   borderRadius: 2,
                   px: 2,
                   py: 0.5,
                   width: { sm: 250, md: 300 },
                   ml: { sm: 2, md: 4 },
-                  border: '1px solid #e0e0e0',
-                  '&:hover': { bgcolor: '#f0f0f0' },
+                  border: isDark ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid #e0e0e0',
+                  '&:hover': { bgcolor: isDark ? '#121c32' : '#f0f0f0' },
                   '&:focus-within': {
-                    borderColor: '#0f1f3d',
-                    boxShadow: `0 0 0 2px ${alpha('#0f1f3d', 0.2)}`,
+                    borderColor: '#2563eb',
+                    boxShadow: `0 0 0 2px rgba(37, 99, 235, 0.25)`,
                   },
                 }}
               >
-                <SearchIcon sx={{ color: '#999', mr: 1, fontSize: 20 }} />
+                <SearchIcon sx={{ color: isDark ? '#64748b' : '#999', mr: 1, fontSize: 20 }} />
                 <InputBase
                   placeholder="Search..."
                   value={searchQuery}
@@ -476,7 +483,8 @@ const Topbar = ({
                   sx={{
                     flex: 1,
                     fontSize: '0.9rem',
-                    '& input::placeholder': { color: '#999', opacity: 1 },
+                    color: isDark ? '#f8fafc' : 'inherit',
+                    '& input::placeholder': { color: isDark ? '#64748b' : '#999', opacity: 1 },
                   }}
                 />
               </Box>
@@ -490,8 +498,8 @@ const Topbar = ({
               <Tooltip title="Search" arrow>
                 <IconButton
                   sx={{
-                    color: '#666',
-                    '&:hover': { bgcolor: alpha('#0f1f3d', 0.05) },
+                    color: isDark ? '#94a3b8' : '#666',
+                    '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : alpha('#0f1f3d', 0.05) },
                   }}
                   onClick={() => setMobileSearchOpen(true)}
                 >
@@ -500,14 +508,32 @@ const Topbar = ({
               </Tooltip>
             )}
 
+            <Tooltip title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"} arrow>
+              <IconButton
+                onClick={() => {
+                  const nextMode = isDark ? "light" : "dark";
+                  localStorage.setItem("appThemeMode", nextMode);
+                  window.dispatchEvent(new CustomEvent("themeModeChange", { detail: nextMode }));
+                }}
+                sx={{
+                  color: isDark ? '#fbbf24' : '#64748b',
+                  border: isDark ? '1px solid rgba(251, 191, 36, 0.3)' : '1px solid #e2e8f0',
+                  bgcolor: isDark ? '#0e1628' : '#ffffff',
+                  '&:hover': { bgcolor: isDark ? '#121c32' : alpha('#0f1f3d', 0.06) },
+                }}
+              >
+                {isDark ? <LightModeIcon sx={{ fontSize: 20 }} /> : <DarkModeIcon sx={{ fontSize: 20 }} />}
+              </IconButton>
+            </Tooltip>
+
             <Tooltip title="Notifications" arrow>
               <IconButton
                 onClick={handleNotificationMenu}
                 sx={{
-                  color: '#0f1f3d',
-                  border: '1px solid #e2e8f0',
-                  bgcolor: '#ffffff',
-                  '&:hover': { bgcolor: alpha('#0f1f3d', 0.06) },
+                  color: isDark ? '#60a5fa' : '#0f1f3d',
+                  border: isDark ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid #e2e8f0',
+                  bgcolor: isDark ? '#0e1628' : '#ffffff',
+                  '&:hover': { bgcolor: isDark ? '#121c32' : alpha('#0f1f3d', 0.06) },
                 }}
               >
                 <Badge badgeContent={unreadCount} color="error" overlap="circular">
@@ -526,7 +552,7 @@ const Topbar = ({
                   cursor: 'pointer',
                   p: 0.5,
                   borderRadius: '8px',
-                  '&:hover': { bgcolor: alpha('#0f1f3d', 0.05) },
+                  '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : alpha('#0f1f3d', 0.05) },
                 }}
                 onClick={handleProfileMenu}
               >
@@ -536,7 +562,7 @@ const Topbar = ({
                     onError: () => setAvatarLoadFailed(true),
                   }}
                   sx={{
-                    bgcolor: avatarSrc ? 'transparent' : '#0f1f3d',
+                    bgcolor: avatarSrc ? 'transparent' : '#1e40af',
                     width: { xs: 32, sm: 36 },
                     height: { xs: 32, sm: 36 },
                     fontSize: { xs: '0.8rem', sm: '0.9rem' },
@@ -550,15 +576,15 @@ const Topbar = ({
                   <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
                     <Typography 
                       fontSize="0.9rem"
-                      fontWeight={500}
-                      color="#333333"
+                      fontWeight={600}
+                      color={isDark ? '#f8fafc' : '#333333'}
                       sx={{ lineHeight: 1.2 }}
                     >
                       {displayName}
                     </Typography>
                     <Typography 
                       fontSize="0.75rem" 
-                      color="#666666"
+                      color={isDark ? '#94a3b8' : '#666666'}
                       sx={{ lineHeight: 1.2 }}
                     >
                       {userRole}
@@ -731,7 +757,7 @@ const Topbar = ({
             />
             <Divider />
             <Typography fontWeight={600}>Change password</Typography>
-            {user?.role === 'Admin_panel' ? (
+            {isAdminRole(user?.role) ? (
               <TextField
                 label="Current password"
                 type={showCurrentPassword ? 'text' : 'password'}

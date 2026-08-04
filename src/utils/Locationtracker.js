@@ -1,18 +1,4 @@
 // utils/Locationtracker.js
-//
-// FIXES applied
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. startTracking() now accepts EITHER a raw socket OR a React ref
-//    ({ current: socket }).  Pass socketRef from useSocket() so the tracker
-//    always uses the live socket even after a reconnect.
-//
-// 2. safeEmit() reads socketRef.current — it never holds a stale reference.
-//
-// 3. flushBuffer() guards against missing userId and re-queues failed points.
-//
-// 4. watchPosition maximumAge:0 — never serve a cached position.
-//
-// 5. MIN_MOVE_METRES = 8 with accuracy-aware gating to suppress stationary GPS drift.
 
 import { toast } from "../components/useToast.jsx";
 import { API_ORIGIN } from "./apiConfig";
@@ -68,8 +54,8 @@ async function reverseGeocode(lat, lng) {
 const DWELL_RADIUS_M  = 50;
 const DWELL_TIME_MS   = 15 * 60 * 1000;  // 15 minutes
 const COOLDOWN_MS     = 30 * 60 * 1000;  // 30 minutes
-const MIN_MOVE_METRES = 8;                // ignore only very small GPS drift when user is stationary
-const MAX_REASONABLE_ACCURACY_METRES = 80;
+const MIN_MOVE_METRES = 12;               // filter out small indoor movements < 12 meters
+const MAX_REASONABLE_ACCURACY_METRES = 100; // filter out low accuracy GPS points > 100 meters
 const TRACKING_POLL_MS = 10_000;          // backup GPS poll for browsers that throttle watchPosition
 
 function getEffectiveMoveThreshold(currentAccuracy = 0, lastAccuracy = 0) {
@@ -92,12 +78,7 @@ let flushTimer       = null;
 let pollTimer        = null;
 let isTracking       = false;
 let onPointCallback  = null;
-
-/**
- * socketRef — either a React ref ({ current: Socket }) or a raw Socket.
- * safeEmit() handles both so callers can pass either form.
- */
-let socketRef = null;
+let socketRef        = null;
 
 let _userId            = null;
 let _shownPoorGpsToast = false;
@@ -110,13 +91,9 @@ const getToken = () =>
   localStorage.getItem("accessToken") || "";
 
 // ── safeEmit ─────────────────────────────────────────────────────────────────
-// Resolves the live socket from either a React ref or a direct socket object.
-// Using a ref means we always read the *current* socket, never a stale closure.
 function getSocket() {
   if (!socketRef) return null;
-  // React ref shape: { current: Socket }
   if (typeof socketRef === "object" && "current" in socketRef) return socketRef.current;
-  // Raw socket passed directly
   return socketRef;
 }
 
@@ -126,12 +103,6 @@ function safeEmit(event, data) {
 }
 
 // ─── startTracking ────────────────────────────────────────────────────────────
-/**
- * @param {Function}        onPoint    — callback(allPoints[]) on every new GPS point
- * @param {Ref|Socket|null} socket     — pass socketRef from useSocket() (preferred)
- *                                       or the raw socket instance
- * @param {string}          userId     — REQUIRED: user._id so flushBuffer can tag points
- */
 export function startTracking(onPoint = null, socket = null, userId = null) {
   if (isTracking) {
     console.warn("[Tracker] Already tracking — ignoring duplicate startTracking call.");
@@ -150,13 +121,13 @@ export function startTracking(onPoint = null, socket = null, userId = null) {
     );
   }
 
-  console.log("🟢 TRACKING STARTED — userId:", userId, "| 20 m jitter filter | DB flush every 30 s");
+  console.log("🟢 TRACKING STARTED — userId:", userId, "| 12 m indoor filter | DB flush every 30 s");
 
   isTracking         = true;
   buffer             = [];
   allPoints          = [];
   onPointCallback    = onPoint;
-  socketRef          = socket;  // store ref or raw socket — safeEmit handles both
+  socketRef          = socket;
   dwellAnchor        = null;
   recentVisitSpots   = [];
   _shownPoorGpsToast = false;
@@ -167,10 +138,16 @@ export function startTracking(onPoint = null, socket = null, userId = null) {
   // ── Emit location:start with the initial position ────────────────────────
   navigator.geolocation.getCurrentPosition(
     (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) {
+        console.warn("[GPS] Initial position is zero (0,0) — skipping location:start");
+        return;
+      }
       safeEmit("location:start", {
         userId,
-        lat:      pos.coords.latitude,
-        lng:      pos.coords.longitude,
+        lat,
+        lng,
         accuracy: pos.coords.accuracy ?? 0,
       });
     },
@@ -178,7 +155,7 @@ export function startTracking(onPoint = null, socket = null, userId = null) {
     { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 }
   );
 
-  // ── watchPosition — the only GPS source ──────────────────────────────────
+  // ── watchPosition — high accuracy live GPS ─────────────────────────────────
   watchId = navigator.geolocation.watchPosition(
     (pos) => {
       const pt = {
@@ -189,19 +166,25 @@ export function startTracking(onPoint = null, socket = null, userId = null) {
         time:     new Date(pos.timestamp).toISOString(),
       };
 
-      // 1. Accuracy gate
-      if (pt.accuracy > MAX_REASONABLE_ACCURACY_METRES) {
-        console.log(`[GPS] ⏭ Skipped — accuracy ±${Math.round(pt.accuracy)} m too poor`);
+      // 0. Zero coordinate gate: filter out invalid (0, 0) default coordinates
+      if (Math.abs(pt.lat) < 0.001 && Math.abs(pt.lng) < 0.001) {
+        console.log(`[GPS] ⏭ Skipped — zero coordinate (0, 0)`);
         return;
       }
 
-      // 2. Distance gate — 15 m minimum movement
+      // 1. Accuracy gate: filter out low-accuracy GPS points (> 100 meters)
+      if (pt.accuracy > MAX_REASONABLE_ACCURACY_METRES) {
+        console.log(`[GPS] ⏭ Skipped — accuracy ±${Math.round(pt.accuracy)} m too poor (> 100m)`);
+        return;
+      }
+
+      // 2. Distance gate — 12 m minimum indoor movement filter
       const last = allPoints[allPoints.length - 1];
       if (last) {
         const dist = distanceMetres(last.lat, last.lng, pt.lat, pt.lng);
         const minMoveRequired = getEffectiveMoveThreshold(pt.accuracy, last.accuracy);
         if (dist < minMoveRequired) {
-          console.log(`[GPS] ⏭ Jitter ${dist.toFixed(1)} m < ${minMoveRequired.toFixed(1)} m — skipped`);
+          console.log(`[GPS] ⏭ Small movement ${dist.toFixed(1)} m < ${minMoveRequired.toFixed(1)} m — skipped`);
           return;
         }
 
@@ -214,8 +197,8 @@ export function startTracking(onPoint = null, socket = null, userId = null) {
         }
       }
 
-      // 4. Warn on weak (but still acceptable) signal
-      if (pt.accuracy > 60 && !_shownPoorGpsToast) {
+      // 4. Warn on weak signal
+      if (pt.accuracy > 70 && !_shownPoorGpsToast) {
         toast.warn(`GPS accuracy is poor (±${Math.round(pt.accuracy)} m). Move to open sky.`, {
           title: "Weak GPS Signal",
         });
@@ -250,7 +233,6 @@ export function startTracking(onPoint = null, socket = null, userId = null) {
         buffer.push(pt);
       }
 
-      // Notify the map component
       if (typeof onPointCallback === "function") {
         onPointCallback([...allPoints]);
       }
@@ -268,12 +250,12 @@ export function startTracking(onPoint = null, socket = null, userId = null) {
     },
     {
       enableHighAccuracy: true,
-      maximumAge:         0,      // always fresh — never use cached position
+      maximumAge:         0,      // always fresh position
       timeout:            20_000,
     }
   );
 
-  // ── DB flush every 30 s ────────────────────────────────────────────────
+  // ── Backup poll timer ─────────────────────────────────────────────────────
   pollTimer = setInterval(() => {
     if (!isTracking) return;
 
@@ -287,8 +269,11 @@ export function startTracking(onPoint = null, socket = null, userId = null) {
           time:     new Date(pos.timestamp || Date.now()).toISOString(),
         };
 
+        if (Math.abs(pt.lat) < 0.001 && Math.abs(pt.lng) < 0.001) {
+          return;
+        }
+
         if (pt.accuracy > MAX_REASONABLE_ACCURACY_METRES) {
-          console.log(`[GPS Poll] Skipped - accuracy +/-${Math.round(pt.accuracy)} m too poor`);
           return;
         }
 
@@ -297,11 +282,9 @@ export function startTracking(onPoint = null, socket = null, userId = null) {
           const dist = distanceMetres(last.lat, last.lng, pt.lat, pt.lng);
           const minMoveRequired = getEffectiveMoveThreshold(pt.accuracy, last.accuracy);
           if (dist < minMoveRequired) {
-            console.log(`[GPS Poll] Jitter ${dist.toFixed(1)} m < ${minMoveRequired.toFixed(1)} m - skipped`);
             return;
           }
           if (dist / 1000 > 10) {
-            console.warn(`[GPS Poll] Jump ${(dist / 1000).toFixed(1)} km - skipped`);
             return;
           }
         }
@@ -327,10 +310,9 @@ export function startTracking(onPoint = null, socket = null, userId = null) {
         }
 
         handleAutoVisit(pt);
-        console.log(`[GPS Poll] Saved point - total:${allPoints.length}`);
       },
       (err) => console.warn("[GPS Poll] failed:", err.message),
-      { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 }
     );
   }, TRACKING_POLL_MS);
 
@@ -362,7 +344,6 @@ export function stopTracking() {
   safeEmit("location:stop", { userId: _userId });
   socketRef = null;
 
-  // Flush remaining points before clearing state
   flushBuffer();
 
   isTracking      = false;
@@ -380,74 +361,14 @@ export function getTrackPoints()      { return [...allPoints]; }
 export function clearTrackPoints()    { allPoints = []; buffer = []; }
 export function isCurrentlyTracking() { return isTracking; }
 
-export function simulateTrackingMovement(options = {}) {
-  const steps = Number(options.steps ?? 8);
-  const stepMetres = Number(options.stepMetres ?? 25);
-  const delayMs = Number(options.delayMs ?? 700);
-  const last = allPoints[allPoints.length - 1];
-  const startLat = Number(options.lat ?? last?.lat);
-  const startLng = Number(options.lng ?? last?.lng);
-
-  if (!_userId) {
-    console.error("[GPS Sim] Start tracking first. No userId is active.");
-    return;
-  }
-
-  if (!Number.isFinite(startLat) || !Number.isFinite(startLng)) {
-    console.error("[GPS Sim] Pass a start coordinate: window.__simulateLiveTrack({ lat: 20.28117, lng: 85.85636 })");
-    return;
-  }
-
-  console.log(`[GPS Sim] Sending ${steps} fake movement point(s) for userId: ${_userId}`);
-
-  for (let i = 1; i <= steps; i++) {
-    setTimeout(() => {
-      const pt = {
-        lat:      startLat + (stepMetres * i) / 111_320,
-        lng:      startLng + (stepMetres * i) / (111_320 * Math.cos((startLat * Math.PI) / 180)),
-        speed:    1.4,
-        accuracy: 10,
-        time:     new Date().toISOString(),
-      };
-
-      allPoints.push(pt);
-      safeEmit("location:update", {
-        userId:   _userId,
-        lat:      pt.lat,
-        lng:      pt.lng,
-        speed:    pt.speed,
-        accuracy: pt.accuracy,
-        time:     pt.time,
-      });
-
-      if (typeof onPointCallback === "function") {
-        onPointCallback([...allPoints]);
-      }
-
-      handleAutoVisit(pt);
-      console.log(`[GPS Sim] Point ${i}/${steps}: ${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)}`);
-    }, delayMs * (i - 1));
-  }
-}
-
 // ─── flushBuffer ──────────────────────────────────────────────────────────────
 async function flushBuffer() {
-  if (!buffer.length) {
-    console.log("[Flush] 🔄 Skipped — buffer empty");
-    return;
-  }
-
-  if (!_userId) {
-    console.error("[Flush] ❌ No userId — aborting flush. Points re-queued.");
-    // Points stay in buffer — do NOT clear them
-    return;
-  }
+  if (!buffer.length) return;
+  if (!_userId) return;
 
   const token  = getToken();
   const points = [...buffer];
-  buffer = []; // optimistically clear before the await
-
-  console.log(`[Flush] 📤 Sending ${points.length} point(s) — userId: ${_userId}`);
+  buffer = [];
 
   try {
     const res = await fetch(`${API}/api/v1/location/track/bulk`, {
@@ -462,12 +383,9 @@ async function flushBuffer() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     _flushFailCount = 0;
-    console.log(`[Flush] ✅ Saved ${points.length} point(s) for userId: ${_userId}`);
   } catch (err) {
-    // Re-queue failed points at the front so nothing is lost
     buffer = [...points, ...buffer];
     _flushFailCount++;
-    console.error(`[Flush] ❌ Failed (attempt ${_flushFailCount}):`, err.message);
     if (_flushFailCount === 3) {
       toast.error("Location data not reaching server. Check your connection.", {
         title: "Sync Failed",
@@ -549,5 +467,21 @@ async function createAutoVisit(lat, lng, dwellMins = 15) {
       title: "Visit Save Failed",
     });
     console.warn("[AutoVisit] Failed:", err.message);
+  }
+}
+
+export function simulateTrackingMovement(coords = {}) {
+  if (!coords?.lat || !coords?.lng) return;
+  console.log("[Tracker] Simulated tracking movement:", coords);
+  if (typeof onPointCallback === "function") {
+    const simulatedPoint = {
+      lat: Number(coords.lat),
+      lng: Number(coords.lng),
+      accuracy: Number(coords.accuracy ?? 10),
+      speed: Number(coords.speed ?? 0),
+      time: new Date().toISOString(),
+    };
+    onPointCallback(simulatedPoint);
+    safeEmit(simulatedPoint);
   }
 }

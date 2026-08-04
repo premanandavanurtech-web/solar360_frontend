@@ -140,448 +140,478 @@ const QUICK_ACTIONS = [
 ];
 
 // Empty State Components
-const EmptyStateCard = ({ title, message, icon, action, isMobile }) => (
-  <Card
-    sx={{
-      borderRadius: { xs: 2, sm: 3 },
-      boxShadow: "0 4px 20px rgba(0,0,0,0.02)",
-      bgcolor: "white",
-      border: "1px solid #edf2f7",
-      height: "100%",
-      minHeight: { xs: 180, sm: 250, md: 300 },
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      p: { xs: 2, sm: 3, md: 4 },
-    }}
-  >
-    <Box sx={{ textAlign: "center" }}>
-      <Box sx={{ 
-        color: alpha(PRIMARY_COLOR, 0.5), 
-        mb: { xs: 1, sm: 2 },
-        '& svg': { fontSize: { xs: 32, sm: 40, md: 48 } }
-      }}>
-        {icon}
-      </Box>
-      <Typography 
-        variant={isMobile ? "subtitle1" : "h6"} 
-        color="text.secondary" 
-        gutterBottom 
-        fontWeight={600}
-        sx={{ fontSize: { xs: '0.95rem', sm: '1.1rem', md: '1.25rem' } }}
-      >
-        {title}
-      </Typography>
-      <Typography 
-        variant="body2" 
-        color="text.secondary" 
-        sx={{ 
-          mb: { xs: 2, sm: 3 }, 
-          maxWidth: { xs: 220, sm: 280, md: 300 },
-          fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' }
-        }}
-      >
-        {message}
-      </Typography>
-      {action}
-    </Box>
-  </Card>
-);
+const EmptyStateCard = ({ title, message, icon, action, isMobile }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
 
-// Stat Card Component - Fully Responsive
-const StatCard = ({ stat, onClick, isMobile }) => (
-  <Card
-    sx={{
-      borderRadius: { xs: 2, sm: 2.5, md: 3 },
-      boxShadow: "0 14px 34px rgba(39,76,167,0.10)",
-      height: "100%",
-      width: "100%",
-      transition: "all 0.3s ease",
-      cursor: "pointer",
-      bgcolor: "white",
-      border: "1px solid #edf2f7",
-      position: "relative",
-      overflow: "hidden",
-      "&::before": {
-        content: '""',
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 4,
-        bgcolor: stat.accent || PRIMARY_COLOR,
-      },
-      "&:hover": {
-        transform: { xs: "none", sm: "translateY(-4px)" },
-        boxShadow: `0 18px 40px ${alpha(stat.accent || PRIMARY_COLOR, 0.18)}`,
-        borderColor: alpha(stat.accent || PRIMARY_COLOR, 0.22),
-      },
-      "&:active": {
-        transform: "scale(0.98)",
-      },
-    }}
-    onClick={onClick}
-  >
-    <CardContent sx={{ p: { xs: 1.25, sm: 1.5, md: 2, lg: 2.5 } }}>
-      <Box sx={{ 
-        display: "flex", 
-        justifyContent: "space-between", 
-        alignItems: "flex-start", 
-        mb: { xs: 0.5, sm: 1, md: 1.5 } 
-      }}>
-        <Box>
-          <Typography 
-            variant="h4" 
-            fontWeight="700" 
-            color={PRIMARY_COLOR} 
-            sx={{ 
-              fontSize: { xs: "1rem", sm: "1.25rem", md: "1.5rem", lg: "1.75rem", xl: "2rem" } 
-            }}
-          >
-            {stat.value}
-          </Typography>
-          <Typography 
-            variant="body2" 
-            color="text.secondary" 
-            fontWeight="500" 
-            sx={{ 
-              mt: 0.25,
-              fontSize: { xs: "0.6rem", sm: "0.65rem", md: "0.75rem", lg: "0.875rem" },
-              lineHeight: 1.2,
-            }}
-          >
-            {stat.title}
-          </Typography>
-        </Box>
-        <Box
-          sx={{
-            p: { xs: 0.75, sm: 1, md: 1.25, lg: 1.5 },
-            borderRadius: 999,
-            bgcolor: alpha(stat.accent || PRIMARY_COLOR, 0.14),
-            color: stat.accent || PRIMARY_COLOR,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: `inset 0 0 0 1px ${alpha(stat.accent || PRIMARY_COLOR, 0.08)}`,
-          }}
-        >
-          {React.cloneElement(stat.icon, { 
-            sx: { fontSize: { xs: 16, sm: 18, md: 20, lg: 24 } } 
-          })}
-        </Box>
-      </Box>
-
-      <Box sx={{ 
-        display: "flex", 
-        alignItems: "center", 
-        justifyContent: "space-between",
-        mt: { xs: 0.25, sm: 0.5, md: 1 }
-      }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
-          {stat.trend === "up" ? (
-            <ArrowUpward sx={{ fontSize: { xs: 10, sm: 10, md: 12, lg: 14 }, color: SUCCESS_COLOR }} />
-          ) : stat.trend === "down" ? (
-            <ArrowDownward sx={{ fontSize: { xs: 10, sm: 10, md: 12, lg: 14 }, color: ERROR_COLOR }} />
-          ) : (
-            <TrendingFlat sx={{ fontSize: { xs: 10, sm: 10, md: 12, lg: 14 }, color: "text.secondary" }} />
-          )}
-          <Typography 
-            variant="caption" 
-            fontWeight="600" 
-            color={stat.trend === "up" ? SUCCESS_COLOR : stat.trend === "down" ? ERROR_COLOR : "text.secondary"}
-            sx={{ fontSize: { xs: "0.5rem", sm: "0.55rem", md: "0.6rem", lg: "0.7rem" } }}
-          >
-            {stat.change}
-          </Typography>
+  return (
+    <Card
+      sx={{
+        borderRadius: { xs: 2, sm: 3 },
+        boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 4px 20px rgba(0,0,0,0.02)",
+        bgcolor: isDark ? "#0d1527" : "white",
+        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #edf2f7",
+        height: "100%",
+        minHeight: { xs: 180, sm: 250, md: 300 },
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        p: { xs: 2, sm: 3, md: 4 },
+      }}
+    >
+      <Box sx={{ textAlign: "center" }}>
+        <Box sx={{ 
+          color: isDark ? alpha("#60a5fa", 0.7) : alpha(PRIMARY_COLOR, 0.5), 
+          mb: { xs: 1, sm: 2 },
+          '& svg': { fontSize: { xs: 32, sm: 40, md: 48 } }
+        }}>
+          {icon}
         </Box>
         <Typography 
-          variant="caption" 
-          color="text.secondary"
-          sx={{ fontSize: { xs: "0.5rem", sm: "0.55rem", md: "0.6rem", lg: "0.7rem" } }}
+          variant={isMobile ? "subtitle1" : "h6"} 
+          color={isDark ? "#f8fafc" : "text.secondary"} 
+          gutterBottom 
+          fontWeight={600}
+          sx={{ fontSize: { xs: '0.95rem', sm: '1.1rem', md: '1.25rem' } }}
         >
-          {stat.subtitle}
+          {title}
         </Typography>
+        <Typography 
+          variant="body2" 
+          color={isDark ? "#94a3b8" : "text.secondary"} 
+          sx={{ 
+            mb: { xs: 2, sm: 3 }, 
+            maxWidth: { xs: 220, sm: 280, md: 300 },
+            fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' }
+          }}
+        >
+          {message}
+        </Typography>
+        {action}
       </Box>
-    </CardContent>
-  </Card>
-);
+    </Card>
+  );
+};
 
-// Mobile Stat Card - Horizontal Layout for very small screens
-const MobileStatCard = ({ stat, onClick }) => (
-  <Paper
-    elevation={0}
-    sx={{
-      p: 1.5,
-      borderRadius: 2.5,
-      bgcolor: "white",
-      border: "1px solid #edf2f7",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      cursor: "pointer",
-      width: 160,
-      flexShrink: 0,
-      boxShadow: "0 10px 24px rgba(39,76,167,0.08)",
-      "&:active": {
-        bgcolor: alpha(PRIMARY_COLOR, 0.05),
-      },
-    }}
-    onClick={onClick}
-  >
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-      <Box
-        sx={{
-          p: 1,
-          borderRadius: 999,
-          bgcolor: alpha(stat.accent || PRIMARY_COLOR, 0.14),
-          color: stat.accent || PRIMARY_COLOR,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {React.cloneElement(stat.icon, { sx: { fontSize: 20 } })}
-      </Box>
-      <Box>
-        <Typography variant="subtitle2" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: '0.9rem' }}>
-          {stat.value}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
-          {stat.title}
-        </Typography>
-      </Box>
-    </Box>
-    <Box sx={{ textAlign: "right" }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, justifyContent: "flex-end" }}>
-        {stat.trend === "up" ? (
-          <ArrowUpward sx={{ fontSize: 10, color: SUCCESS_COLOR }} />
-        ) : stat.trend === "down" ? (
-          <ArrowDownward sx={{ fontSize: 10, color: ERROR_COLOR }} />
-        ) : (
-          <TrendingFlat sx={{ fontSize: 10, color: "text.secondary" }} />
-        )}
-        <Typography variant="caption" fontWeight="600" sx={{ fontSize: '0.6rem' }} color={stat.trend === "up" ? SUCCESS_COLOR : stat.trend === "down" ? ERROR_COLOR : "text.secondary"}>
-          {stat.change}
-        </Typography>
-      </Box>
-      <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.55rem" }}>
-        {stat.subtitle}
-      </Typography>
-    </Box>
-  </Paper>
-);
+// Stat Card Component - Fully Responsive
+const StatCard = ({ stat, onClick, isMobile }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const accentColor = stat.accent || (isDark ? "#3b82f6" : PRIMARY_COLOR);
 
-// Activity Card Component - Fully Responsive
-const ActivityCard = ({ activity, isMobile }) => (
-  <Paper
-    sx={{
-      p: { xs: 1.5, sm: 1.5, md: 2 },
-      borderRadius: { xs: 1.5, sm: 1.5, md: 2 },
-      border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-      bgcolor: alpha(PRIMARY_COLOR, 0.02),
-      transition: "all 0.2s ease",
-      "&:hover": {
-        borderColor: alpha(PRIMARY_COLOR, 0.3),
-        bgcolor: alpha(PRIMARY_COLOR, 0.04),
-        transform: { xs: "none", sm: "translateX(4px)" },
-      },
-      "&:active": {
-        bgcolor: alpha(PRIMARY_COLOR, 0.08),
-      },
-    }}
-  >
-    <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, sm: 1.5, md: 2 } }}>
-      <Avatar
-        sx={{
-          bgcolor: alpha(PRIMARY_COLOR, 0.1),
-          color: PRIMARY_COLOR,
-          width: { xs: 32, sm: 36, md: 40 },
-          height: { xs: 32, sm: 36, md: 40 },
-          fontSize: { xs: "0.8rem", sm: "0.85rem", md: "0.9rem" },
-          fontWeight: "bold",
-        }}
-      >
-        {getInitials(activity.leadName)}
-      </Avatar>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
+  return (
+    <Card
+      sx={{
+        borderRadius: { xs: 2, sm: 2.5, md: 3 },
+        boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.4)" : "0 14px 34px rgba(39,76,167,0.10)",
+        height: "100%",
+        width: "100%",
+        transition: "all 0.3s ease",
+        cursor: "pointer",
+        bgcolor: isDark ? "#0d1527" : "white",
+        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #edf2f7",
+        position: "relative",
+        overflow: "hidden",
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 4,
+          bgcolor: accentColor,
+        },
+        "&:hover": {
+          transform: { xs: "none", sm: "translateY(-4px)" },
+          boxShadow: isDark 
+            ? `0 12px 30px ${alpha(accentColor, 0.25)}` 
+            : `0 18px 40px ${alpha(accentColor, 0.18)}`,
+          borderColor: alpha(accentColor, 0.35),
+        },
+        "&:active": {
+          transform: "scale(0.98)",
+        },
+      }}
+      onClick={onClick}
+    >
+      <CardContent sx={{ p: { xs: 1.25, sm: 1.5, md: 2, lg: 2.5 } }}>
+        <Box sx={{ 
+          display: "flex", 
+          justifyContent: "space-between", 
+          alignItems: "flex-start", 
+          mb: { xs: 0.5, sm: 1, md: 1.5 } 
+        }}>
+          <Box>
+            <Typography 
+              variant="h4" 
+              fontWeight="700" 
+              color={isDark ? "#ffffff" : PRIMARY_COLOR} 
+              sx={{ 
+                fontSize: { xs: "1rem", sm: "1.25rem", md: "1.5rem", lg: "1.75rem", xl: "2rem" } 
+              }}
+            >
+              {stat.value}
+            </Typography>
+            <Typography 
+              variant="body2" 
+              color={isDark ? "#94a3b8" : "text.secondary"} 
+              fontWeight="500" 
+              sx={{ 
+                mt: 0.25,
+                fontSize: { xs: "0.6rem", sm: "0.65rem", md: "0.75rem", lg: "0.875rem" },
+                lineHeight: 1.2,
+              }}
+            >
+              {stat.title}
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              p: { xs: 0.75, sm: 1, md: 1.25, lg: 1.5 },
+              borderRadius: 999,
+              bgcolor: isDark ? alpha(accentColor, 0.2) : alpha(accentColor, 0.14),
+              color: accentColor,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: `inset 0 0 0 1px ${alpha(accentColor, isDark ? 0.25 : 0.08)}`,
+            }}
+          >
+            {React.cloneElement(stat.icon, { 
+              sx: { fontSize: { xs: 16, sm: 18, md: 20, lg: 24 } } 
+            })}
+          </Box>
+        </Box>
+
         <Box sx={{ 
           display: "flex", 
           alignItems: "center", 
-          justifyContent: "space-between", 
-          mb: 0.25,
-          flexWrap: "wrap",
-          gap: 0.5,
+          justifyContent: "space-between",
+          mt: { xs: 0.25, sm: 0.5, md: 1 }
         }}>
-          <Typography 
-            variant="subtitle2" 
-            fontWeight="600" 
-            color={PRIMARY_COLOR}
-            sx={{ fontSize: { xs: "0.8rem", sm: "0.85rem", md: "0.9rem" } }}
-          >
-            {activity.leadName}
-          </Typography>
-          <Chip
-            label={activity.status}
-            size="small"
-            sx={{
-              height: { xs: 20, sm: 20, md: 24 },
-              fontSize: { xs: "0.6rem", sm: "0.6rem", md: "0.7rem" },
-              fontWeight: 600,
-              bgcolor: alpha(PRIMARY_COLOR, 0.1),
-              color: PRIMARY_COLOR,
-            }}
-          />
-        </Box>
-        <Typography 
-          variant="caption" 
-          color="text.secondary" 
-          sx={{ 
-            display: "block", 
-            mb: 0.25,
-            fontSize: { xs: "0.7rem", sm: "0.7rem", md: "0.75rem" },
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {activity.description || "Activity updated"}
-        </Typography>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <AccessTime sx={{ fontSize: { xs: 10, sm: 10, md: 12 }, color: "text.secondary" }} />
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+            {stat.trend === "up" ? (
+              <ArrowUpward sx={{ fontSize: { xs: 10, sm: 10, md: 12, lg: 14 }, color: isDark ? "#4ade80" : SUCCESS_COLOR }} />
+            ) : stat.trend === "down" ? (
+              <ArrowDownward sx={{ fontSize: { xs: 10, sm: 10, md: 12, lg: 14 }, color: isDark ? "#f87171" : ERROR_COLOR }} />
+            ) : (
+              <TrendingFlat sx={{ fontSize: { xs: 10, sm: 10, md: 12, lg: 14 }, color: isDark ? "#94a3b8" : "text.secondary" }} />
+            )}
+            <Typography 
+              variant="caption" 
+              fontWeight="600" 
+              color={stat.trend === "up" ? (isDark ? "#4ade80" : SUCCESS_COLOR) : stat.trend === "down" ? (isDark ? "#f87171" : ERROR_COLOR) : (isDark ? "#94a3b8" : "text.secondary")}
+              sx={{ fontSize: { xs: "0.5rem", sm: "0.55rem", md: "0.6rem", lg: "0.7rem" } }}
+            >
+              {stat.change}
+            </Typography>
+          </Box>
           <Typography 
             variant="caption" 
-            color="text.secondary"
-            sx={{ fontSize: { xs: "0.6rem", sm: "0.6rem", md: "0.7rem" } }}
+            color={isDark ? "#94a3b8" : "text.secondary"}
+            sx={{ fontSize: { xs: "0.5rem", sm: "0.55rem", md: "0.6rem", lg: "0.7rem" } }}
           >
-            {activity.updatedAt ? new Date(activity.updatedAt).toLocaleString() : "Just now"}
+            {stat.subtitle}
+          </Typography>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+};
+
+// Mobile Stat Card - Horizontal Layout for very small screens
+const MobileStatCard = ({ stat, onClick }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const accentColor = stat.accent || (isDark ? "#3b82f6" : PRIMARY_COLOR);
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 1.5,
+        borderRadius: 2.5,
+        bgcolor: isDark ? "#0d1527" : "white",
+        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #edf2f7",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        cursor: "pointer",
+        width: 160,
+        flexShrink: 0,
+        boxShadow: isDark ? "0 8px 20px rgba(0,0,0,0.3)" : "0 10px 24px rgba(39,76,167,0.08)",
+        "&:active": {
+          bgcolor: isDark ? "#131d33" : alpha(PRIMARY_COLOR, 0.05),
+        },
+      }}
+      onClick={onClick}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box
+          sx={{
+            p: 1,
+            borderRadius: 999,
+            bgcolor: isDark ? alpha(accentColor, 0.2) : alpha(accentColor, 0.14),
+            color: accentColor,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {React.cloneElement(stat.icon, { sx: { fontSize: 20 } })}
+        </Box>
+        <Box>
+          <Typography variant="subtitle2" fontWeight="600" color={isDark ? "#ffffff" : PRIMARY_COLOR} sx={{ fontSize: '0.9rem' }}>
+            {stat.value}
+          </Typography>
+          <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"} sx={{ fontSize: '0.65rem' }}>
+            {stat.title}
           </Typography>
         </Box>
       </Box>
-    </Box>
-  </Paper>
-);
+      <Box sx={{ textAlign: "right" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, justifyContent: "flex-end" }}>
+          {stat.trend === "up" ? (
+            <ArrowUpward sx={{ fontSize: 10, color: isDark ? "#4ade80" : SUCCESS_COLOR }} />
+          ) : stat.trend === "down" ? (
+            <ArrowDownward sx={{ fontSize: 10, color: isDark ? "#f87171" : ERROR_COLOR }} />
+          ) : (
+            <TrendingFlat sx={{ fontSize: 10, color: isDark ? "#94a3b8" : "text.secondary" }} />
+          )}
+          <Typography variant="caption" fontWeight="600" sx={{ fontSize: '0.6rem' }} color={stat.trend === "up" ? (isDark ? "#4ade80" : SUCCESS_COLOR) : stat.trend === "down" ? (isDark ? "#f87171" : ERROR_COLOR) : (isDark ? "#94a3b8" : "text.secondary")}>
+            {stat.change}
+          </Typography>
+        </Box>
+        <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"} sx={{ fontSize: "0.55rem" }}>
+          {stat.subtitle}
+        </Typography>
+      </Box>
+    </Paper>
+  );
+};
+
+// Activity Card Component - Fully Responsive
+const ActivityCard = ({ activity, isMobile }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
+  return (
+    <Paper
+      sx={{
+        p: { xs: 1.5, sm: 1.5, md: 2 },
+        borderRadius: { xs: 1.5, sm: 1.5, md: 2 },
+        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+        bgcolor: isDark ? "#121b2d" : alpha(PRIMARY_COLOR, 0.02),
+        transition: "all 0.2s ease",
+        "&:hover": {
+          borderColor: isDark ? alpha("#3b82f6", 0.4) : alpha(PRIMARY_COLOR, 0.3),
+          bgcolor: isDark ? "#17233a" : alpha(PRIMARY_COLOR, 0.04),
+          transform: { xs: "none", sm: "translateX(4px)" },
+        },
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, sm: 1.5, md: 2 } }}>
+        <Avatar
+          sx={{
+            bgcolor: isDark ? "rgba(59, 130, 246, 0.2)" : alpha(PRIMARY_COLOR, 0.1),
+            color: isDark ? "#60a5fa" : PRIMARY_COLOR,
+            width: { xs: 32, sm: 36, md: 40 },
+            height: { xs: 32, sm: 36, md: 40 },
+            fontSize: { xs: "0.8rem", sm: "0.85rem", md: "0.9rem" },
+            fontWeight: "bold",
+          }}
+        >
+          {getInitials(activity.leadName)}
+        </Avatar>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "space-between", 
+            mb: 0.25,
+            flexWrap: "wrap",
+            gap: 0.5,
+          }}>
+            <Typography 
+              variant="subtitle2" 
+              fontWeight="600" 
+              color={isDark ? "#f8fafc" : PRIMARY_COLOR}
+              sx={{ fontSize: { xs: "0.8rem", sm: "0.85rem", md: "0.9rem" } }}
+            >
+              {activity.leadName}
+            </Typography>
+            <Chip
+              label={activity.status}
+              size="small"
+              sx={{
+                height: { xs: 20, sm: 20, md: 24 },
+                fontSize: { xs: "0.6rem", sm: "0.6rem", md: "0.7rem" },
+                fontWeight: 600,
+                bgcolor: isDark ? "rgba(59, 130, 246, 0.18)" : alpha(PRIMARY_COLOR, 0.1),
+                color: isDark ? "#60a5fa" : PRIMARY_COLOR,
+              }}
+            />
+          </Box>
+          <Typography 
+            variant="caption" 
+            color={isDark ? "#94a3b8" : "text.secondary"} 
+            sx={{ 
+              display: "block", 
+              mb: 0.25,
+              fontSize: { xs: "0.7rem", sm: "0.7rem", md: "0.75rem" },
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {activity.description || "Activity updated"}
+          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <AccessTime sx={{ fontSize: { xs: 10, sm: 10, md: 12 }, color: isDark ? "#94a3b8" : "text.secondary" }} />
+            <Typography 
+              variant="caption" 
+              color={isDark ? "#94a3b8" : "text.secondary"}
+              sx={{ fontSize: { xs: "0.6rem", sm: "0.6rem", md: "0.7rem" } }}
+            >
+              {activity.updatedAt ? new Date(activity.updatedAt).toLocaleString() : "Just now"}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+    </Paper>
+  );
+};
 
 // Team Member Card Component - Fully Responsive
-const TeamMemberCard = ({ member, isMobile }) => (
-  <Paper
-    sx={{
-      p: { xs: 1.5, sm: 1.5, md: 2 },
-      borderRadius: { xs: 1.5, sm: 1.5, md: 2 },
-      border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-      bgcolor: alpha(PRIMARY_COLOR, 0.02),
-      transition: "all 0.2s ease",
-      height: '100%',
-      boxShadow: "0 10px 24px rgba(39,76,167,0.06)",
-      "&:hover": {
-        transform: { xs: "none", sm: "translateY(-2px)" },
-        boxShadow: `0 14px 28px ${alpha(PRIMARY_COLOR, 0.12)}`,
-        borderColor: alpha(PRIMARY_COLOR, 0.3),
-        bgcolor: "white",
-      },
-      "&:active": {
-        transform: "scale(0.98)",
-      },
-    }}
-  >
-    <Box sx={{ 
-      display: "flex", 
-      alignItems: "center", 
-      gap: { xs: 1.5, sm: 1.5, md: 2 }, 
-      mb: { xs: 1.5, sm: 1.5, md: 2 } 
-    }}>
-      <Avatar
-        sx={{
-          bgcolor: alpha(PRIMARY_COLOR, 0.1),
-          color: PRIMARY_COLOR,
-          width: { xs: 40, sm: 44, md: 48 },
-          height: { xs: 40, sm: 44, md: 48 },
-          fontSize: { xs: "0.9rem", sm: "0.95rem", md: "1rem" },
-          fontWeight: "bold",
-        }}
-      >
-        {getInitials(`${member.firstName || ""} ${member.lastName || ""}`)}
-      </Avatar>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography 
-          variant="subtitle2" 
-          fontWeight="600" 
-          color={PRIMARY_COLOR}
-          sx={{ 
-            fontSize: { xs: "0.85rem", sm: "0.9rem", md: "1rem" },
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {member.firstName || ""} {member.lastName || ""}
-        </Typography>
-        <Typography 
-          variant="caption" 
-          color="text.secondary" 
-          sx={{ 
-            display: "block",
-            fontSize: { xs: "0.7rem", sm: "0.7rem", md: "0.75rem" },
-          }}
-        >
-          {member.role || "Team Member"}
-        </Typography>
-      </Box>
-    </Box>
+const TeamMemberCard = ({ member, isMobile }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
 
-    <Box sx={{ 
-      display: "flex", 
-      alignItems: "center", 
-      justifyContent: "space-between", 
-      mb: 1,
-      flexWrap: "wrap",
-      gap: 0.5,
-    }}>
-      <Chip
-        label={member.status === "active" ? "Active" : "Inactive"}
-        size="small"
-        sx={{
-          fontSize: { xs: "0.6rem", sm: "0.6rem", md: "0.7rem" },
-          fontWeight: 600,
-          height: { xs: 20, sm: 22, md: 24 },
-          bgcolor: member.status === "active" ? alpha(SUCCESS_COLOR, 0.1) : alpha(ERROR_COLOR, 0.1),
-          color: member.status === "active" ? SUCCESS_COLOR : ERROR_COLOR,
-        }}
-      />
-      {member.performance && (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
-          <Star sx={{ fontSize: { xs: 12, sm: 12, md: 14 }, color: WARNING_COLOR }} />
-          <Typography variant="caption" fontWeight="600" sx={{ fontSize: { xs: "0.6rem", sm: "0.65rem", md: "0.7rem" } }}>
-            {member.performance}%
-          </Typography>
-        </Box>
-      )}
-    </Box>
-
-    {member.email && (
+  return (
+    <Paper
+      sx={{
+        p: { xs: 1.5, sm: 1.5, md: 2 },
+        borderRadius: { xs: 1.5, sm: 1.5, md: 2 },
+        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+        bgcolor: isDark ? "#121b2d" : alpha(PRIMARY_COLOR, 0.02),
+        transition: "all 0.2s ease",
+        height: '100%',
+        boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 10px 24px rgba(39,76,167,0.06)",
+        "&:hover": {
+          transform: { xs: "none", sm: "translateY(-2px)" },
+          boxShadow: isDark ? "0 12px 28px rgba(0,0,0,0.4)" : `0 14px 28px ${alpha(PRIMARY_COLOR, 0.12)}`,
+          borderColor: isDark ? alpha("#3b82f6", 0.4) : alpha(PRIMARY_COLOR, 0.3),
+          bgcolor: isDark ? "#17233a" : "white",
+        },
+        "&:active": {
+          transform: "scale(0.98)",
+        },
+      }}
+    >
       <Box sx={{ 
         display: "flex", 
         alignItems: "center", 
-        gap: 0.5,
-        minWidth: 0,
+        gap: { xs: 1.5, sm: 1.5, md: 2 }, 
+        mb: { xs: 1.5, sm: 1.5, md: 2 } 
       }}>
-        <Mail sx={{ fontSize: { xs: 12, sm: 12, md: 14 }, color: alpha(PRIMARY_COLOR, 0.6) }} />
-        <Typography 
-          variant="caption" 
-          color="text.secondary" 
-          sx={{ 
-            fontSize: { xs: "0.65rem", sm: "0.7rem", md: "0.75rem" },
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
+        <Avatar
+          sx={{
+            bgcolor: isDark ? "rgba(59, 130, 246, 0.2)" : alpha(PRIMARY_COLOR, 0.1),
+            color: isDark ? "#60a5fa" : PRIMARY_COLOR,
+            width: { xs: 40, sm: 44, md: 48 },
+            height: { xs: 40, sm: 44, md: 48 },
+            fontSize: { xs: "0.9rem", sm: "0.95rem", md: "1rem" },
+            fontWeight: "bold",
           }}
         >
-          {member.email}
-        </Typography>
+          {getInitials(`${member.firstName || member.name || ""} ${member.lastName || ""}`)}
+        </Avatar>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography 
+            variant="subtitle2" 
+            fontWeight="600" 
+            color={isDark ? "#60a5fa" : PRIMARY_COLOR}
+            sx={{ 
+              fontSize: { xs: "0.85rem", sm: "0.9rem", md: "1rem" },
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {member.firstName ? `${member.firstName} ${member.lastName || ""}` : (member.name || "Team Member")}
+          </Typography>
+          <Typography 
+            variant="caption" 
+            color={isDark ? "#94a3b8" : "text.secondary"} 
+            sx={{ 
+              display: "block",
+              fontSize: { xs: "0.7rem", sm: "0.7rem", md: "0.75rem" },
+            }}
+          >
+            {member.role || "TEAM"}
+          </Typography>
+        </Box>
       </Box>
-    )}
-  </Paper>
-);
+
+      <Box sx={{ 
+        display: "flex", 
+        alignItems: "center", 
+        justifyContent: "space-between", 
+        mb: 1,
+        flexWrap: "wrap",
+        gap: 0.5,
+      }}>
+        <Chip
+          label={member.status === "inactive" ? "Inactive" : "Active"}
+          size="small"
+          sx={{
+            fontSize: { xs: "0.6rem", sm: "0.6rem", md: "0.7rem" },
+            fontWeight: 600,
+            height: { xs: 20, sm: 22, md: 24 },
+            bgcolor: (member.status === "inactive")
+              ? (isDark ? "rgba(239, 68, 68, 0.15)" : alpha(ERROR_COLOR, 0.1))
+              : (isDark ? "rgba(34, 197, 94, 0.15)" : alpha(SUCCESS_COLOR, 0.1)),
+            color: (member.status === "inactive")
+              ? (isDark ? "#f87171" : ERROR_COLOR)
+              : (isDark ? "#4ade80" : SUCCESS_COLOR),
+          }}
+        />
+        {member.performance && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+            <Star sx={{ fontSize: { xs: 12, sm: 12, md: 14 }, color: WARNING_COLOR }} />
+            <Typography variant="caption" fontWeight="600" color={isDark ? "#f8fafc" : "text.primary"} sx={{ fontSize: { xs: "0.6rem", sm: "0.65rem", md: "0.7rem" } }}>
+              {member.performance}%
+            </Typography>
+          </Box>
+        )}
+      </Box>
+
+      {member.email && (
+        <Box sx={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: 0.5,
+          minWidth: 0,
+        }}>
+          <Mail sx={{ fontSize: { xs: 12, sm: 12, md: 14 }, color: isDark ? "#60a5fa" : alpha(PRIMARY_COLOR, 0.6) }} />
+          <Typography 
+            variant="caption" 
+            color={isDark ? "#94a3b8" : "text.secondary"} 
+            sx={{ 
+              fontSize: { xs: "0.65rem", sm: "0.7rem", md: "0.75rem" },
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {member.email}
+          </Typography>
+        </Box>
+      )}
+    </Paper>
+  );
+};
 
 // Mobile Quick Actions Drawer
 const QuickActionsDrawer = ({ open, onClose, navigate }) => (
@@ -791,7 +821,6 @@ export default function UnifiedDashboard() {
   const [timeFilter, setTimeFilter] = useState("today");
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState([]);
-  const [mobileNavValue, setMobileNavValue] = useState(0);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('home');
@@ -1620,6 +1649,8 @@ export default function UnifiedDashboard() {
   }
 
   // Desktop/Tablet view with perfect centering
+  const isDark = theme.palette.mode === "dark";
+
   return (
     <Box sx={{ 
       width: '100%', 
@@ -1627,7 +1658,7 @@ export default function UnifiedDashboard() {
       mx: 'auto', 
       px: { xs: 2, sm: 3, md: 4, lg: 5 },
       py: { xs: 1, md: 1.5 },
-      bgcolor: SURFACE_BG,
+      bgcolor: isDark ? "#070d19" : SURFACE_BG,
       borderRadius: 4,
     }}>
       {/* Header Section */}
@@ -1636,9 +1667,14 @@ export default function UnifiedDashboard() {
           sx={{
             mb: 3,
             borderRadius: 3.5,
-            background: `linear-gradient(135deg, ${HEADER_DARK} 0%, ${HEADER_LIGHT} 100%)`,
+            background: isDark 
+              ? "linear-gradient(135deg, #0d172a 0%, #1e3a8a 100%)" 
+              : `linear-gradient(135deg, ${HEADER_DARK} 0%, ${HEADER_LIGHT} 100%)`,
             color: "white",
-            boxShadow: "0 24px 48px rgba(42,83,189,0.18)",
+            boxShadow: isDark 
+              ? "0 24px 48px rgba(0,0,0,0.5)" 
+              : "0 24px 48px rgba(42,83,189,0.18)",
+            border: isDark ? "1px solid rgba(255,255,255,0.1)" : "none",
           }}
         >
           <CardContent sx={{ p: { xs: 2.5, sm: 3, md: 3.5 } }}>
@@ -1763,10 +1799,16 @@ export default function UnifiedDashboard() {
       <Grid container spacing={getGridSpacing()}>
         {/* Recent Visits */}
         <Grid item xs={12} md={6} lg={4}>
-          <Card sx={{ borderRadius: { xs: 2.5, sm: 3, md: 3 }, boxShadow: "0 14px 30px rgba(39,76,167,0.08)", border: "1px solid #edf2f7", height: "100%" }}>
+          <Card sx={{ 
+            borderRadius: { xs: 2.5, sm: 3, md: 3 }, 
+            boxShadow: isDark ? "0 10px 30px rgba(0,0,0,0.4)" : "0 14px 30px rgba(39,76,167,0.08)", 
+            bgcolor: isDark ? "#0d1527" : "#ffffff",
+            border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #edf2f7", 
+            height: "100%" 
+          }}>
             <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-                <Typography variant="h6" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
+                <Typography variant="h6" fontWeight="600" color={isDark ? "#60a5fa" : PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
                   Recent Visits
                 </Typography>
                 <Button
@@ -1774,7 +1816,7 @@ export default function UnifiedDashboard() {
                   size="small"
                   onClick={() => handleNavigateTo("/total-visits")}
                   endIcon={<NavigateNext />}
-                  sx={{ color: PRIMARY_COLOR, fontSize: { xs: '0.75rem', sm: '0.85rem' } }}
+                  sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, fontSize: { xs: '0.75rem', sm: '0.85rem' } }}
                 >
                   View All
                 </Button>
@@ -1805,24 +1847,34 @@ export default function UnifiedDashboard() {
                       sx={{
                         p: 1.5,
                         borderRadius: 1.5,
-                        border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-                        bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                        border: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                        bgcolor: isDark ? "#121b2d" : alpha(PRIMARY_COLOR, 0.02),
                       }}
                     >
                       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
-                        <Typography fontWeight="600" color={PRIMARY_COLOR} variant="body2" sx={{ fontSize: { xs: '0.85rem', sm: '0.9rem' } }}>
+                        <Typography fontWeight="600" color={isDark ? "#f8fafc" : PRIMARY_COLOR} variant="body2" sx={{ fontSize: { xs: '0.85rem', sm: '0.9rem' } }}>
                           {visit.firstName} {visit.lastName}
                         </Typography>
                         <Chip
                           label={visit.visitStatus || "Pending"}
                           size="small"
-                          sx={{ height: 22, fontSize: { xs: '0.6rem', sm: '0.65rem' } }}
+                          sx={{ 
+                            height: 22, 
+                            fontSize: { xs: '0.6rem', sm: '0.65rem' },
+                            fontWeight: 600,
+                            bgcolor: isDark 
+                              ? (visit.visitStatus === "Completed" ? "rgba(34, 197, 94, 0.15)" : "rgba(59, 130, 246, 0.15)") 
+                              : alpha(PRIMARY_COLOR, 0.1),
+                            color: isDark 
+                              ? (visit.visitStatus === "Completed" ? "#4ade80" : "#60a5fa") 
+                              : PRIMARY_COLOR,
+                          }}
                         />
                       </Box>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
                         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                          <Phone sx={{ fontSize: 14, color: alpha(PRIMARY_COLOR, 0.6) }} />
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                          <Phone sx={{ fontSize: 14, color: isDark ? "#60a5fa" : alpha(PRIMARY_COLOR, 0.6) }} />
+                          <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"} sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                             {visit.phone || "N/A"}
                           </Typography>
                         </Box>
@@ -1837,10 +1889,16 @@ export default function UnifiedDashboard() {
 
         {/* Recent Registrations */}
         <Grid item xs={12} md={6} lg={4}>
-          <Card sx={{ borderRadius: { xs: 2.5, sm: 3, md: 3 }, boxShadow: "0 14px 30px rgba(39,76,167,0.08)", border: "1px solid #edf2f7", height: "100%" }}>
+          <Card sx={{ 
+            borderRadius: { xs: 2.5, sm: 3, md: 3 }, 
+            boxShadow: isDark ? "0 10px 30px rgba(0,0,0,0.4)" : "0 14px 30px rgba(39,76,167,0.08)", 
+            bgcolor: isDark ? "#0d1527" : "#ffffff",
+            border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #edf2f7", 
+            height: "100%" 
+          }}>
             <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-                <Typography variant="h6" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
+                <Typography variant="h6" fontWeight="600" color={isDark ? "#60a5fa" : PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
                   Recent Registrations
                 </Typography>
                 <Button
@@ -1848,7 +1906,7 @@ export default function UnifiedDashboard() {
                   size="small"
                   onClick={() => handleNavigateTo("/registration")}
                   endIcon={<NavigateNext />}
-                  sx={{ color: PRIMARY_COLOR, fontSize: { xs: '0.75rem', sm: '0.85rem' } }}
+                  sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, fontSize: { xs: '0.75rem', sm: '0.85rem' } }}
                 >
                   View All
                 </Button>
@@ -1879,24 +1937,30 @@ export default function UnifiedDashboard() {
                       sx={{
                         p: 1.5,
                         borderRadius: 1.5,
-                        border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-                        bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                        border: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                        bgcolor: isDark ? "#121b2d" : alpha(PRIMARY_COLOR, 0.02),
                       }}
                     >
                       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
-                        <Typography fontWeight="600" color={PRIMARY_COLOR} variant="body2" sx={{ fontSize: { xs: '0.85rem', sm: '0.9rem' } }}>
+                        <Typography fontWeight="600" color={isDark ? "#f8fafc" : PRIMARY_COLOR} variant="body2" sx={{ fontSize: { xs: '0.85rem', sm: '0.9rem' } }}>
                           {reg.firstName} {reg.lastName}
                         </Typography>
                         <Chip
                           label="Registered"
                           size="small"
-                          sx={{ height: 22, fontSize: { xs: '0.6rem', sm: '0.65rem' }, bgcolor: alpha(SUCCESS_COLOR, 0.1), color: SUCCESS_COLOR }}
+                          sx={{ 
+                            height: 22, 
+                            fontSize: { xs: '0.6rem', sm: '0.65rem' }, 
+                            fontWeight: 600,
+                            bgcolor: isDark ? "rgba(34, 197, 94, 0.15)" : alpha(SUCCESS_COLOR, 0.1), 
+                            color: isDark ? "#4ade80" : SUCCESS_COLOR 
+                          }}
                         />
                       </Box>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
                         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                          <Phone sx={{ fontSize: 14, color: alpha(PRIMARY_COLOR, 0.6) }} />
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                          <Phone sx={{ fontSize: 14, color: isDark ? "#60a5fa" : alpha(PRIMARY_COLOR, 0.6) }} />
+                          <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"} sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                             {reg.phone || "N/A"}
                           </Typography>
                         </Box>
@@ -1911,10 +1975,16 @@ export default function UnifiedDashboard() {
 
         {/* Recent Missed Leads or Activities */}
         <Grid item xs={12} md={6} lg={4}>
-          <Card sx={{ borderRadius: { xs: 2.5, sm: 3, md: 3 }, boxShadow: "0 14px 30px rgba(39,76,167,0.08)", border: "1px solid #edf2f7", height: "100%" }}>
+          <Card sx={{ 
+            borderRadius: { xs: 2.5, sm: 3, md: 3 }, 
+            boxShadow: isDark ? "0 10px 30px rgba(0,0,0,0.4)" : "0 14px 30px rgba(39,76,167,0.08)", 
+            bgcolor: isDark ? "#0d1527" : "#ffffff",
+            border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #edf2f7", 
+            height: "100%" 
+          }}>
             <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-                <Typography variant="h6" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
+                <Typography variant="h6" fontWeight="600" color={isDark ? "#60a5fa" : PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
                   {hInchargeissedLeadsData ? "Missed Leads" : "Recent Activities"}
                 </Typography>
                 <Button
@@ -1922,7 +1992,7 @@ export default function UnifiedDashboard() {
                   size="small"
                   onClick={() => handleNavigateTo(hInchargeissedLeadsData ? "/missed-leads" : "/activities")}
                   endIcon={<NavigateNext />}
-                  sx={{ color: PRIMARY_COLOR, fontSize: { xs: '0.75rem', sm: '0.85rem' } }}
+                  sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, fontSize: { xs: '0.75rem', sm: '0.85rem' } }}
                 >
                   View All
                 </Button>
@@ -1931,9 +2001,9 @@ export default function UnifiedDashboard() {
               {hInchargeissedLeadsData ? (
                 getRecentMissedLeads.length === 0 ? (
                   <EmptyStateCard
-                    title="No Missed Leads"
-                    message="Great job! No missed leads to show."
-                    icon={<CheckCircle sx={{ fontSize: 40, color: SUCCESS_COLOR }} />}
+                    title="Site Ready"
+                    message="No leads pending!"
+                    icon={<CheckCircle sx={{ fontSize: 40, color: isDark ? "#4ade80" : SUCCESS_COLOR }} />}
                     isMobile={isMobile}
                     action={
                       <Button
@@ -1954,14 +2024,14 @@ export default function UnifiedDashboard() {
                         sx={{
                           p: 1.5,
                           borderRadius: 1.5,
-                          border: `1px solid ${alpha(ERROR_COLOR, 0.1)}`,
-                          bgcolor: alpha(ERROR_COLOR, 0.02),
+                          border: isDark ? "1px solid rgba(239, 68, 68, 0.2)" : `1px solid ${alpha(ERROR_COLOR, 0.1)}`,
+                          bgcolor: isDark ? "rgba(239, 68, 68, 0.08)" : alpha(ERROR_COLOR, 0.02),
                         }}
                       >
-                        <Typography fontWeight="600" color={ERROR_COLOR} variant="body2" sx={{ fontSize: { xs: '0.85rem', sm: '0.9rem' } }} gutterBottom>
+                        <Typography fontWeight="600" color={isDark ? "#f87171" : ERROR_COLOR} variant="body2" sx={{ fontSize: { xs: '0.85rem', sm: '0.9rem' } }} gutterBottom>
                           {lead.firstName} {lead.lastName}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                        <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"} sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                           {lead.reason || "No reason provided"}
                         </Typography>
                       </Paper>
@@ -2002,10 +2072,15 @@ export default function UnifiedDashboard() {
         {/* Team Overview - For admin, project head, manager, supervisor */}
         {TEAM_OVERVIEW_ROLES.includes(normalizeRole(user?.role)) && getTeamMembers.length > 0 && (
           <Grid item xs={12}>
-            <Card sx={{ borderRadius: { xs: 2.5, sm: 3, md: 3 }, boxShadow: "0 14px 30px rgba(39,76,167,0.08)", border: "1px solid #edf2f7" }}>
+            <Card sx={{ 
+              borderRadius: { xs: 2.5, sm: 3, md: 3 }, 
+              boxShadow: isDark ? "0 10px 30px rgba(0,0,0,0.4)" : "0 14px 30px rgba(39,76,167,0.08)", 
+              bgcolor: isDark ? "#0d1527" : "#ffffff",
+              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #edf2f7" 
+            }}>
               <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-                  <Typography variant="h6" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
+                  <Typography variant="h6" fontWeight="600" color={isDark ? "#60a5fa" : PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
                     Team Overview
                   </Typography>
                   <Button
@@ -2013,7 +2088,7 @@ export default function UnifiedDashboard() {
                     size="small"
                     onClick={() => handleNavigateTo("/team-members")}
                     endIcon={<NavigateNext />}
-                    sx={{ color: PRIMARY_COLOR, fontSize: { xs: '0.75rem', sm: '0.85rem' } }}
+                    sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, fontSize: { xs: '0.75rem', sm: '0.85rem' } }}
                   >
                     View All Team
                   </Button>
@@ -2034,10 +2109,15 @@ export default function UnifiedDashboard() {
         {/* Performance Chart Section */}
         {getTeamPerformance.length > 0 && (
           <Grid item xs={12}>
-            <Card sx={{ borderRadius: { xs: 2.5, sm: 3, md: 3 }, boxShadow: "0 14px 30px rgba(39,76,167,0.08)", border: "1px solid #edf2f7" }}>
+            <Card sx={{ 
+              borderRadius: { xs: 2.5, sm: 3, md: 3 }, 
+              boxShadow: isDark ? "0 10px 30px rgba(0,0,0,0.4)" : "0 14px 30px rgba(39,76,167,0.08)", 
+              bgcolor: isDark ? "#0d1527" : "#ffffff",
+              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #edf2f7" 
+            }}>
               <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-                  <Typography variant="h6" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
+                  <Typography variant="h6" fontWeight="600" color={isDark ? "#60a5fa" : PRIMARY_COLOR} sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>
                     Team Performance
                   </Typography>
                   <Button
@@ -2045,7 +2125,7 @@ export default function UnifiedDashboard() {
                     size="small"
                     onClick={() => handleNavigateTo("/performance")}
                     endIcon={<NavigateNext />}
-                    sx={{ color: PRIMARY_COLOR, fontSize: { xs: '0.75rem', sm: '0.85rem' } }}
+                    sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, fontSize: { xs: '0.75rem', sm: '0.85rem' } }}
                   >
                     View Details
                   </Button>
@@ -2058,16 +2138,16 @@ export default function UnifiedDashboard() {
                         sx={{
                           p: 2,
                           borderRadius: 2.5,
-                          border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-                          bgcolor: alpha(PRIMARY_COLOR, 0.02),
-                          boxShadow: "0 10px 24px rgba(39,76,167,0.06)",
+                          border: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                          bgcolor: isDark ? "#121b2d" : alpha(PRIMARY_COLOR, 0.02),
+                          boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 10px 24px rgba(39,76,167,0.06)",
                         }}
                       >
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 }}>
                           <Avatar
                             sx={{
-                              bgcolor: alpha(PRIMARY_COLOR, 0.1),
-                              color: PRIMARY_COLOR,
+                              bgcolor: isDark ? "rgba(59, 130, 246, 0.2)" : alpha(PRIMARY_COLOR, 0.1),
+                              color: isDark ? "#60a5fa" : PRIMARY_COLOR,
                               width: 40,
                               height: 40,
                             }}
@@ -2075,10 +2155,10 @@ export default function UnifiedDashboard() {
                             {getInitials(member.name)}
                           </Avatar>
                           <Box>
-                            <Typography variant="body2" fontWeight="600" sx={{ fontSize: { xs: '0.85rem', sm: '0.9rem' } }}>
+                            <Typography variant="body2" fontWeight="600" color={isDark ? "#f8fafc" : "text.primary"} sx={{ fontSize: { xs: '0.85rem', sm: '0.9rem' } }}>
                               {member.name}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                            <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"} sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                               {member.role}
                             </Typography>
                           </Box>
@@ -2086,10 +2166,10 @@ export default function UnifiedDashboard() {
 
                         <Box sx={{ mb: 1 }}>
                           <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                            <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"} sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                               Performance
                             </Typography>
-                            <Typography variant="caption" fontWeight="600" color={PRIMARY_COLOR} sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                            <Typography variant="caption" fontWeight="600" color={isDark ? "#60a5fa" : PRIMARY_COLOR} sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                               {member.performance}%
                             </Typography>
                           </Box>
@@ -2099,9 +2179,9 @@ export default function UnifiedDashboard() {
                             sx={{
                               height: 6,
                               borderRadius: 3,
-                              bgcolor: alpha(PRIMARY_COLOR, 0.1),
+                              bgcolor: isDark ? "rgba(255, 255, 255, 0.08)" : alpha(PRIMARY_COLOR, 0.1),
                               "& .MuiLinearProgress-bar": {
-                                bgcolor: PRIMARY_COLOR,
+                                bgcolor: isDark ? "#3b82f6" : PRIMARY_COLOR,
                               },
                             }}
                           />

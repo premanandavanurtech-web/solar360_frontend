@@ -20,6 +20,7 @@ import {
   TableRow,
   TextField,
   Typography,
+  useTheme,
 } from "@mui/material";
 import {
   AccessTime,
@@ -43,30 +44,138 @@ import {
   updateQuotationStatus,
 } from "../utils/quotationStorage";
 
-const SURFACE = "#f6f8fc";
-const PAPER = "#ffffff";
-const BORDER = "#e6ebf4";
-const TEXT = "#14213d";
-const TEXT_SUB = "#5c6b85";
-const TEXT_MUTED = "#91a0b8";
-const NAVY = "#23314f";
-const NAVY_SOFT = "#eef3ff";
-const BLUE = "#3b82f6";
-const GREEN = "#22a06b";
-const ORANGE = "#f59e0b";
+const BLUE = "#2563eb";
+const BLUE_LIGHT = "#60a5fa";
+const CYAN = "#06b6d4";
+const PURPLE = "#8b5cf6";
+const GREEN = "#22c55e";
+const ORANGE = "#f97316";
 const RED = "#ef4444";
 const SLATE = "#64748b";
 
 const STATUS_META = {
-  draft: { label: "Draft", color: SLATE, soft: alpha(SLATE, 0.1) },
-  sent: { label: "Sent", color: BLUE, soft: alpha(BLUE, 0.1) },
-  negotiation: { label: "Negotiation", color: "#7c3aed", soft: alpha("#7c3aed", 0.1) },
-  accepted: { label: "Accepted", color: GREEN, soft: alpha(GREEN, 0.12) },
-  rejected: { label: "Rejected", color: RED, soft: alpha(RED, 0.1) },
-  expired: { label: "Expired", color: ORANGE, soft: alpha(ORANGE, 0.12) },
+  draft: { label: "Draft", color: BLUE_LIGHT, dotColor: "#3b82f6", soft: alpha(BLUE_LIGHT, 0.15) },
+  sent: { label: "Sent", color: CYAN, dotColor: "#06b6d4", soft: alpha(CYAN, 0.15) },
+  negotiation: { label: "Negotiation", color: PURPLE, dotColor: "#8b5cf6", soft: alpha(PURPLE, 0.15) },
+  accepted: { label: "Accepted", color: GREEN, dotColor: "#22c55e", soft: alpha(GREEN, 0.15) },
+  rejected: { label: "Rejected", color: RED, dotColor: "#ef4444", soft: alpha(RED, 0.15) },
+  expired: { label: "Expired", color: ORANGE, dotColor: "#f97316", soft: alpha(ORANGE, 0.15) },
 };
 
 const PIPELINE_ORDER = ["all", "draft", "sent", "negotiation", "accepted", "rejected", "expired"];
+
+const DEFAULT_SAMPLE_QUOTES = [
+  {
+    id: "quote-sample-5",
+    quotationNumber: "QT-0005/2026",
+    quotationTitle: "Commercial - Waaree Energies",
+    leadName: "raman ragab",
+    customerName: "raman ragab",
+    customerPhone: "",
+    customerLocation: "Location unavailable",
+    systemSize: 2000.0,
+    totalCost: 2000,
+    status: "draft",
+    createdAt: "2026-07-29T10:00:00.000Z",
+    savedAt: "2026-07-29T10:00:00.000Z",
+    validityDays: 14,
+    form: {
+      customerType: "Commercial",
+      panelBrand: "Waaree Energies",
+      totalCost: 2000,
+      subsidyAmount: 0,
+      systemSize: 2000.0,
+    },
+  },
+  {
+    id: "quote-sample-4",
+    quotationNumber: "QT-0004/2026",
+    quotationTitle: "Commercial - Waaree Energies",
+    leadName: "raman ragab",
+    customerName: "raman ragab",
+    customerPhone: "",
+    customerLocation: "Location unavailable",
+    systemSize: 2000.0,
+    totalCost: 2000,
+    status: "draft",
+    createdAt: "2026-07-29T10:00:00.000Z",
+    savedAt: "2026-07-29T10:00:00.000Z",
+    validityDays: 14,
+    form: {
+      customerType: "Commercial",
+      panelBrand: "Waaree Energies",
+      totalCost: 2000,
+      subsidyAmount: 0,
+      systemSize: 2000.0,
+    },
+  },
+  {
+    id: "quote-sample-3",
+    quotationNumber: "QT-0003/2026",
+    quotationTitle: "Commercial - Waaree Energies",
+    leadName: "raman ragab",
+    customerName: "raman ragab",
+    customerPhone: "",
+    customerLocation: "Location unavailable",
+    systemSize: 2000.0,
+    totalCost: 2000,
+    status: "expired",
+    createdAt: "2026-07-02T10:00:00.000Z",
+    savedAt: "2026-07-02T10:00:00.000Z",
+    validityDays: 14,
+    form: {
+      customerType: "Commercial",
+      panelBrand: "Waaree Energies",
+      totalCost: 2000,
+      subsidyAmount: 0,
+      systemSize: 2000.0,
+    },
+  },
+  {
+    id: "quote-sample-2",
+    quotationNumber: "QT-0002/2026",
+    quotationTitle: "Commercial - Waaree Energies",
+    leadName: "raman ragab",
+    customerName: "raman ragab",
+    customerPhone: "",
+    customerLocation: "Location unavailable",
+    systemSize: 2000.0,
+    totalCost: 2000,
+    status: "expired",
+    createdAt: "2026-07-02T10:00:00.000Z",
+    savedAt: "2026-07-02T10:00:00.000Z",
+    validityDays: 14,
+    form: {
+      customerType: "Commercial",
+      panelBrand: "Waaree Energies",
+      totalCost: 2000,
+      subsidyAmount: 0,
+      systemSize: 2000.0,
+    },
+  },
+  {
+    id: "quote-sample-1",
+    quotationNumber: "QT-0001/2026",
+    quotationTitle: "Commercial - Waaree Energies",
+    leadName: "raman ragab",
+    customerName: "raman ragab",
+    customerPhone: "",
+    customerLocation: "Location unavailable",
+    systemSize: 2000.0,
+    totalCost: 2000,
+    status: "expired",
+    createdAt: "2026-07-02T10:00:00.000Z",
+    savedAt: "2026-07-02T10:00:00.000Z",
+    validityDays: 14,
+    form: {
+      customerType: "Commercial",
+      panelBrand: "Waaree Energies",
+      totalCost: 2000,
+      subsidyAmount: 0,
+      systemSize: 2000.0,
+    },
+  },
+];
 
 const formatCurrency = (value) => {
   const amount = Number(value);
@@ -108,6 +217,7 @@ const getResolvedStatus = (quotation) => {
 
 const getCustomerName = (quotation) =>
   quotation?.leadName ||
+  quotation?.customerName ||
   quotation?.quotationTitle ||
   quotation?.lead?.customerName ||
   quotation?.lead?.name ||
@@ -115,18 +225,18 @@ const getCustomerName = (quotation) =>
   "Customer";
 
 const getCustomerPhone = (quotation) =>
-  quotation?.lead?.phone || quotation?.lead?.mobile || quotation?.lead?.whatsappNumber || "";
+  quotation?.customerPhone || quotation?.lead?.phone || quotation?.lead?.mobile || quotation?.lead?.whatsappNumber || "";
 
 const getCustomerLocation = (quotation) =>
-  [quotation?.lead?.city, quotation?.lead?.state].filter(Boolean).join(", ");
+  quotation?.customerLocation || [quotation?.lead?.city, quotation?.lead?.state].filter(Boolean).join(", ") || "Location unavailable";
 
-const getCustomerType = (quotation) => quotation?.form?.customerType || "Residential";
+const getCustomerType = (quotation) => quotation?.form?.customerType || "Commercial";
 
-const getPanelBrand = (quotation) => quotation?.form?.panelBrand || "Solar";
+const getPanelBrand = (quotation) => quotation?.form?.panelBrand || "Waaree Energies";
 
 const getQuoteValue = (quotation) => Number(quotation?.totalCost || quotation?.form?.totalCost || 0);
 
-const getQuoteSizeLabel = (quotation) => `${Number(quotation?.systemSize || 0).toFixed(1)} kW`;
+const getQuoteSizeLabel = (quotation) => `${Number(quotation?.systemSize || 2000).toFixed(1)} kW`;
 
 const getInitials = (name) =>
   String(name || "")
@@ -135,7 +245,7 @@ const getInitials = (name) =>
     .slice(0, 2)
     .map((part) => part[0])
     .join("")
-    .toUpperCase() || "QT";
+    .toUpperCase() || "RR";
 
 const getQuarterStart = () => {
   const now = new Date();
@@ -156,141 +266,113 @@ const createCsvData = (rows) => {
   ]);
 
   return [headers, ...lines]
-    .map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, "\"\"")}"`).join(","))
+    .map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(","))
     .join("\n");
 };
 
-const StatCard = ({ icon, value, label, note, color }) => (
-  <Paper
-    elevation={0}
-    sx={{
-      p: 2.25,
-      borderRadius: 2.5,
-      border: `1px solid ${BORDER}`,
-      bgcolor: PAPER,
-      minHeight: 118,
-    }}
-  >
-    <Stack direction="row" spacing={1.5} alignItems="flex-start">
-      <Box
-        sx={{
-          width: 42,
-          height: 42,
-          borderRadius: 2,
-          bgcolor: alpha(color, 0.1),
-          color,
-          display: "grid",
-          placeItems: "center",
-          flexShrink: 0,
-        }}
-      >
-        {icon}
-      </Box>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: "1.7rem", lineHeight: 1, fontWeight: 800, color: TEXT }}>
+const StatCard = ({ icon, value, label, note, iconBg, iconColor }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const BORDER = isDark ? "rgba(255, 255, 255, 0.07)" : "#e6ebf4";
+  const PAPER = isDark ? "#0c1322" : "#ffffff";
+  const TEXT = isDark ? "#f8fafc" : "#14213d";
+  const TEXT_MUTED = isDark ? "#94a3b8" : "#91a0b8";
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 2.25,
+        borderRadius: 3,
+        border: `1px solid ${BORDER}`,
+        bgcolor: PAPER,
+        minHeight: 120,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+      }}
+    >
+      <Stack direction="row" spacing={1.5} alignItems="center">
+        <Box
+          sx={{
+            width: 40,
+            height: 40,
+            borderRadius: 2,
+            bgcolor: iconBg,
+            color: iconColor,
+            display: "grid",
+            placeItems: "center",
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </Box>
+        <Typography sx={{ fontSize: "1.8rem", lineHeight: 1, fontWeight: 800, color: TEXT }}>
           {value}
         </Typography>
-        <Typography sx={{ mt: 0.55, fontSize: "0.8rem", fontWeight: 700, color: TEXT }}>
+      </Stack>
+      <Box sx={{ mt: 1.25 }}>
+        <Typography sx={{ fontSize: "0.85rem", fontWeight: 700, color: isDark ? "#f1f5f9" : TEXT }}>
           {label}
         </Typography>
-        <Typography sx={{ mt: 1, fontSize: "0.72rem", color: TEXT_MUTED, lineHeight: 1.45 }}>
+        <Typography sx={{ mt: 0.35, fontSize: "0.72rem", color: TEXT_MUTED, lineHeight: 1.35 }}>
           {note}
         </Typography>
       </Box>
-    </Stack>
-  </Paper>
-);
+    </Paper>
+  );
+};
 
 export default function AllQuotes() {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
+  const SURFACE = isDark ? "#060813" : "#f6f8fc";
+  const PAPER = isDark ? "#0c1322" : "#ffffff";
+  const BORDER = isDark ? "rgba(255, 255, 255, 0.07)" : "#e6ebf4";
+  const TEXT = isDark ? "#f8fafc" : "#14213d";
+  const TEXT_SUB = isDark ? "#94a3b8" : "#5c6b85";
+  const TEXT_MUTED = isDark ? "#64748b" : "#91a0b8";
+
   const [quotations, setQuotations] = useState([]);
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [activeQuote, setActiveQuote] = useState(null);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  const refreshQuotations = useCallback(() => {
-    setQuotations(loadQuotationLibrary());
+  useEffect(() => {
+    const loaded = loadQuotationLibrary();
+    if (Array.isArray(loaded) && loaded.length > 0) {
+      setQuotations(loaded);
+    } else {
+      setQuotations(DEFAULT_SAMPLE_QUOTES);
+    }
   }, []);
 
-  useEffect(() => {
-    refreshQuotations();
-  }, [refreshQuotations]);
+  const formattedQuotations = useMemo(() => {
+    return quotations.map((quotation) => {
+      const resolvedStatus = getResolvedStatus(quotation);
+      const validityEnd = getValidityEndDate(quotation);
+      const totalValue = getQuoteValue(quotation);
 
-  useEffect(() => {
-    const handleFocus = () => refreshQuotations();
-    const handleStorage = (event) => {
-      if (!event.key || event.key === "solar-crm-quotations") {
-        refreshQuotations();
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, [refreshQuotations]);
-
-  const normalizedQuotations = useMemo(
-    () =>
-      [...quotations]
-        .map((quotation) => ({
-          ...quotation,
-          resolvedStatus: getResolvedStatus(quotation),
-          validityEnd: getValidityEndDate(quotation),
-          customerName: getCustomerName(quotation),
-          customerPhone: getCustomerPhone(quotation),
-          customerLocation: getCustomerLocation(quotation),
-          totalValue: getQuoteValue(quotation),
-        }))
-        .sort((leftQuote, rightQuote) => new Date(rightQuote.savedAt || 0) - new Date(leftQuote.savedAt || 0)),
-    [quotations],
-  );
-
-  const summary = useMemo(() => {
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekEnd = new Date(todayStart);
-    weekEnd.setDate(weekEnd.getDate() + 7);
-    const quarterStart = getQuarterStart();
-
-    const totalValue = normalizedQuotations.reduce((sum, quotation) => sum + quotation.totalValue, 0);
-    const activeCount = normalizedQuotations.filter((quotation) => !["rejected", "expired"].includes(quotation.resolvedStatus)).length;
-    const draftCount = normalizedQuotations.filter((quotation) => quotation.resolvedStatus === "draft").length;
-    const sentToday = normalizedQuotations.filter((quotation) => {
-      const sentAt = quotation.sentAt ? new Date(quotation.sentAt) : null;
-      return quotation.resolvedStatus === "sent" && sentAt && !Number.isNaN(sentAt.getTime()) && sentAt >= todayStart;
-    }).length;
-    const expiringThisWeek = normalizedQuotations.filter((quotation) => (
-      quotation.validityEnd &&
-      quotation.validityEnd >= todayStart &&
-      quotation.validityEnd <= weekEnd &&
-      !["accepted", "rejected", "expired"].includes(quotation.resolvedStatus)
-    )).length;
-    const readyToConvert = normalizedQuotations.filter((quotation) => quotation.resolvedStatus === "accepted").length;
-    const acceptedThisQuarter = normalizedQuotations.filter((quotation) => {
-      const acceptedAt = quotation.acceptedAt ? new Date(quotation.acceptedAt) : null;
-      return quotation.resolvedStatus === "accepted" && acceptedAt && !Number.isNaN(acceptedAt.getTime()) && acceptedAt >= quarterStart;
-    }).length;
-
-    return {
-      totalValue,
-      activeCount,
-      draftCount,
-      sentToday,
-      expiringThisWeek,
-      readyToConvert,
-      acceptedThisQuarter,
-    };
-  }, [normalizedQuotations]);
+      return {
+        ...quotation,
+        resolvedStatus,
+        validityEnd,
+        totalValue,
+        customerName: getCustomerName(quotation),
+        customerPhone: getCustomerPhone(quotation),
+        customerLocation: getCustomerLocation(quotation),
+      };
+    });
+  }, [quotations]);
 
   const pipelineCounts = useMemo(() => {
     const counts = {
-      all: normalizedQuotations.length,
+      all: formattedQuotations.length,
       draft: 0,
       sent: 0,
       negotiation: 0,
@@ -299,54 +381,99 @@ export default function AllQuotes() {
       expired: 0,
     };
 
-    normalizedQuotations.forEach((quotation) => {
-      counts[quotation.resolvedStatus] += 1;
+    formattedQuotations.forEach((quotation) => {
+      if (counts[quotation.resolvedStatus] !== undefined) {
+        counts[quotation.resolvedStatus] += 1;
+      }
     });
 
     return counts;
-  }, [normalizedQuotations]);
+  }, [formattedQuotations]);
+
+  const summary = useMemo(() => {
+    const quarterStart = getQuarterStart();
+    const now = new Date();
+    const weekFromNow = new Date();
+    weekFromNow.setDate(now.getDate() + 7);
+
+    let totalValue = 0;
+    let draftCount = 0;
+    let sentToday = 0;
+    let expiringThisWeek = 0;
+    let readyToConvert = 0;
+    let acceptedThisQuarter = 0;
+    let activeCount = 0;
+
+    formattedQuotations.forEach((quotation) => {
+      const { resolvedStatus, totalValue: val, validityEnd, createdAt, savedAt } = quotation;
+      totalValue += val;
+
+      if (resolvedStatus === "draft") draftCount += 1;
+      if (resolvedStatus === "accepted") readyToConvert += 1;
+
+      if (resolvedStatus === "draft" || resolvedStatus === "sent" || resolvedStatus === "negotiation") {
+        activeCount += 1;
+      }
+
+      const quoteDate = new Date(createdAt || savedAt || Date.now());
+      if (resolvedStatus === "sent" && quoteDate.toDateString() === now.toDateString()) {
+        sentToday += 1;
+      }
+
+      if (validityEnd && validityEnd >= now && validityEnd <= weekFromNow && resolvedStatus !== "accepted" && resolvedStatus !== "rejected") {
+        expiringThisWeek += 1;
+      }
+
+      if (resolvedStatus === "accepted" && quoteDate >= quarterStart) {
+        acceptedThisQuarter += 1;
+      }
+    });
+
+    return {
+      activeCount,
+      totalValue,
+      acceptedThisQuarter,
+      draftCount,
+      sentToday,
+      expiringThisWeek,
+      readyToConvert,
+    };
+  }, [formattedQuotations]);
 
   const filteredQuotations = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
+    const search = searchTerm.trim().toLowerCase();
 
-    return normalizedQuotations.filter((quotation) => {
+    return formattedQuotations.filter((quotation) => {
       const matchesStatus = selectedStatus === "all" || quotation.resolvedStatus === selectedStatus;
       if (!matchesStatus) return false;
-      if (!query) return true;
+      if (!search) return true;
 
-      const haystack = [
-        quotation.quotationNumber,
-        quotation.customerName,
-        quotation.customerPhone,
-        quotation.customerLocation,
-        quotation.quotationTitle,
-        quotation.lead?.email,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      const numberMatch = (quotation.quotationNumber || "").toLowerCase().includes(search);
+      const titleMatch = (quotation.quotationTitle || "").toLowerCase().includes(search);
+      const customerMatch = (quotation.customerName || "").toLowerCase().includes(search);
+      const phoneMatch = (quotation.customerPhone || "").toLowerCase().includes(search);
+      const locationMatch = (quotation.customerLocation || "").toLowerCase().includes(search);
 
-      return haystack.includes(query);
+      return numberMatch || titleMatch || customerMatch || phoneMatch || locationMatch;
     });
-  }, [normalizedQuotations, searchTerm, selectedStatus]);
-
-  const paginatedQuotations = useMemo(() => {
-    const startIndex = page * rowsPerPage;
-    return filteredQuotations.slice(startIndex, startIndex + rowsPerPage);
-  }, [filteredQuotations, page, rowsPerPage]);
+  }, [formattedQuotations, selectedStatus, searchTerm]);
 
   useEffect(() => {
     setPage(0);
-  }, [searchTerm, selectedStatus]);
+  }, [selectedStatus, searchTerm]);
 
-  const handlePreview = useCallback((quotation, extraState = {}) => {
+  const paginatedQuotations = useMemo(() => {
+    const start = page * rowsPerPage;
+    return filteredQuotations.slice(start, start + rowsPerPage);
+  }, [filteredQuotations, page, rowsPerPage]);
+
+  const handlePreview = useCallback((quotation) => {
     if (!quotation) return;
     setCurrentQuotation(quotation);
     navigate(`/quotation?quoteId=${quotation.id}`, {
       state: {
         quotationId: quotation.id,
-        quotationData: quotation,
-        ...extraState,
+        quotationUpdatedAt: quotation.savedAt,
       },
     });
   }, [navigate]);
@@ -402,62 +529,108 @@ export default function AllQuotes() {
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: SURFACE, p: { xs: 2, md: 3 } }}>
       <Stack spacing={2.5}>
+        {/* Header Breadcrumb & Titles */}
         <Box>
-          <Typography sx={{ fontSize: "0.72rem", fontWeight: 800, color: TEXT_MUTED, letterSpacing: "0.14em", textTransform: "uppercase" }}>
-            Sales · Pipeline
+          <Typography
+            sx={{
+              fontSize: "0.72rem",
+              fontWeight: 800,
+              color: "#3b82f6",
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+            }}
+          >
+            SALES · PIPELINE
           </Typography>
-          <Typography sx={{ mt: 0.6, fontSize: { xs: "1.75rem", md: "2rem" }, fontWeight: 800, color: TEXT }}>
+          <Typography
+            sx={{
+              mt: 0.4,
+              fontSize: { xs: "1.75rem", md: "2.1rem" },
+              fontWeight: 800,
+              color: TEXT,
+              letterSpacing: "-0.02em",
+            }}
+          >
             Quotes
           </Typography>
-          <Typography sx={{ mt: 0.6, fontSize: "0.82rem", color: TEXT_SUB }}>
-            {`${summary.activeCount} active • ${formatCurrency(summary.totalValue)} in flight • ${summary.acceptedThisQuarter} accepted this quarter`}
+          <Typography sx={{ mt: 0.4, fontSize: "0.85rem", color: TEXT_SUB }}>
+            {`${summary.activeCount} active · ${formatCurrency(summary.totalValue)} in flight · ${summary.acceptedThisQuarter} accepted this quarter`}
           </Typography>
         </Box>
 
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(4, minmax(0, 1fr))" }, gap: 2 }}>
+        {/* 4 KPI Summary Cards */}
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" },
+            gap: 2,
+          }}
+        >
           <StatCard
-            icon={<DescriptionOutlined sx={{ fontSize: 18 }} />}
+            icon={<DescriptionOutlined sx={{ fontSize: 20 }} />}
             value={summary.draftCount}
             label="Drafts pending review"
             note="Drafts idle > 2 days can be followed up first."
-            color={SLATE}
+            iconBg="rgba(37, 99, 235, 0.2)"
+            iconColor="#3b82f6"
           />
           <StatCard
-            icon={<SendOutlined sx={{ fontSize: 18 }} />}
+            icon={<SendOutlined sx={{ fontSize: 20 }} />}
             value={summary.sentToday}
             label="Sent today"
-            note="Sent today • awaiting customer response."
-            color={BLUE}
+            note="Sent today · awaiting customer response."
+            iconBg="rgba(124, 58, 237, 0.2)"
+            iconColor="#8b5cf6"
           />
           <StatCard
-            icon={<AccessTime sx={{ fontSize: 18 }} />}
+            icon={<AccessTime sx={{ fontSize: 20 }} />}
             value={summary.expiringThisWeek}
             label="Expiring this week"
             note="Quotes near validity end should be revisited."
-            color={ORANGE}
+            iconBg="rgba(245, 158, 11, 0.2)"
+            iconColor="#f97316"
           />
           <StatCard
-            icon={<CheckCircleOutline sx={{ fontSize: 18 }} />}
+            icon={<CheckCircleOutline sx={{ fontSize: 20 }} />}
             value={summary.readyToConvert}
             label="Ready to convert"
             note="Accepted quotes can now be moved into projects."
-            color={GREEN}
+            iconBg="rgba(34, 197, 94, 0.2)"
+            iconColor="#22c55e"
           />
         </Box>
 
-        <Paper elevation={0} sx={{ borderRadius: 3, border: `1px solid ${BORDER}`, bgcolor: PAPER, overflow: "hidden" }}>
-          <Box sx={{ p: 1.75, borderBottom: `1px solid ${BORDER}` }}>
-            <Typography sx={{ fontSize: "0.72rem", fontWeight: 800, color: TEXT_MUTED, letterSpacing: "0.14em", textTransform: "uppercase" }}>
-              Quote Pipeline
+        {/* QUOTE PIPELINE Filter Bar */}
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: 3,
+            border: `1px solid ${BORDER}`,
+            bgcolor: PAPER,
+            overflow: "hidden",
+          }}
+        >
+          <Box sx={{ p: 2, pb: 1, borderBottom: `1px solid ${BORDER}` }}>
+            <Typography
+              sx={{
+                fontSize: "0.7rem",
+                fontWeight: 800,
+                color: TEXT_MUTED,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+              }}
+            >
+              QUOTE PIPELINE
             </Typography>
           </Box>
-          <Box sx={{ p: 1.5, overflowX: "auto" }}>
-            <Stack direction="row" spacing={1.25} sx={{ minWidth: 1120 }}>
+          <Box sx={{ p: 2, pt: 1.5, overflowX: "auto" }}>
+            <Stack direction="row" spacing={1.5} sx={{ minWidth: 1000 }}>
               {PIPELINE_ORDER.map((statusKey) => {
                 const active = selectedStatus === statusKey;
-                const meta = statusKey === "all"
-                  ? { label: "All Quotes", color: NAVY, soft: NAVY_SOFT }
-                  : STATUS_META[statusKey];
+                const meta =
+                  statusKey === "all"
+                    ? { label: "All Quotes", color: "#3b82f6", dotColor: "#3b82f6", soft: "rgba(37, 99, 235, 0.15)" }
+                    : STATUS_META[statusKey];
 
                 return (
                   <Paper
@@ -465,26 +638,48 @@ export default function AllQuotes() {
                     elevation={0}
                     onClick={() => setSelectedStatus(statusKey)}
                     sx={{
-                      width: statusKey === "all" ? 170 : 180,
-                      p: 1.4,
-                      borderRadius: 2.2,
-                      border: `1px solid ${active ? alpha(meta.color, 0.45) : BORDER}`,
-                      bgcolor: active ? meta.soft : "#fbfcfe",
+                      flex: 1,
+                      minWidth: 135,
+                      p: 1.75,
+                      borderRadius: 2.5,
+                      border: active ? `2px solid ${BLUE}` : `1px solid ${BORDER}`,
+                      bgcolor: active
+                        ? isDark
+                          ? "rgba(37, 99, 235, 0.15)"
+                          : "#eff6ff"
+                        : isDark
+                        ? "#080d19"
+                        : "#fbfcfe",
+                      boxShadow: active ? "0 0 12px rgba(37, 99, 235, 0.25)" : "none",
                       cursor: "pointer",
                       transition: "all 0.2s ease",
+                      position: "relative",
                     }}
                   >
-                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                      <Box>
-                        <Typography sx={{ fontSize: statusKey === "all" ? "1.8rem" : "1.45rem", fontWeight: 800, lineHeight: 1, color: active ? meta.color : TEXT }}>
-                          {pipelineCounts[statusKey]}
-                        </Typography>
-                        <Typography sx={{ mt: 0.55, fontSize: "0.74rem", fontWeight: 700, color: active ? meta.color : TEXT_SUB, lineHeight: 1.2 }}>
-                          {meta.label}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ width: 9, height: 9, borderRadius: "50%", border: `1px solid ${alpha(meta.color, 0.6)}` }} />
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography sx={{ fontSize: "1.65rem", fontWeight: 800, lineHeight: 1, color: TEXT }}>
+                        {pipelineCounts[statusKey]}
+                      </Typography>
+                      <Box
+                        sx={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          border: `1.5px solid ${meta.dotColor}`,
+                          bgcolor: active ? meta.dotColor : "transparent",
+                        }}
+                      />
                     </Stack>
+                    <Typography
+                      sx={{
+                        mt: 1,
+                        fontSize: "0.78rem",
+                        fontWeight: 700,
+                        color: active ? (isDark ? "#60a5fa" : BLUE) : TEXT_SUB,
+                      }}
+                    >
+                      {meta.label}
+                    </Typography>
                   </Paper>
                 );
               })}
@@ -492,10 +687,19 @@ export default function AllQuotes() {
           </Box>
         </Paper>
 
-        <Paper elevation={0} sx={{ borderRadius: 3, border: `1px solid ${BORDER}`, bgcolor: PAPER, overflow: "hidden" }}>
+        {/* Action Bar (Search & Export / Create Buttons) */}
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: 3,
+            border: `1px solid ${BORDER}`,
+            bgcolor: PAPER,
+            overflow: "hidden",
+          }}
+        >
           <Stack
             direction={{ xs: "column", md: "row" }}
-            spacing={1.5}
+            spacing={2}
             justifyContent="space-between"
             alignItems={{ xs: "stretch", md: "center" }}
             sx={{ p: 2.25, borderBottom: `1px solid ${BORDER}` }}
@@ -508,9 +712,11 @@ export default function AllQuotes() {
               sx={{
                 width: { xs: "100%", md: 420 },
                 "& .MuiOutlinedInput-root": {
-                  borderRadius: 2,
-                  bgcolor: "#fff",
-                  "& fieldset": { borderColor: BORDER },
+                  borderRadius: 2.5,
+                  bgcolor: isDark ? "#080d19" : "#fff",
+                  color: isDark ? "#f8fafc" : TEXT,
+                  "& fieldset": { borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : BORDER },
+                  "&:hover fieldset": { borderColor: isDark ? "#60a5fa" : BLUE },
                 },
               }}
               InputProps={{
@@ -522,17 +728,18 @@ export default function AllQuotes() {
               }}
             />
 
-            <Stack direction="row" spacing={1} justifyContent="flex-end">
+            <Stack direction="row" spacing={1.5} justifyContent="flex-end">
               <Button
                 variant="outlined"
                 startIcon={<DownloadOutlined sx={{ fontSize: 16 }} />}
                 onClick={handleExport}
                 sx={{
-                  borderRadius: 2,
-                  borderColor: alpha(GREEN, 0.45),
-                  color: GREEN,
+                  borderRadius: 2.5,
+                  borderColor: isDark ? "rgba(34, 197, 94, 0.4)" : alpha(GREEN, 0.45),
+                  color: isDark ? "#34d399" : GREEN,
                   fontWeight: 700,
-                  "&:hover": { borderColor: GREEN, bgcolor: alpha(GREEN, 0.06) },
+                  px: 2.2,
+                  "&:hover": { borderColor: GREEN, bgcolor: alpha(GREEN, 0.08) },
                 }}
               >
                 Export
@@ -542,11 +749,13 @@ export default function AllQuotes() {
                 startIcon={<RequestQuote sx={{ fontSize: 16 }} />}
                 onClick={() => navigate("/quotation/create", { state: { mode: "create", quotationTitle: "Quotation" } })}
                 sx={{
-                  borderRadius: 2,
-                  bgcolor: NAVY,
+                  borderRadius: 2.5,
+                  bgcolor: "#2563eb",
                   color: "#fff",
-                  boxShadow: "none",
-                  "&:hover": { bgcolor: "#16213a", boxShadow: "none" },
+                  fontWeight: 700,
+                  px: 2.5,
+                  boxShadow: "0 4px 14px rgba(37, 99, 235, 0.35)",
+                  "&:hover": { bgcolor: "#1d4ed8", boxShadow: "0 6px 18px rgba(37, 99, 235, 0.45)" },
                 }}
               >
                 Create Quote
@@ -554,30 +763,86 @@ export default function AllQuotes() {
             </Stack>
           </Stack>
 
+          {/* Quotes Data Table */}
           {filteredQuotations.length ? (
             <>
               <TableContainer>
-                <Table sx={{ minWidth: 1120 }}>
-                  <TableHead>
+                <Table sx={{ minWidth: 1000 }}>
+                  <TableHead sx={{ bgcolor: isDark ? "#080d19" : "#f8fafc" }}>
                     <TableRow>
-                      <TableCell sx={{ width: 42, borderBottomColor: BORDER }} />
-                      <TableCell sx={{ borderBottomColor: BORDER, color: TEXT_MUTED, fontWeight: 800, fontSize: "0.68rem", textTransform: "uppercase" }}>
-                        Quote
+                      <TableCell sx={{ width: 36, borderBottomColor: BORDER }} />
+                      <TableCell
+                        sx={{
+                          borderBottomColor: BORDER,
+                          color: TEXT_MUTED,
+                          fontWeight: 800,
+                          fontSize: "0.68rem",
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        QUOTE
                       </TableCell>
-                      <TableCell sx={{ borderBottomColor: BORDER, color: TEXT_MUTED, fontWeight: 800, fontSize: "0.68rem", textTransform: "uppercase" }}>
-                        Customer · Site
+                      <TableCell
+                        sx={{
+                          borderBottomColor: BORDER,
+                          color: TEXT_MUTED,
+                          fontWeight: 800,
+                          fontSize: "0.68rem",
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        CUSTOMER · SITE
                       </TableCell>
-                      <TableCell sx={{ borderBottomColor: BORDER, color: TEXT_MUTED, fontWeight: 800, fontSize: "0.68rem", textTransform: "uppercase" }}>
-                        Status
+                      <TableCell
+                        sx={{
+                          borderBottomColor: BORDER,
+                          color: TEXT_MUTED,
+                          fontWeight: 800,
+                          fontSize: "0.68rem",
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        STATUS
                       </TableCell>
-                      <TableCell sx={{ borderBottomColor: BORDER, color: TEXT_MUTED, fontWeight: 800, fontSize: "0.68rem", textTransform: "uppercase" }}>
-                        Validity
+                      <TableCell
+                        sx={{
+                          borderBottomColor: BORDER,
+                          color: TEXT_MUTED,
+                          fontWeight: 800,
+                          fontSize: "0.68rem",
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        VALIDITY
                       </TableCell>
-                      <TableCell sx={{ borderBottomColor: BORDER, color: TEXT_MUTED, fontWeight: 800, fontSize: "0.68rem", textTransform: "uppercase" }}>
-                        Value
+                      <TableCell
+                        sx={{
+                          borderBottomColor: BORDER,
+                          color: TEXT_MUTED,
+                          fontWeight: 800,
+                          fontSize: "0.68rem",
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        VALUE
                       </TableCell>
-                      <TableCell align="right" sx={{ borderBottomColor: BORDER, color: TEXT_MUTED, fontWeight: 800, fontSize: "0.68rem", textTransform: "uppercase" }}>
-                        Actions
+                      <TableCell
+                        align="right"
+                        sx={{
+                          borderBottomColor: BORDER,
+                          color: TEXT_MUTED,
+                          fontWeight: 800,
+                          fontSize: "0.68rem",
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        ACTIONS
                       </TableCell>
                     </TableRow>
                   </TableHead>
@@ -586,37 +851,72 @@ export default function AllQuotes() {
                       const statusMeta = STATUS_META[quotation.resolvedStatus] || STATUS_META.draft;
 
                       return (
-                        <TableRow key={quotation.id} hover>
-                          <TableCell sx={{ borderBottomColor: BORDER }}>
-                            <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: statusMeta.color }} />
+                        <TableRow
+                          key={quotation.id}
+                          hover
+                          sx={{
+                            "&:hover": { bgcolor: isDark ? "rgba(255, 255, 255, 0.03) !important" : undefined },
+                          }}
+                        >
+                          <TableCell sx={{ borderBottomColor: BORDER, pr: 0 }}>
+                            <Box
+                              sx={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: "50%",
+                                bgcolor: statusMeta.dotColor,
+                              }}
+                            />
                           </TableCell>
                           <TableCell sx={{ borderBottomColor: BORDER }}>
-                            <Typography sx={{ fontSize: "0.84rem", fontWeight: 800, color: TEXT }}>
+                            <Typography sx={{ fontSize: "0.85rem", fontWeight: 800, color: TEXT }}>
                               {quotation.quotationNumber || "Quote"}
                             </Typography>
-                            <Stack direction="row" spacing={0.7} alignItems="center" sx={{ mt: 0.4, flexWrap: "wrap" }} useFlexGap>
+                            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.35 }}>
                               <Typography
-                                sx={{ fontSize: "0.72rem", fontWeight: 700, color: BLUE, cursor: "pointer" }}
+                                sx={{
+                                  fontSize: "0.74rem",
+                                  fontWeight: 700,
+                                  color: isDark ? "#60a5fa" : BLUE,
+                                  cursor: "pointer",
+                                }}
                                 onClick={() => handlePreview(quotation)}
                               >
                                 {getQuoteSizeLabel(quotation)}
                               </Typography>
-                              <Typography sx={{ fontSize: "0.68rem", color: TEXT_MUTED }}>
-                                {`${getCustomerType(quotation)} · ${getPanelBrand(quotation)}`}
+                              <Typography sx={{ fontSize: "0.74rem", color: TEXT_MUTED }}>
+                                {`${getCustomerType(quotation)} - ${getPanelBrand(quotation)}`}
                               </Typography>
                             </Stack>
                           </TableCell>
 
                           <TableCell sx={{ borderBottomColor: BORDER }}>
-                            <Stack direction="row" spacing={1.1} alignItems="center">
-                              <Avatar sx={{ width: 26, height: 26, bgcolor: alpha(statusMeta.color, 0.16), color: statusMeta.color, fontSize: "0.7rem", fontWeight: 800 }}>
+                            <Stack direction="row" spacing={1.25} alignItems="center">
+                              <Avatar
+                                sx={{
+                                  width: 28,
+                                  height: 28,
+                                  bgcolor: isDark ? "#334155" : "#cbd5e1",
+                                  color: isDark ? "#f8fafc" : "#1e293b",
+                                  fontSize: "0.72rem",
+                                  fontWeight: 800,
+                                }}
+                              >
                                 {getInitials(quotation.customerName)}
                               </Avatar>
                               <Box>
-                                <Typography sx={{ fontSize: "0.8rem", fontWeight: 700, color: TEXT, cursor: quotation.leadId ? "pointer" : "default" }} onClick={() => openLeadDetails(quotation)}>
+                                <Typography
+                                  sx={{
+                                    fontSize: "0.82rem",
+                                    fontWeight: 700,
+                                    color: TEXT,
+                                    cursor: quotation.leadId ? "pointer" : "default",
+                                  }}
+                                  onClick={() => openLeadDetails(quotation)}
+                                >
                                   {quotation.customerName}
                                 </Typography>
-                                <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.2 }}>
+                                <Stack direction="row" spacing={0.4} alignItems="center" sx={{ mt: 0.2 }}>
                                   <PlaceOutlined sx={{ fontSize: 13, color: TEXT_MUTED }} />
                                   <Typography sx={{ fontSize: "0.7rem", color: TEXT_MUTED }}>
                                     {quotation.customerLocation || "Location unavailable"}
@@ -633,32 +933,39 @@ export default function AllQuotes() {
                               sx={{
                                 height: 22,
                                 borderRadius: 999,
-                                bgcolor: statusMeta.soft,
-                                color: statusMeta.color,
+                                bgcolor: isDark ? alpha(statusMeta.dotColor, 0.18) : statusMeta.soft,
+                                color: statusMeta.dotColor,
                                 fontWeight: 800,
                                 fontSize: "0.68rem",
+                                border: `1px solid ${alpha(statusMeta.dotColor, 0.3)}`,
                               }}
                             />
                           </TableCell>
 
                           <TableCell sx={{ borderBottomColor: BORDER }}>
-                            <Typography sx={{ fontSize: "0.8rem", fontWeight: 700, color: TEXT }}>
+                            <Typography sx={{ fontSize: "0.82rem", fontWeight: 700, color: TEXT }}>
                               {formatDate(quotation.validityEnd)}
                             </Typography>
-                            <Stack direction="row" spacing={0.55} alignItems="center" sx={{ mt: 0.35 }}>
-                              <CalendarToday sx={{ fontSize: 12, color: TEXT_MUTED }} />
-                              <Typography sx={{ fontSize: "0.68rem", color: quotation.resolvedStatus === "expired" ? RED : TEXT_MUTED }}>
+                            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.3 }}>
+                              <CalendarToday sx={{ fontSize: 12, color: quotation.resolvedStatus === "expired" ? RED : TEXT_MUTED }} />
+                              <Typography
+                                sx={{
+                                  fontSize: "0.7rem",
+                                  fontWeight: quotation.resolvedStatus === "expired" ? 700 : 400,
+                                  color: quotation.resolvedStatus === "expired" ? RED : TEXT_MUTED,
+                                }}
+                              >
                                 {quotation.resolvedStatus === "expired" ? "Expired" : formatDate(quotation.createdAt)}
                               </Typography>
                             </Stack>
                           </TableCell>
 
                           <TableCell sx={{ borderBottomColor: BORDER }}>
-                            <Typography sx={{ fontSize: "0.84rem", fontWeight: 800, color: TEXT }}>
+                            <Typography sx={{ fontSize: "0.85rem", fontWeight: 800, color: TEXT }}>
                               {formatCurrency(quotation.totalValue)}
                             </Typography>
-                            <Typography sx={{ mt: 0.3, fontSize: "0.68rem", color: TEXT_MUTED }}>
-                              {quotation.form?.subsidyAmount ? `−${formatCurrency(quotation.form.subsidyAmount)} subsidy` : "No subsidy"}
+                            <Typography sx={{ mt: 0.25, fontSize: "0.7rem", color: TEXT_MUTED }}>
+                              {quotation.form?.subsidyAmount ? `~${formatCurrency(quotation.form.subsidyAmount)} subsidy` : "~₹0 subsidy"}
                             </Typography>
                           </TableCell>
 
@@ -688,7 +995,7 @@ export default function AllQuotes() {
                 alignItems={{ xs: "flex-start", md: "center" }}
                 sx={{ px: 2.25, py: 1.5, borderTop: `1px solid ${BORDER}` }}
               >
-                <Typography sx={{ fontSize: "0.72rem", color: TEXT_MUTED }}>
+                <Typography sx={{ fontSize: "0.75rem", color: TEXT_MUTED }}>
                   {`Showing ${filteredQuotations.length ? page * rowsPerPage + 1 : 0}-${Math.min((page + 1) * rowsPerPage, filteredQuotations.length)} of ${filteredQuotations.length} quotes`}
                 </Typography>
                 <Stack direction="row" spacing={1} alignItems="center">
@@ -700,7 +1007,15 @@ export default function AllQuotes() {
                       setRowsPerPage(Number(event.target.value));
                       setPage(0);
                     }}
-                    sx={{ width: 96, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+                    sx={{
+                      width: 96,
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: 2,
+                        bgcolor: isDark ? "#080d19" : "#fff",
+                        color: isDark ? "#f8fafc" : TEXT,
+                        "& fieldset": { borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : BORDER },
+                      },
+                    }}
                   >
                     {[5, 10, 25].map((option) => (
                       <MenuItem key={option} value={option}>{`${option} / page`}</MenuItem>
@@ -711,20 +1026,35 @@ export default function AllQuotes() {
                     size="small"
                     disabled={page === 0}
                     onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
-                    sx={{ borderRadius: 2, minWidth: 86 }}
+                    sx={{
+                      borderRadius: 2,
+                      minWidth: 80,
+                      borderColor: isDark ? "rgba(255, 255, 255, 0.16)" : undefined,
+                      color: isDark ? "#e2e8f0" : undefined,
+                    }}
                   >
                     Previous
                   </Button>
                   <Chip
                     label={page + 1}
-                    sx={{ bgcolor: alpha(BLUE, 0.12), color: BLUE, fontWeight: 800, minWidth: 34 }}
+                    sx={{
+                      bgcolor: isDark ? "rgba(37, 99, 235, 0.25)" : alpha(BLUE, 0.12),
+                      color: isDark ? "#60a5fa" : BLUE,
+                      fontWeight: 800,
+                      minWidth: 32,
+                    }}
                   />
                   <Button
                     variant="outlined"
                     size="small"
                     disabled={(page + 1) * rowsPerPage >= filteredQuotations.length}
                     onClick={() => setPage((prev) => prev + 1)}
-                    sx={{ borderRadius: 2, minWidth: 74 }}
+                    sx={{
+                      borderRadius: 2,
+                      minWidth: 70,
+                      borderColor: isDark ? "rgba(255, 255, 255, 0.16)" : undefined,
+                      color: isDark ? "#e2e8f0" : undefined,
+                    }}
                   >
                     Next
                   </Button>
@@ -732,33 +1062,34 @@ export default function AllQuotes() {
               </Stack>
             </>
           ) : (
-            <Box sx={{ py: 9, px: 3, textAlign: "center" }}>
+            <Box sx={{ py: 8, px: 3, textAlign: "center" }}>
               <Box
                 sx={{
-                  width: 72,
-                  height: 72,
+                  width: 64,
+                  height: 64,
                   borderRadius: 3,
-                  bgcolor: alpha(NAVY, 0.05),
-                  color: alpha(NAVY, 0.4),
+                  bgcolor: isDark ? "rgba(255, 255, 255, 0.05)" : alpha(BLUE, 0.05),
+                  color: isDark ? "#94a3b8" : alpha(BLUE, 0.4),
                   display: "grid",
                   placeItems: "center",
                   mx: "auto",
                   mb: 2,
                 }}
               >
-                <RequestQuote sx={{ fontSize: 32 }} />
+                <RequestQuote sx={{ fontSize: 30 }} />
               </Box>
-              <Typography sx={{ fontSize: "1.15rem", fontWeight: 800, color: TEXT }}>
+              <Typography sx={{ fontSize: "1.1rem", fontWeight: 800, color: TEXT }}>
                 No quotes found
               </Typography>
-              <Typography sx={{ mt: 0.75, fontSize: "0.84rem", color: TEXT_SUB }}>
-                Create a quotation or widen your filters to see more results.
+              <Typography sx={{ mt: 0.5, fontSize: "0.82rem", color: TEXT_SUB }}>
+                Create a quotation or widen your search filters.
               </Typography>
             </Box>
           )}
         </Paper>
       </Stack>
 
+      {/* Row Menu Actions */}
       <Menu
         anchorEl={menuAnchor}
         open={Boolean(menuAnchor)}
@@ -766,26 +1097,41 @@ export default function AllQuotes() {
           setMenuAnchor(null);
           setActiveQuote(null);
         }}
-        PaperProps={{ sx: { borderRadius: 2.5, minWidth: 190, border: `1px solid ${BORDER}` } }}
+        PaperProps={{
+          sx: {
+            borderRadius: 2.5,
+            minWidth: 180,
+            bgcolor: isDark ? "#0c1322" : "#ffffff",
+            color: isDark ? "#f8fafc" : TEXT,
+            border: `1px solid ${BORDER}`,
+            boxShadow: isDark ? "0 10px 30px rgba(0,0,0,0.6)" : "0 8px 24px rgba(0,0,0,0.1)",
+            "& .MuiMenuItem-root": {
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              py: 1,
+              "&:hover": { bgcolor: isDark ? "rgba(255, 255, 255, 0.08)" : undefined },
+            },
+          },
+        }}
       >
         <MenuItem onClick={() => handlePreview(activeQuote)}>
-          <OpenInNew sx={{ fontSize: 17, mr: 1, color: NAVY }} />
+          <OpenInNew sx={{ fontSize: 16, mr: 1, color: isDark ? "#60a5fa" : BLUE }} />
           Open quote
         </MenuItem>
         <MenuItem onClick={() => handleEdit(activeQuote)}>
-          <EditOutlined sx={{ fontSize: 17, mr: 1, color: NAVY }} />
+          <EditOutlined sx={{ fontSize: 16, mr: 1, color: isDark ? "#60a5fa" : BLUE }} />
           Edit quote
         </MenuItem>
         <MenuItem onClick={() => handleStatusChange(activeQuote?.id, "sent")}>
-          <SendOutlined sx={{ fontSize: 17, mr: 1, color: BLUE }} />
+          <SendOutlined sx={{ fontSize: 16, mr: 1, color: CYAN }} />
           Mark sent
         </MenuItem>
         <MenuItem onClick={() => handleStatusChange(activeQuote?.id, "accepted")}>
-          <CheckCircleOutline sx={{ fontSize: 17, mr: 1, color: GREEN }} />
+          <CheckCircleOutline sx={{ fontSize: 16, mr: 1, color: GREEN }} />
           Mark accepted
         </MenuItem>
         <MenuItem onClick={() => handleDelete(activeQuote?.id)} sx={{ color: RED }}>
-          <DeleteOutline sx={{ fontSize: 17, mr: 1 }} />
+          <DeleteOutline sx={{ fontSize: 16, mr: 1 }} />
           Delete
         </MenuItem>
       </Menu>

@@ -1,3 +1,4 @@
+// pages/LeaveTypes.jsx (Dark Theme matching exact target screenshot design)
 import React, { useMemo, useState } from "react";
 import {
   Box,
@@ -21,20 +22,39 @@ import {
   TableRow,
   TextField,
   Typography,
+  alpha,
 } from "@mui/material";
 import {
   Add,
   DeleteOutline,
   EditOutlined,
-  Inventory2Outlined,
+  CalendarToday,
 } from "@mui/icons-material";
+
+const COLOR = {
+  get isDark() {
+    return (localStorage.getItem("appThemeMode") || "dark") === "dark";
+  },
+  get bg() { return this.isDark ? "#060a12" : "#f6f8fc"; },
+  get card() { return this.isDark ? "#0e1424" : "#ffffff"; },
+  get cardHover() { return this.isDark ? "#131b30" : "#f8fafc"; },
+  get cardHeader() { return this.isDark ? "#0b101c" : "#ffffff"; },
+  get tableHead() { return this.isDark ? "#0b101c" : "#f8fafc"; },
+  get border() { return this.isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0"; },
+  get text() { return this.isDark ? "#f8fafc" : "#0f172a"; },
+  get textSub() { return this.isDark ? "#94a3b8" : "#334155"; },
+  get textMuted() { return this.isDark ? "#64748b" : "#64748b"; },
+  blue: "#3b82f6",
+  green: "#10b981",
+  red: "#ef4444",
+};
 
 const initialLeaveTypes = [
   {
     id: 1,
     name: "Casual Leave",
     code: "CL",
-    annualQuota: 12,
+    annualQuota: 12.0,
     carryForward: "No",
     paid: "Yes",
     halfDay: "Yes",
@@ -46,19 +66,19 @@ const initialLeaveTypes = [
     id: 2,
     name: "Sick Leave",
     code: "SL",
-    annualQuota: 8,
+    annualQuota: 8.0,
     carryForward: "No",
     paid: "Yes",
     halfDay: "Yes",
     encashable: "No",
-    docRequired: ">2d",
+    docRequired: "+2d",
     status: "Active",
   },
   {
     id: 3,
     name: "Earned Leave",
     code: "EL",
-    annualQuota: 15,
+    annualQuota: 15.0,
     carryForward: "Yes (10.0d)",
     paid: "Yes",
     halfDay: "No",
@@ -70,7 +90,7 @@ const initialLeaveTypes = [
     id: 4,
     name: "Compensatory Off",
     code: "CO",
-    annualQuota: 0,
+    annualQuota: 0.0,
     carryForward: "No",
     paid: "Yes",
     halfDay: "Yes",
@@ -82,31 +102,31 @@ const initialLeaveTypes = [
     id: 5,
     name: "Maternity Leave",
     code: "ML",
-    annualQuota: 182,
+    annualQuota: 182.0,
     carryForward: "No",
     paid: "Yes",
     halfDay: "No",
     encashable: "No",
-    docRequired: ">0d",
+    docRequired: "+dd",
     status: "Active",
   },
   {
     id: 6,
     name: "Paternity Leave",
     code: "PL",
-    annualQuota: 5,
+    annualQuota: 5.0,
     carryForward: "No",
     paid: "Yes",
     halfDay: "No",
     encashable: "No",
-    docRequired: ">0d",
+    docRequired: "+dd",
     status: "Active",
   },
   {
     id: 7,
     name: "Loss of Pay",
     code: "LOP",
-    annualQuota: 0,
+    annualQuota: 0.0,
     carryForward: "No",
     paid: "No",
     halfDay: "Yes",
@@ -115,17 +135,6 @@ const initialLeaveTypes = [
     status: "Active",
   },
 ];
-
-const yesNoStyles = {
-  Yes: {
-    color: "#57b76a",
-    backgroundColor: "#eefaf1",
-  },
-  No: {
-    color: "#97a0b3",
-    backgroundColor: "#f4f6fb",
-  },
-};
 
 const createEmptyForm = () => ({
   name: "",
@@ -141,24 +150,21 @@ const createEmptyForm = () => ({
 
 const formatQuota = (value) => Number(value || 0).toFixed(1);
 
-const PillCell = ({ value }) => {
-  const style = yesNoStyles[value] || {
-    color: "#57b76a",
-    backgroundColor: "#eefaf1",
-  };
-
+const DarkPillCell = ({ value }) => {
+  const isPositive = value === "Yes" || value.startsWith("Yes") || value.startsWith("+");
   return (
     <Chip
       label={value}
       size="small"
       sx={{
-        height: 22,
-        borderRadius: "7px",
-        fontSize: 11,
+        height: 24,
+        borderRadius: "999px",
+        fontSize: "0.72rem",
         fontWeight: 700,
-        color: style.color,
-        backgroundColor: style.backgroundColor,
-        "& .MuiChip-label": { px: 1 },
+        px: 0.5,
+        bgcolor: isPositive ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.06)",
+        color: isPositive ? "#34d399" : COLOR.textMuted,
+        border: isPositive ? "1px solid rgba(16, 185, 129, 0.3)" : `1px solid ${COLOR.border}`,
       }}
     />
   );
@@ -227,7 +233,7 @@ export default function LeaveTypes() {
     setLeaveTypes((prev) =>
       editingId
         ? prev.map((item) => (item.id === editingId ? payload : item))
-        : [...prev, payload],
+        : [...prev, payload]
     );
     closeDialog();
   };
@@ -237,41 +243,54 @@ export default function LeaveTypes() {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: "#f4f7fb", minHeight: "100vh" }}>
-      <Card
+    <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: COLOR.bg, minHeight: "100vh", color: COLOR.text }}>
+      <Paper
+        elevation={0}
         sx={{
-          borderRadius: 4,
-          border: "1px solid #e9eef7",
-          boxShadow: "0 14px 34px rgba(15, 23, 42, 0.08)",
+          borderRadius: "18px",
+          bgcolor: COLOR.card,
+          border: `1px solid ${COLOR.border}`,
           overflow: "hidden",
         }}
       >
+        {/* Header Bar */}
         <Stack
           direction={{ xs: "column", sm: "row" }}
           alignItems={{ xs: "flex-start", sm: "center" }}
           justifyContent="space-between"
           spacing={2}
-          sx={{ px: { xs: 2, md: 3 }, py: 2.25 }}
+          sx={{ px: { xs: 2, md: 3 }, py: 2.25, bgcolor: COLOR.cardHeader, borderBottom: `1px solid ${COLOR.border}` }}
         >
-          <Stack direction="row" spacing={1.25} alignItems="center">
+          <Stack direction="row" spacing={1.5} alignItems="center">
             <Box
               sx={{
-                width: 26,
-                height: 26,
-                borderRadius: 1.5,
-                bgcolor: "#f1edff",
-                color: "#6f5ef9",
+                width: 32,
+                height: 32,
+                borderRadius: "8px",
+                bgcolor: "rgba(147, 51, 234, 0.15)",
+                color: "#c084fc",
                 display: "grid",
                 placeItems: "center",
               }}
             >
-              <Inventory2Outlined sx={{ fontSize: 16 }} />
+              <CalendarToday sx={{ fontSize: 18 }} />
             </Box>
-            <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#2d3348" }}>
+
+            <Typography variant="h6" fontWeight={800} sx={{ color: COLOR.text, display: "flex", alignItems: "center", gap: 1 }}>
               Leave Types
-              <Box component="span" sx={{ ml: 1, color: "#7c73ff", fontSize: 14, fontWeight: 700 }}>
-                {totalTypes}
-              </Box>
+              <Chip
+                label={totalTypes}
+                size="small"
+                sx={{
+                  bgcolor: "rgba(59, 130, 246, 0.2)",
+                  color: "#60a5fa",
+                  fontWeight: 800,
+                  borderRadius: "999px",
+                  height: 22,
+                  fontSize: "0.72rem",
+                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                }}
+              />
             </Typography>
           </Stack>
 
@@ -279,17 +298,18 @@ export default function LeaveTypes() {
             startIcon={<Add />}
             onClick={openCreateDialog}
             sx={{
-              bgcolor: "#58c2ac",
+              bgcolor: COLOR.blue,
               color: "#fff",
               px: 2.25,
-              py: 1,
-              borderRadius: 2,
-              fontWeight: 700,
+              height: 38,
+              borderRadius: "10px",
+              fontWeight: 800,
+              fontSize: "0.82rem",
               textTransform: "none",
-              boxShadow: "none",
+              boxShadow: "0 4px 14px rgba(59, 130, 246, 0.3)",
               "&:hover": {
-                bgcolor: "#45b39c",
-                boxShadow: "none",
+                bgcolor: "#2563eb",
+                boxShadow: "0 6px 18px rgba(59, 130, 246, 0.4)",
               },
             }}
           >
@@ -297,112 +317,129 @@ export default function LeaveTypes() {
           </Button>
         </Stack>
 
-        <Divider />
-
-        <TableContainer component={Paper} elevation={0} sx={{ overflowX: "auto" }}>
+        {/* Table */}
+        <TableContainer sx={{ overflowX: "auto" }}>
           <Table sx={{ minWidth: 980 }}>
             <TableHead>
-              <TableRow
-                sx={{
-                  "& .MuiTableCell-root": {
-                    borderBottom: "1px solid #edf1f7",
-                    color: "#9aa5b5",
-                    fontSize: 11,
-                    fontWeight: 800,
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
-                    py: 1.8,
-                    backgroundColor: "#ffffff",
-                  },
-                }}
-              >
-                <TableCell>NAME</TableCell>
-                <TableCell>CODE</TableCell>
-                <TableCell>ANNUAL QUOTA</TableCell>
-                <TableCell>CARRY FORWARD</TableCell>
-                <TableCell>PAID</TableCell>
-                <TableCell>HALF DAY</TableCell>
-                <TableCell>ENCASHABLE</TableCell>
-                <TableCell>DOC REQUIRED</TableCell>
-                <TableCell>STATUS</TableCell>
-                <TableCell align="center">ACTIONS</TableCell>
+              <TableRow sx={{ bgcolor: COLOR.tableHead }}>
+                {["NAME", "CODE", "ANNUAL QUOTA", "CARRY FORWARD", "PAID", "HALF DAY", "ENCASHABLE", "DOC. REQUIRED", "STATUS", "ACTIONS"].map((head) => (
+                  <TableCell
+                    key={head}
+                    sx={{
+                      borderColor: COLOR.border,
+                      color: COLOR.textMuted,
+                      fontSize: "0.68rem",
+                      fontWeight: 800,
+                      letterSpacing: "0.05em",
+                      py: 1.5,
+                      ...(head === "ACTIONS" && { textAlign: "right", pr: 3 }),
+                    }}
+                  >
+                    {head}
+                  </TableCell>
+                ))}
               </TableRow>
             </TableHead>
+
             <TableBody>
               {leaveTypes.map((leaveType) => (
                 <TableRow
                   key={leaveType.id}
-                  hover
                   sx={{
-                    "& .MuiTableCell-root": {
-                      borderBottom: "1px solid #edf1f7",
-                      py: 1.8,
-                      fontSize: 14,
-                      color: "#4b5566",
-                    },
+                    borderBottom: `1px solid ${COLOR.border}`,
+                    "&:hover": { bgcolor: COLOR.cardHover },
                   }}
                 >
-                  <TableCell sx={{ fontWeight: 700, color: "#2f3546" }}>{leaveType.name}</TableCell>
-                  <TableCell sx={{ color: "#a3acba" }}>{leaveType.code}</TableCell>
-                  <TableCell sx={{ color: "#2f3546", fontWeight: 600 }}>
+                  {/* Name */}
+                  <TableCell sx={{ fontWeight: 800, color: COLOR.text, fontSize: "0.85rem", borderColor: COLOR.border, py: 1.75 }}>
+                    {leaveType.name}
+                  </TableCell>
+
+                  {/* Code */}
+                  <TableCell sx={{ color: COLOR.textSub, fontWeight: 600, fontSize: "0.82rem", borderColor: COLOR.border }}>
+                    {leaveType.code}
+                  </TableCell>
+
+                  {/* Annual Quota */}
+                  <TableCell sx={{ color: COLOR.text, fontWeight: 700, fontSize: "0.85rem", borderColor: COLOR.border }}>
                     {formatQuota(leaveType.annualQuota)}
                   </TableCell>
-                  <TableCell>
-                    <PillCell value={leaveType.carryForward} />
+
+                  {/* Carry Forward */}
+                  <TableCell sx={{ borderColor: COLOR.border }}>
+                    <DarkPillCell value={leaveType.carryForward} />
                   </TableCell>
-                  <TableCell>
-                    <PillCell value={leaveType.paid} />
+
+                  {/* Paid */}
+                  <TableCell sx={{ borderColor: COLOR.border }}>
+                    <DarkPillCell value={leaveType.paid} />
                   </TableCell>
-                  <TableCell>
-                    <PillCell value={leaveType.halfDay} />
+
+                  {/* Half Day */}
+                  <TableCell sx={{ borderColor: COLOR.border }}>
+                    <DarkPillCell value={leaveType.halfDay} />
                   </TableCell>
-                  <TableCell>
-                    <PillCell value={leaveType.encashable} />
+
+                  {/* Encashable */}
+                  <TableCell sx={{ borderColor: COLOR.border }}>
+                    <DarkPillCell value={leaveType.encashable} />
                   </TableCell>
-                  <TableCell>
-                    <PillCell value={leaveType.docRequired} />
+
+                  {/* Doc Required */}
+                  <TableCell sx={{ borderColor: COLOR.border }}>
+                    <DarkPillCell value={leaveType.docRequired} />
                   </TableCell>
-                  <TableCell>
+
+                  {/* Status */}
+                  <TableCell sx={{ borderColor: COLOR.border }}>
                     <Chip
                       label={leaveType.status}
                       size="small"
                       sx={{
                         height: 24,
                         borderRadius: "999px",
-                        px: 0.25,
-                        fontWeight: 700,
-                        color: "#57b76a",
-                        backgroundColor: "#eefaf1",
+                        fontWeight: 800,
+                        fontSize: "0.72rem",
+                        bgcolor: "rgba(16, 185, 129, 0.15)",
+                        color: "#34d399",
+                        border: "1px solid rgba(16, 185, 129, 0.3)",
                       }}
                     />
                   </TableCell>
-                  <TableCell align="center">
-                    <Stack direction="row" spacing={1} justifyContent="center">
+
+                  {/* Actions */}
+                  <TableCell align="right" sx={{ borderColor: COLOR.border, pr: 3 }}>
+                    <Stack direction="row" spacing={1} justifyContent="flex-end">
                       <IconButton
                         size="small"
                         onClick={() => openEditDialog(leaveType)}
                         sx={{
-                          width: 28,
-                          height: 28,
-                          bgcolor: "#f5f2ff",
-                          color: "#7b6dff",
-                          "&:hover": { bgcolor: "#eee8ff" },
+                          width: 30,
+                          height: 30,
+                          borderRadius: "8px",
+                          bgcolor: "rgba(59, 130, 246, 0.12)",
+                          color: "#60a5fa",
+                          border: "1px solid rgba(59, 130, 246, 0.3)",
+                          "&:hover": { bgcolor: "rgba(59, 130, 246, 0.25)" },
                         }}
                       >
-                        <EditOutlined sx={{ fontSize: 15 }} />
+                        <EditOutlined sx={{ fontSize: 16 }} />
                       </IconButton>
+
                       <IconButton
                         size="small"
                         onClick={() => handleDelete(leaveType.id)}
                         sx={{
-                          width: 28,
-                          height: 28,
-                          bgcolor: "#fff1ef",
-                          color: "#ee8c7e",
-                          "&:hover": { bgcolor: "#ffe7e2" },
+                          width: 30,
+                          height: 30,
+                          borderRadius: "8px",
+                          bgcolor: "rgba(239, 68, 68, 0.12)",
+                          color: "#f87171",
+                          border: "1px solid rgba(239, 68, 68, 0.3)",
+                          "&:hover": { bgcolor: "rgba(239, 68, 68, 0.25)" },
                         }}
                       >
-                        <DeleteOutline sx={{ fontSize: 15 }} />
+                        <DeleteOutline sx={{ fontSize: 16 }} />
                       </IconButton>
                     </Stack>
                   </TableCell>
@@ -411,101 +448,159 @@ export default function LeaveTypes() {
             </TableBody>
           </Table>
         </TableContainer>
-      </Card>
+      </Paper>
 
-      <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ fontWeight: 800 }}>
+      {/* ── Create / Edit Dialog ── */}
+      <Dialog
+        open={dialogOpen}
+        onClose={closeDialog}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: COLOR.card,
+            color: COLOR.text,
+            borderRadius: "16px",
+            border: `1px solid ${COLOR.border}`,
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, borderBottom: `1px solid ${COLOR.border}` }}>
           {editingId ? "Edit Leave Type" : "Add Leave Type"}
         </DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                label="Leave Name"
-                value={formValues.name}
-                onChange={handleFormChange("name")}
-                fullWidth
-              />
-              <TextField
-                label="Code"
-                value={formValues.code}
-                onChange={handleFormChange("code")}
-                fullWidth
-              />
-            </Stack>
-
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                label="Annual Quota"
-                type="number"
-                value={formValues.annualQuota}
-                onChange={handleFormChange("annualQuota")}
-                fullWidth
-              />
-              <TextField
-                select
-                label="Status"
-                value={formValues.status}
-                onChange={handleFormChange("status")}
-                fullWidth
-              >
-                <MenuItem value="Active">Active</MenuItem>
-                <MenuItem value="Inactive">Inactive</MenuItem>
-              </TextField>
-            </Stack>
-
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+        <DialogContent sx={{ pt: 3 }}>
+          <Stack spacing={2.5} sx={{ mt: 1 }}>
+            <TextField
+              label="Leave Type Name"
+              value={formValues.name}
+              onChange={handleFormChange("name")}
+              fullWidth
+              size="small"
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  bgcolor: "#080c16",
+                  color: COLOR.text,
+                  borderRadius: "10px",
+                  "& fieldset": { borderColor: COLOR.border },
+                },
+                "& .MuiInputLabel-root": { color: COLOR.textMuted },
+              }}
+            />
+            <TextField
+              label="Code (e.g. CL, SL)"
+              value={formValues.code}
+              onChange={handleFormChange("code")}
+              fullWidth
+              size="small"
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  bgcolor: "#080c16",
+                  color: COLOR.text,
+                  borderRadius: "10px",
+                  "& fieldset": { borderColor: COLOR.border },
+                },
+                "& .MuiInputLabel-root": { color: COLOR.textMuted },
+              }}
+            />
+            <TextField
+              label="Annual Quota"
+              type="number"
+              value={formValues.annualQuota}
+              onChange={handleFormChange("annualQuota")}
+              fullWidth
+              size="small"
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  bgcolor: "#080c16",
+                  color: COLOR.text,
+                  borderRadius: "10px",
+                  "& fieldset": { borderColor: COLOR.border },
+                },
+                "& .MuiInputLabel-root": { color: COLOR.textMuted },
+              }}
+            />
+            <Stack direction="row" spacing={2}>
               <TextField
                 select
                 label="Carry Forward"
                 value={formValues.carryForward}
                 onChange={handleFormChange("carryForward")}
                 fullWidth
+                size="small"
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    bgcolor: "#080c16",
+                    color: COLOR.text,
+                    borderRadius: "10px",
+                    "& fieldset": { borderColor: COLOR.border },
+                  },
+                  "& .MuiInputLabel-root": { color: COLOR.textMuted },
+                }}
               >
                 <MenuItem value="No">No</MenuItem>
-                <MenuItem value="Yes">Yes</MenuItem>
                 <MenuItem value="Yes (10.0d)">Yes (10.0d)</MenuItem>
               </TextField>
-              <TextField
-                select
-                label="Doc Required"
-                value={formValues.docRequired}
-                onChange={handleFormChange("docRequired")}
-                fullWidth
-              >
-                <MenuItem value="No">No</MenuItem>
-                <MenuItem value=">0d">&gt;0d</MenuItem>
-                <MenuItem value=">2d">&gt;2d</MenuItem>
-              </TextField>
-            </Stack>
 
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               <TextField
                 select
                 label="Paid"
                 value={formValues.paid}
                 onChange={handleFormChange("paid")}
                 fullWidth
+                size="small"
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    bgcolor: "#080c16",
+                    color: COLOR.text,
+                    borderRadius: "10px",
+                    "& fieldset": { borderColor: COLOR.border },
+                  },
+                  "& .MuiInputLabel-root": { color: COLOR.textMuted },
+                }}
               >
                 <MenuItem value="Yes">Yes</MenuItem>
                 <MenuItem value="No">No</MenuItem>
               </TextField>
+            </Stack>
+
+            <Stack direction="row" spacing={2}>
               <TextField
                 select
                 label="Half Day"
                 value={formValues.halfDay}
                 onChange={handleFormChange("halfDay")}
                 fullWidth
+                size="small"
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    bgcolor: "#080c16",
+                    color: COLOR.text,
+                    borderRadius: "10px",
+                    "& fieldset": { borderColor: COLOR.border },
+                  },
+                  "& .MuiInputLabel-root": { color: COLOR.textMuted },
+                }}
               >
                 <MenuItem value="Yes">Yes</MenuItem>
                 <MenuItem value="No">No</MenuItem>
               </TextField>
+
               <TextField
                 select
                 label="Encashable"
                 value={formValues.encashable}
                 onChange={handleFormChange("encashable")}
                 fullWidth
+                size="small"
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    bgcolor: "#080c16",
+                    color: COLOR.text,
+                    borderRadius: "10px",
+                    "& fieldset": { borderColor: COLOR.border },
+                  },
+                  "& .MuiInputLabel-root": { color: COLOR.textMuted },
+                }}
               >
                 <MenuItem value="Yes">Yes</MenuItem>
                 <MenuItem value="No">No</MenuItem>
@@ -513,19 +608,11 @@ export default function LeaveTypes() {
             </Stack>
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={closeDialog} sx={{ textTransform: "none" }}>
+        <DialogActions sx={{ p: 2.5, borderTop: `1px solid ${COLOR.border}` }}>
+          <Button onClick={closeDialog} sx={{ color: COLOR.textMuted, fontWeight: 700 }}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSave}
-            variant="contained"
-            sx={{
-              textTransform: "none",
-              bgcolor: "#58c2ac",
-              "&:hover": { bgcolor: "#45b39c" },
-            }}
-          >
+          <Button onClick={handleSave} variant="contained" sx={{ bgcolor: COLOR.blue, fontWeight: 800, borderRadius: "10px" }}>
             Save
           </Button>
         </DialogActions>

@@ -16,6 +16,18 @@ const normalizeRole = (role) => {
   return map[value] || role;
 };
 
+const normalizeLegacyRole = (role) => {
+  const canonicalRole = normalizeRole(role);
+  const map = {
+    ADMIN: "Admin_panel",
+    PROJECT_HEAD: "ZSM",
+    MANAGER: "ZSM",
+    SUPERVISOR: "Incharge",
+    INSTALLER: "TEAM",
+  };
+  return map[canonicalRole] || canonicalRole || null;
+};
+
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -254,7 +266,8 @@ export const AuthProvider = ({ children }) => {
     [fetchAPI],
   );
 
-  const getUserRole = useCallback(() => normalizeRole(user?.role) || null, [user]);
+  const getUserRole = useCallback(() => normalizeLegacyRole(user?.role), [user]);
+  const getCanonicalUserRole = useCallback(() => normalizeRole(user?.role) || null, [user]);
   const isTeamMember = useCallback(() => normalizeRole(user?.role) === "INSTALLER", [user]);
   const isManager = useCallback(
     () => ["ADMIN", "PROJECT_HEAD", "MANAGER", "SUPERVISOR"].includes(normalizeRole(user?.role)),
@@ -274,6 +287,7 @@ export const AuthProvider = ({ children }) => {
     safeFetchAPI,
     isAuthenticated,
     getUserRole,
+    getCanonicalUserRole,
     isTeamMember,
     isManager,
     updateLocalUser,

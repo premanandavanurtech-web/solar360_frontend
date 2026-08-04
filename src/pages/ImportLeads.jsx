@@ -125,88 +125,97 @@ const getRoleConfig = (role) => {
 };
 
 // Summary Card Component
-const SummaryCard = ({ card, index }) => (
-  <Fade in={true} timeout={500 + index * 100}>
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 1.5, sm: 2, md: 2.5 },
-        borderRadius: 3,
-        border: `1px solid ${alpha(card.color, 0.1)}`,
-        boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
-        transition: "transform 0.2s",
-        "&:hover": {
-          transform: "translateY(-2px)",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
-        },
-      }}
-    >
-      <Stack spacing={1}>
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
+const SummaryCard = ({ card, index }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const displayColor = card.color;
+
+  return (
+    <Fade in={true} timeout={500 + index * 100}>
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 1.5, sm: 2, md: 2.5 },
+          borderRadius: 3,
+          bgcolor: isDark ? "#0b0e1a" : "#fff",
+          color: isDark ? "#f8fafc" : "inherit",
+          border: isDark ? `1px solid ${alpha(card.color, 0.25)}` : `1px solid ${alpha(card.color, 0.15)}`,
+          boxShadow: isDark ? `0 4px 20px ${alpha(card.color, 0.15)}` : "0 4px 12px rgba(0,0,0,0.05)",
+          transition: "transform 0.2s, box-shadow 0.2s",
+          "&:hover": {
+            transform: "translateY(-2px)",
+            boxShadow: isDark ? `0 8px 28px ${alpha(card.color, 0.25)}` : "0 8px 24px rgba(0,0,0,0.1)",
+          },
+        }}
+      >
+        <Stack spacing={1}>
           <Box
             sx={{
-              width: { xs: 32, sm: 40, md: 48 },
-              height: { xs: 32, sm: 40, md: 48 },
-              borderRadius: { xs: 1.5, sm: 2 },
-              bgcolor: alpha(card.color, 0.1),
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              color: card.color,
+              justifyContent: "space-between",
             }}
           >
-            {React.cloneElement(card.icon, {
-              sx: { fontSize: { xs: 16, sm: 20, md: 24 } },
-            })}
+            <Box
+              sx={{
+                width: { xs: 32, sm: 40, md: 48 },
+                height: { xs: 32, sm: 40, md: 48 },
+                borderRadius: { xs: 1.5, sm: 2 },
+                bgcolor: isDark ? alpha(displayColor, 0.2) : alpha(card.color, 0.1),
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: displayColor,
+              }}
+            >
+              {React.cloneElement(card.icon, {
+                sx: { fontSize: { xs: 16, sm: 20, md: 24 } },
+              })}
+            </Box>
+            <Typography
+              variant="h4"
+              fontWeight={700}
+              sx={{
+                color: displayColor,
+                fontSize: { xs: "1.25rem", sm: "1.5rem", md: "2rem" },
+              }}
+            >
+              {card.value}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography
+              variant="subtitle2"
+              fontWeight={600}
+              color={isDark ? "#f8fafc" : "text.primary"}
+              sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" } }}
+            >
+              {card.label}
+            </Typography>
+            <Typography
+              variant="caption"
+              color={isDark ? "#94a3b8" : "text.secondary"}
+              sx={{ fontSize: { xs: "0.6rem", sm: "0.7rem" } }}
+            >
+              {card.subText}
+            </Typography>
           </Box>
           <Typography
-            variant="h4"
-            fontWeight={700}
+            variant="caption"
             sx={{
-              color: card.color,
-              fontSize: { xs: "1.25rem", sm: "1.5rem", md: "2rem" },
+              color: displayColor,
+              fontWeight: 500,
+              display: "block",
+              fontSize: { xs: "0.6rem", sm: "0.7rem" },
             }}
           >
-            {card.value}
+            {card.trend}
           </Typography>
-        </Box>
-        <Box>
-          <Typography
-            variant="subtitle2"
-            fontWeight={600}
-            sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" } }}
-          >
-            {card.label}
-          </Typography>
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ fontSize: { xs: "0.6rem", sm: "0.7rem" } }}
-          >
-            {card.subText}
-          </Typography>
-        </Box>
-        <Typography
-          variant="caption"
-          sx={{
-            color: card.color,
-            fontWeight: 500,
-            display: "block",
-            fontSize: { xs: "0.6rem", sm: "0.7rem" },
-          }}
-        >
-          {card.trend}
-        </Typography>
-      </Stack>
-    </Paper>
-  </Fade>
-);
+        </Stack>
+      </Paper>
+    </Fade>
+  );
+};
 
 // Mobile Option Card Component
 const MobileOptionCard = ({
@@ -216,54 +225,63 @@ const MobileOptionCard = ({
   buttonText,
   onClick,
   color = PRIMARY,
-}) => (
-  <Paper
-    elevation={0}
-    sx={{
-      p: 2.5,
-      borderRadius: 3,
-      border: `2px dashed ${alpha(color, 0.3)}`,
-      bgcolor: alpha(color, 0.02),
-      textAlign: "center",
-    }}
-  >
-    <Avatar
+}) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const displayColor = isDark && color === PRIMARY ? "#60a5fa" : color;
+
+  return (
+    <Paper
+      elevation={0}
       sx={{
-        width: 56,
-        height: 56,
-        bgcolor: alpha(color, 0.1),
-        color: color,
-        mx: "auto",
-        mb: 2,
+        p: 2.5,
+        borderRadius: 3,
+        border: `2px dashed ${isDark ? "rgba(96,165,250,0.3)" : alpha(color, 0.3)}`,
+        bgcolor: isDark ? "#0e1220" : alpha(color, 0.02),
+        color: isDark ? "#f8fafc" : "inherit",
+        textAlign: "center",
       }}
     >
-      {icon}
-    </Avatar>
-    <Typography variant="h6" fontWeight={600} gutterBottom>
-      {title}
-    </Typography>
-    <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
-      {description}
-    </Typography>
-    <Button
-      onClick={onClick}
-      variant="contained"
-      startIcon={icon}
-      fullWidth
-      sx={{
-        bgcolor: color,
-        borderRadius: 2,
-        py: 1.2,
-        "&:hover": { bgcolor: SECONDARY },
-      }}
-    >
-      {buttonText}
-    </Button>
-  </Paper>
-);
+      <Avatar
+        sx={{
+          width: 56,
+          height: 56,
+          bgcolor: isDark ? "rgba(96,165,250,0.15)" : alpha(color, 0.1),
+          color: displayColor,
+          mx: "auto",
+          mb: 2,
+        }}
+      >
+        {icon}
+      </Avatar>
+      <Typography variant="h6" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"} gutterBottom>
+        {title}
+      </Typography>
+      <Typography variant="body2" color={isDark ? "#94a3b8" : "text.secondary"} sx={{ mb: 2.5 }}>
+        {description}
+      </Typography>
+      <Button
+        onClick={onClick}
+        variant="contained"
+        startIcon={icon}
+        fullWidth
+        sx={{
+          bgcolor: isDark ? "#3b82f6" : color,
+          borderRadius: 2,
+          py: 1.2,
+          "&:hover": { bgcolor: SECONDARY },
+        }}
+      >
+        {buttonText}
+      </Button>
+    </Paper>
+  );
+};
 
 // Template Download Component
 const TemplateDownload = ({ onDownload }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
 
@@ -278,11 +296,11 @@ const TemplateDownload = ({ onDownload }) => {
         startIcon={<FileDownload />}
         sx={{
           borderRadius: 2,
-          borderColor: alpha(PRIMARY, 0.5),
-          color: PRIMARY,
+          borderColor: isDark ? "rgba(255,255,255,0.2)" : alpha(PRIMARY, 0.5),
+          color: isDark ? "#60a5fa" : PRIMARY,
           "&:hover": {
-            borderColor: PRIMARY,
-            bgcolor: alpha(PRIMARY, 0.05),
+            borderColor: isDark ? "#60a5fa" : PRIMARY,
+            bgcolor: isDark ? "rgba(255,255,255,0.05)" : alpha(PRIMARY, 0.05),
           },
         }}
       >
@@ -298,7 +316,10 @@ const TemplateDownload = ({ onDownload }) => {
             mt: 1.5,
             borderRadius: 2,
             minWidth: 200,
-            boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+            bgcolor: isDark ? "#0b0e1a" : "#fff",
+            color: isDark ? "#f8fafc" : "inherit",
+            border: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined,
+            boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.5)" : "0 4px 20px rgba(0,0,0,0.1)",
           }
         }}
       >
@@ -306,19 +327,28 @@ const TemplateDownload = ({ onDownload }) => {
           <ListItemIcon>
             <TableRows fontSize="small" sx={{ color: SUCCESS }} />
           </ListItemIcon>
-          <ListItemText primary="CSV Template" secondary="Simple format" />
+          <ListItemText 
+            primary={<Typography color={isDark ? "#f8fafc" : "inherit"}>CSV Template</Typography>} 
+            secondary={<Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>Simple format</Typography>} 
+          />
         </MenuItem>
         <MenuItem onClick={() => onDownload('excel')}>
           <ListItemIcon>
-            <TableChart fontSize="small" sx={{ color: PRIMARY }} />
+            <TableChart fontSize="small" sx={{ color: isDark ? "#60a5fa" : PRIMARY }} />
           </ListItemIcon>
-          <ListItemText primary="Excel Template" secondary="With formatting" />
+          <ListItemText 
+            primary={<Typography color={isDark ? "#f8fafc" : "inherit"}>Excel Template</Typography>} 
+            secondary={<Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>With formatting</Typography>} 
+          />
         </MenuItem>
         <MenuItem onClick={() => onDownload('sample')}>
           <ListItemIcon>
             <FileCopy fontSize="small" sx={{ color: WARNING }} />
           </ListItemIcon>
-          <ListItemText primary="Sample Data" secondary="With example entries" />
+          <ListItemText 
+            primary={<Typography color={isDark ? "#f8fafc" : "inherit"}>Sample Data</Typography>} 
+            secondary={<Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>With example entries</Typography>} 
+          />
         </MenuItem>
       </Menu>
     </>
@@ -326,6 +356,8 @@ const TemplateDownload = ({ onDownload }) => {
 };
 
 export default function InputLeadsPage() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const [filter, setFilter] = useState("Today");
   const [selectedFile, setSelectedFile] = useState(null);
   const [leadsData, setLeadsData] = useState({
@@ -349,7 +381,6 @@ export default function InputLeadsPage() {
   const navigate = useNavigate();
   const { fetchAPI, getUserRole } = useAuth();
   const userRole = getUserRole();
-  const theme = useTheme();
 
   // Responsive breakpoints
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -374,7 +405,7 @@ export default function InputLeadsPage() {
       {
         label: "Total Leads",
         value: leadsData.totalLeads,
-        color: PRIMARY,
+        color: "#3b82f6",
         icon: <People />,
         subText: "All time leads",
         trend:
@@ -385,7 +416,7 @@ export default function InputLeadsPage() {
       {
         label: "Active Leads",
         value: leadsData.activeLeads,
-        color: PRIMARY,
+        color: "#f59e0b",
         icon: <TrendingUp />,
         subText: "Currently active",
         trend: "Follow up required",
@@ -393,7 +424,7 @@ export default function InputLeadsPage() {
       {
         label: "Converted",
         value: leadsData.convertedLeads,
-        color: PRIMARY,
+        color: "#10b981",
         icon: <CheckCircle />,
         subText: "Successfully converted",
         trend: `${leadsData.conversionRate}% rate`,
@@ -401,7 +432,7 @@ export default function InputLeadsPage() {
       {
         label: "This Month",
         value: leadsData.thisMonthLeads,
-        color: PRIMARY,
+        color: "#a855f7",
         icon: <BarChart />,
         subText: "Monthly performance",
         trend:
@@ -747,10 +778,10 @@ export default function InputLeadsPage() {
   return (
     <Box
       sx={{
-        minHeight: "100vh",
+        bgcolor: "transparent",
         p: { xs: 1.5, sm: 2, md: 3 },
         pb: { xs: 8, sm: 3 },
-        bgcolor: "#f8fafc",
+        bgcolor: isDark ? "#050811" : "#f8fafc",
       }}
     >
       {/* Snackbar for notifications */}
@@ -780,7 +811,7 @@ export default function InputLeadsPage() {
           p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
-          background: `linear-gradient(135deg, ${PRIMARY} 0%, ${SECONDARY} 100%)`,
+          background: isDark ? "linear-gradient(135deg, #090c17 0%, #11172a 100%)" : `linear-gradient(135deg, ${PRIMARY} 0%, ${SECONDARY} 100%)`,
           color: "#fff",
         }}
       >
@@ -869,8 +900,9 @@ export default function InputLeadsPage() {
           borderRadius: 3,
           p: { xs: 2.5, sm: 4 },
           border: "1px solid",
-          borderColor: "divider",
-          bgcolor: "#fff",
+          borderColor: isDark ? "rgba(255,255,255,0.08)" : "divider",
+          bgcolor: isDark ? "#0b0e1a" : "#fff",
+          color: isDark ? "#f8fafc" : "inherit",
         }}
       >
         <Stack 
@@ -883,11 +915,12 @@ export default function InputLeadsPage() {
             <Typography
               variant={isMobile ? "h6" : "h5"}
               fontWeight="bold"
+              color={isDark ? "#f8fafc" : "text.primary"}
               gutterBottom
             >
               Import New Leads
             </Typography>
-            <Typography color="text.secondary">
+            <Typography color={isDark ? "#94a3b8" : "text.secondary"}>
               Bulk import leads from Excel/CSV files or add manually
             </Typography>
           </Box>
@@ -916,8 +949,9 @@ export default function InputLeadsPage() {
               sx={{
                 p: { xs: 2.5, sm: 3 },
                 borderRadius: 3,
-                border: `2px dashed ${alpha(PRIMARY, 0.3)}`,
-                bgcolor: alpha(PRIMARY, 0.02),
+                border: `2px dashed ${isDark ? "rgba(96,165,250,0.3)" : alpha(PRIMARY, 0.3)}`,
+                bgcolor: isDark ? "#0e1220" : alpha(PRIMARY, 0.02),
+                color: isDark ? "#f8fafc" : "inherit",
                 textAlign: "center",
               }}
             >
@@ -925,20 +959,20 @@ export default function InputLeadsPage() {
                 sx={{
                   width: { xs: 52, sm: 60 },
                   height: { xs: 52, sm: 60 },
-                  bgcolor: alpha(PRIMARY, 0.1),
-                  color: PRIMARY,
+                  bgcolor: isDark ? "rgba(96,165,250,0.15)" : alpha(PRIMARY, 0.1),
+                  color: isDark ? "#60a5fa" : PRIMARY,
                   mx: "auto",
                   mb: 2,
                 }}
               >
                 <CloudUpload sx={{ fontSize: { xs: 28, sm: 32 } }} />
               </Avatar>
-              <Typography variant="h6" fontWeight={600} gutterBottom>
+              <Typography variant="h6" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"} gutterBottom>
                 Bulk Import
               </Typography>
               <Typography
                 variant="body2"
-                color="text.secondary"
+                color={isDark ? "#94a3b8" : "text.secondary"}
                 sx={{ mb: 2.5 }}
               >
                 Import multiple leads from Excel/CSV file
@@ -962,7 +996,7 @@ export default function InputLeadsPage() {
                       startIcon={<Upload />}
                       fullWidth
                       sx={{
-                        bgcolor: PRIMARY,
+                        bgcolor: isDark ? "#3b82f6" : PRIMARY,
                         borderRadius: 2,
                         py: 1.2,
                         "&:hover": { bgcolor: SECONDARY },
@@ -977,7 +1011,7 @@ export default function InputLeadsPage() {
                   sx={{
                     p: 2,
                     borderRadius: 2,
-                    bgcolor: "action.hover",
+                    bgcolor: isDark ? "#050811" : "action.hover",
                   }}
                 >
                   <Stack
@@ -1040,7 +1074,7 @@ export default function InputLeadsPage() {
           <Typography
             variant="subtitle2"
             fontWeight={600}
-            color="text.primary"
+            color={isDark ? "#f8fafc" : "text.primary"}
             gutterBottom
           >
             📋 Import Instructions
@@ -1050,7 +1084,7 @@ export default function InputLeadsPage() {
               variant="body2"
               sx={{ display: "flex", alignItems: "center", gap: 1 }}
             >
-              <Info fontSize="small" sx={{ color: PRIMARY }} />
+              <Info fontSize="small" sx={{ color: isDark ? "#60a5fa" : PRIMARY }} />
               1. Use the template with required columns:{" "}
               <strong>name, phone, email, source, status</strong>
             </Typography>
@@ -1058,7 +1092,7 @@ export default function InputLeadsPage() {
               variant="body2"
               sx={{ display: "flex", alignItems: "center", gap: 1 }}
             >
-              <Info fontSize="small" sx={{ color: PRIMARY }} />
+              <Info fontSize="small" sx={{ color: isDark ? "#60a5fa" : PRIMARY }} />
               2. Save file as <strong>.xlsx</strong> or <strong>.csv</strong>{" "}
               format
             </Typography>
@@ -1066,14 +1100,14 @@ export default function InputLeadsPage() {
               variant="body2"
               sx={{ display: "flex", alignItems: "center", gap: 1 }}
             >
-              <Info fontSize="small" sx={{ color: PRIMARY }} />
+              <Info fontSize="small" sx={{ color: isDark ? "#60a5fa" : PRIMARY }} />
               3. Maximum file size: <strong>10MB</strong>
             </Typography>
             <Typography
               variant="body2"
               sx={{ display: "flex", alignItems: "center", gap: 1 }}
             >
-              <Info fontSize="small" sx={{ color: PRIMARY }} />
+              <Info fontSize="small" sx={{ color: isDark ? "#60a5fa" : PRIMARY }} />
               4. Required permissions: <strong>Incharge, Operation Lead, or Admin Panel</strong>
             </Typography>
           </Stack>
@@ -1091,7 +1125,7 @@ export default function InputLeadsPage() {
           }}
         >
           <Stack direction="row" spacing={1} alignItems="center">
-            <Warning sx={{ color: PRIMARY, fontSize: { xs: 18, sm: 20 } }} />
+            <Warning sx={{ color: isDark ? "#60a5fa" : PRIMARY, fontSize: { xs: 18, sm: 20 } }} />
             <Typography variant="body2">
               <strong>Tip:</strong> Ensure phone numbers are in correct format
               (10 digits). Invalid data may be skipped during import.

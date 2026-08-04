@@ -198,7 +198,7 @@ const REPORT_CONFIGS = [
     description: "Lead tracking and pipeline performance",
     icon: <TrendingUp />,
     endpoint: "/report/leads",
-    color: PRIMARY_COLOR,
+    color: "#3b82f6",
     bgColor: alpha(PRIMARY_COLOR, 0.1),
     columns: [
       { field: "firstName", label: "First Name", type: "string" },
@@ -224,7 +224,7 @@ const REPORT_CONFIGS = [
     description: "Installation completion metrics and progress",
     icon: <Build />,
     endpoint: "/report/installations",
-    color: "#4caf50",
+    color: "#10b981",
     bgColor: alpha("#4caf50", 0.1),
     columns: [
       { field: "customerName", label: "Customer", type: "string" },
@@ -246,7 +246,7 @@ const REPORT_CONFIGS = [
     description: "Expense tracking and approval status",
     icon: <ReceiptLong />,
     endpoint: "/report/expenses",
-    color: "#ff9800",
+    color: "#f59e0b",
     bgColor: alpha("#ff9800", 0.1),
     columns: [
       { field: "title", label: "Title", type: "string" },
@@ -268,7 +268,7 @@ const REPORT_CONFIGS = [
     description: "Attendance tracking and records",
     icon: <People />,
     endpoint: "/report/attendance",
-    color: "#9c27b0",
+    color: "#a855f7",
     bgColor: alpha("#9c27b0", 0.1),
     columns: [
       { field: "employee", label: "Employee", type: "user" },
@@ -478,7 +478,7 @@ const MobileFilterDrawer = ({
   );
 };
 
-// ========== MOBILE REPORT CARD ==========
+// // ========== MOBILE REPORT CARD ==========
 const MobileReportCard = ({
   report,
   data,
@@ -487,6 +487,12 @@ const MobileReportCard = ({
   onDownload,
   downloading,
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const cardBg = isDark ? "#0e1424" : "#ffffff";
+  const cardBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#e8edf2";
+  const textTitle = isDark ? "#ffffff" : "#0f172a";
+  const textSub = isDark ? "#94a3b8" : "#64748b";
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -494,7 +500,8 @@ const MobileReportCard = ({
       sx={{
         mb: 1.5,
         borderRadius: 3,
-        border: `1px solid ${alpha(report.color, 0.2)}`,
+        bgcolor: cardBg,
+        border: `1px solid ${cardBorder}`,
         overflow: "hidden",
         position: "relative",
       }}
@@ -701,16 +708,23 @@ const DesktopReportCard = ({
   onDownload,
   downloading,
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const cardBg = isDark ? "#0e1424" : "#ffffff";
+  const cardBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#e8edf2";
+  const textTitle = isDark ? "#ffffff" : "#0f172a";
+  const textSub = isDark ? "#94a3b8" : "#64748b";
+
   return (
     <Card
       sx={{
         borderRadius: 3,
         boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
-        bgcolor: "white",
+        bgcolor: cardBg,
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        border: `1px solid ${alpha(report.color, 0.1)}`,
+        border: `1px solid ${cardBorder}`,
         position: "relative",
         overflow: "hidden",
         transition: "all 0.3s ease",
@@ -753,7 +767,7 @@ const DesktopReportCard = ({
             {React.cloneElement(report.icon, { sx: { fontSize: 28 } })}
           </Box>
           <Box>
-            <Typography variant="h6" fontWeight={700} gutterBottom>
+            <Typography variant="h6" fontWeight={700} sx={{ color: textTitle }} gutterBottom>
               {report.title}
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -790,7 +804,7 @@ const DesktopReportCard = ({
           </Box>
         )}
 
-        <Divider sx={{ my: 2 }} />
+        <Divider sx={{ my: 2, borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0" }} />
 
         {/* Record Count */}
         <Box
@@ -1349,6 +1363,15 @@ export default function ReportsPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isTablet = useMediaQuery(theme.breakpoints.down("md"));
 
+  const isDark = theme.palette.mode === "dark";
+  const pageBg = isDark ? "#060a12" : "#f8fafc";
+  const bannerBg = isDark ? "linear-gradient(135deg, #090e1a 0%, #0d172e 100%)" : "linear-gradient(135deg, #0f1f3d 0%, #1a237e 100%)";
+  const bannerBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "transparent";
+  const filterBg = isDark ? "#0b101c" : "#ffffff";
+  const cardBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#e8edf2";
+  const textTitle = isDark ? "#ffffff" : "#0f172a";
+  const textSub = isDark ? "#94a3b8" : "#64748b";
+
   const userRole = user?.role || "TEAM";
   const roleConfig = ROLE_ACCESS[userRole] || ROLE_ACCESS.TEAM;
 
@@ -1646,12 +1669,10 @@ export default function ReportsPage() {
     setAnchorEl(null);
   };
 
-  // Handle clear filters
   const handleClearFilters = () => {
     setDateRange("all");
   };
 
-  // Loading skeletons
   if (loading && !Object.keys(reportsData).length) {
     return <LoadingSkeleton />;
   }
@@ -1663,10 +1684,9 @@ export default function ReportsPage() {
         p: { xs: 1.5, sm: 2, md: 3 },
         minHeight: "100vh",
         pb: { xs: 8, sm: 3 },
-        bgcolor: "#f8fafc",
+        bgcolor: pageBg,
       }}
     >
-      {/* Mobile Filter Drawer */}
       <MobileFilterDrawer
         open={mobileFilterOpen}
         onClose={() => setMobileFilterOpen(false)}
@@ -1676,14 +1696,14 @@ export default function ReportsPage() {
         activeFilterCount={activeFilterCount}
       />
 
-      {/* Header with Gradient Background */}
       <Paper
         elevation={0}
         sx={{
           p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
-          background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, ${SECONDARY_COLOR} 100%)`,
+          background: bannerBg,
+          border: `1px solid ${bannerBorder}`,
           color: "#fff",
         }}
       >
@@ -1801,9 +1821,9 @@ export default function ReportsPage() {
 
       {/* Desktop Date Range Filter */}
       {!isMobile && (
-        <Paper sx={{ p: 2, mb: 3, borderRadius: 3 }}>
+        <Paper sx={{ p: 2, mb: 3, borderRadius: 3, bgcolor: filterBg, border: `1px solid ${cardBorder}` }}>
           <Stack direction="row" spacing={2} alignItems="center">
-            <DateRange sx={{ color: "text.secondary" }} />
+            <DateRange sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR }} />
             <Typography variant="body2" color="text.secondary">
               Time Period:
             </Typography>

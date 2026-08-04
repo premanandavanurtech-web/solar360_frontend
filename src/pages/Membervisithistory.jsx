@@ -1,5 +1,5 @@
 // pages/MemberVisitHistory.jsx
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box, Typography, Button, Chip, IconButton, Tooltip, alpha,
   useTheme, useMediaQuery, CircularProgress, Alert, Skeleton,
@@ -13,25 +13,25 @@ import {
   CalendarToday, GpsFixed,
   ArrowDownward, DirectionsCar, Schedule,
   ArrowBack, OpenInNew, ReceiptLong,
+  Wifi, WifiOff, SignalCellularAlt, SignalCellularOff, Lan, LocationOff,
 } from "@mui/icons-material";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { stopTracking, isCurrentlyTracking } from "../utils/Locationtracker.js";
 import LiveTrackingMap from "../utils/Livetrackmap.jsx";
-import { API_BASE_URL, API_ORIGIN } from "../utils/apiConfig";
+import { API_BASE_URL, API_ORIGIN, KNOWN_API_HOSTS, LEGACY_API_ORIGINS } from "../utils/apiConfig";
 
 const BASE_URL = API_BASE_URL;
 const BACKEND_ORIGIN = API_ORIGIN;
 const PHOTO_BACKEND_ORIGINS = [
   BACKEND_ORIGIN,
-  "https://solar-backend-29z1.onrender.com",
+  ...LEGACY_API_ORIGINS,
 ].filter((origin, index, list) => origin && list.indexOf(origin) === index);
 const KNOWN_BACKEND_HOSTS = new Set([
   "localhost",
   "127.0.0.1",
   "::1",
-  "solar-backend-6vaa.onrender.com",
-  "solar-backend-29z1.onrender.com",
+  ...KNOWN_API_HOSTS,
 ]);
 
 const PRIMARY = "#0f1f3d";
@@ -366,19 +366,21 @@ const isVisitInDateRange = (visit, dateRange) => {
   const range = getDateRange(dateRange);
   if (!range.startDate || !range.endDate) return true;
 
-  const rawDate = visit?.visitDate || visit?.createdAt;
-  if (!rawDate) return false;
+  const rawDate = visit?.visitDate || visit?.checkInTime || visit?.createdAt;
+  if (!rawDate) return true;
 
   const visitTime = new Date(rawDate).getTime();
   const startTime = new Date(range.startDate).getTime();
   const endTime = new Date(range.endDate).getTime();
 
+  const tzBufferMs = 12 * 60 * 60 * 1000;
+
   return (
     Number.isFinite(visitTime) &&
     Number.isFinite(startTime) &&
     Number.isFinite(endTime) &&
-    visitTime >= startTime &&
-    visitTime <= endTime
+    visitTime >= startTime - tzBufferMs &&
+    visitTime <= endTime + tzBufferMs
   );
 };
 
@@ -810,6 +812,12 @@ const StayedLocationCard = ({ stay }) => {
 
 // ─── Filter Drawer ────────────────────────────────────────────────────────────
 const FilterDrawer = ({ open, onClose, filters, onApply }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const cardBg = isDark ? "#0e1424" : "#ffffff";
+  const cardBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#e8edf2";
+  const textTitle = isDark ? "#ffffff" : "#0f172a";
+  const textSub = isDark ? "#94a3b8" : "#64748b";
   const [local, setLocal] = useState(filters);
 
   useEffect(() => {
@@ -820,7 +828,7 @@ const FilterDrawer = ({ open, onClose, filters, onApply }) => {
 
   return (
     <SwipeableDrawer anchor="bottom" open={open} onClose={onClose} onOpen={() => {}}
-      PaperProps={{ sx: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "80vh" } }}>
+      PaperProps={{ sx: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "80vh", bgcolor: cardBg, color: textTitle, borderTop: `1px solid ${cardBorder}` } }}>
       <Box sx={{ p: 3 }}>
         <Box sx={{ width: 36, height: 4, bgcolor: "#e2e8f0", borderRadius: 2, mx: "auto", mb: 2.5 }} />
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2.5 }}>
@@ -913,7 +921,18 @@ const FilterDrawer = ({ open, onClose, filters, onApply }) => {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function MemberVisitHistory({ userId: propUserId }) {
   const theme    = useTheme();
+  const isDark   = theme.palette.mode === "dark";
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
+  const pageBg = isDark ? "#060a12" : "#f4f6fb";
+  const cardBg = isDark ? "#0e1424" : "#ffffff";
+  const cardBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#e8edf2";
+  const cardHoverBorder = isDark ? "rgba(255, 255, 255, 0.15)" : alpha(PRIMARY, 0.3);
+  const textTitle = isDark ? "#ffffff" : "#0f172a";
+  const textSub = isDark ? "#94a3b8" : "#64748b";
+  const textMuted = isDark ? "#cbd5e1" : "#475569";
+  const barBg = isDark ? "#090d18" : "#fafbfc";
+  const dividerBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#f1f5f9";
   const { userId: paramUserId } = useParams();
   const location = useLocation();
   const { user: authUser } = useAuth();
@@ -949,6 +968,88 @@ export default function MemberVisitHistory({ userId: propUserId }) {
   const [locating,         setLocating]         = useState(false);
   const [gpsDistance,      setGpsDistance]      = useState(null);
   const [mapDistance,      setMapDistance]      = useState(null);
+  const [currentLocation,  setCurrentLocation]  = useState(null);
+  const [resolvedAddress,  setResolvedAddress]  = useState("");
+  const [networkStatus, setNetworkStatus] = useState(() => {
+    if (typeof navigator === "undefined" || !navigator.onLine) {
+      return { isOnline: false, type: "offline", label: "Signal Off", color: "#ef4444", bg: "rgba(239, 68, 68, 0.12)" };
+    }
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const type = conn ? String(conn.type || "").toLowerCase() : "";
+    const effType = conn ? String(conn.effectiveType || "").toUpperCase() : "";
+
+    if (type === "cellular" || type.includes("mobile") || type.includes("cellular")) {
+      return { isOnline: true, type: "cellular", label: `Mobile Data (${effType || "4G"})`, color: "#10b981", bg: "rgba(16, 185, 129, 0.12)" };
+    }
+    if (type === "ethernet") {
+      return { isOnline: true, type: "ethernet", label: "Ethernet", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.12)" };
+    }
+    return { isOnline: true, type: "wifi", label: "WiFi Connected", color: "#06b6d4", bg: "rgba(6, 182, 212, 0.12)" };
+  });
+
+  useEffect(() => {
+    const updateNet = () => {
+      if (typeof navigator === "undefined" || !navigator.onLine) {
+        setNetworkStatus({ isOnline: false, type: "offline", label: "Signal Off", color: "#ef4444", bg: "rgba(239, 68, 68, 0.12)" });
+        return;
+      }
+      const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      const type = conn ? String(conn.type || "").toLowerCase() : "";
+      const effType = conn ? String(conn.effectiveType || "").toUpperCase() : "";
+
+      if (type === "cellular" || type.includes("mobile") || type.includes("cellular")) {
+        setNetworkStatus({ isOnline: true, type: "cellular", label: `Mobile Data (${effType || "4G"})`, color: "#10b981", bg: "rgba(16, 185, 129, 0.12)" });
+        return;
+      }
+      if (type === "ethernet") {
+        setNetworkStatus({ isOnline: true, type: "ethernet", label: "Ethernet", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.12)" });
+        return;
+      }
+      setNetworkStatus({ isOnline: true, type: "wifi", label: "WiFi Connected", color: "#06b6d4", bg: "rgba(6, 182, 212, 0.12)" });
+    };
+
+    window.addEventListener("online", updateNet);
+    window.addEventListener("offline", updateNet);
+
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (conn && conn.addEventListener) {
+      conn.addEventListener("change", updateNet);
+    }
+
+    return () => {
+      window.removeEventListener("online", updateNet);
+      window.removeEventListener("offline", updateNet);
+      if (conn && conn.removeEventListener) {
+        conn.removeEventListener("change", updateNet);
+      }
+    };
+  }, []);
+
+  const lastGeocodedRef = useRef(null);
+
+  useEffect(() => {
+    const lat = Number(currentLocation?.lat || punchInLocation?.lat || (Array.isArray(visits) && visits[0]?.coordinates?.lat));
+    const lng = Number(currentLocation?.lng || punchInLocation?.lng || (Array.isArray(visits) && visits[0]?.coordinates?.lng));
+    if (!lat || !lng) return;
+
+    const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+    if (lastGeocodedRef.current === coordKey) return;
+    lastGeocodedRef.current = coordKey;
+
+    let active = true;
+    fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`, {
+      headers: { "Accept-Language": "en" }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!active || !data) return;
+        const fullAddress = data.display_name;
+        if (fullAddress) setResolvedAddress(fullAddress);
+      })
+      .catch(() => {});
+
+    return () => { active = false; };
+  }, [currentLocation?.lat, currentLocation?.lng, punchInLocation?.lat, punchInLocation?.lng, visits]);
   const [autoVisitToast,   setAutoVisitToast]   = useState(null);
   const [dwellInfo,        setDwellInfo]        = useState(null);
   const [stayedLocations,  setStayedLocations]  = useState([]);
@@ -1310,7 +1411,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
   const totalDist       = visibleVisits.reduce((s, v) => s + (v.distanceFromPreviousKm ?? v.distance ?? 0), 0);
   const mapDistanceKm   = Number(mapDistance?.totalKm || 0);
   const gpsDistanceKm   = Number(gpsDistance?.totalKm || 0);
-  const displayDistanceKm = mapDistanceKm > 0 ? mapDistanceKm : gpsDistanceKm > 0 ? gpsDistanceKm : totalDist;
+  const displayDistanceKm = gpsDistanceKm > 0 ? gpsDistanceKm : mapDistanceKm > 0 ? mapDistanceKm : totalDist;
   const stayedStopCount = stayedLocations.reduce(
     (sum, stay) => sum + Math.max(1, Number(stay.visitCount) || 0),
     0,
@@ -1361,7 +1462,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
   ];
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f4f6fb" }}>
+    <Box sx={{ minHeight: "100vh", bgcolor: pageBg, color: textTitle }}>
       <FilterDrawer open={filterOpen} onClose={() => setFilterOpen(false)} filters={filters} onApply={setFilters} />
 
       <Box sx={{ p: { xs: 2, sm: 3, lg: 4 }, maxWidth: 1400, mx: "auto" }}>
@@ -1408,151 +1509,133 @@ export default function MemberVisitHistory({ userId: propUserId }) {
 
             {isAdminView && (
               <Box sx={{
-                bgcolor: "#fff",
-                borderRadius: "16px",
-                border: "1px solid #e8edf2",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.04)",
-                p: { xs: 2, sm: 2.5 },
+                bgcolor: cardBg,
+                borderRadius: "20px",
+                border: `1px solid ${cardBorder}`,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.05)",
+                px: { xs: 2.5, sm: 3 },
+                py: 2,
                 display: "flex",
-                alignItems: { xs: "flex-start", sm: "center" },
+                alignItems: "center",
                 justifyContent: "space-between",
                 gap: 2,
                 flexWrap: "wrap",
               }}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
-                  <Box sx={{
-                    width: 50,
-                    height: 50,
-                    borderRadius: "14px",
-                    bgcolor: alpha(PRIMARY, 0.12),
-                    color: PRIMARY,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "1rem",
-                    fontWeight: 800,
-                    flexShrink: 0,
-                  }}>
-                    {memberInitials}
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2, minWidth: 0 }}>
+                  <Box sx={{ position: "relative" }}>
+                    <Box sx={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: "14px",
+                      bgcolor: alpha(PRIMARY, 0.12),
+                      color: PRIMARY,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "1.05rem",
+                      fontWeight: 800,
+                      boxShadow: `0 0 0 2px ${isPunchedIn && !hasPunchedOut ? "#10b981" : "#ef4444"}`,
+                    }}>
+                      {memberInitials}
+                    </Box>
+                    <Box sx={{
+                      position: "absolute", bottom: -2, right: -2, width: 12, height: 12, borderRadius: "50%",
+                      bgcolor: isPunchedIn && !hasPunchedOut ? "#10b981" : "#ef4444",
+                      border: "2px solid #fff",
+                    }} />
                   </Box>
+
                   <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: { xs: "1rem", sm: "1.08rem" }, fontWeight: 800, color: "#0f172a", lineHeight: 1.2 }}>
+                    <Typography sx={{ fontSize: "1.1rem", fontWeight: 800, color: textTitle, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {memberName}
                     </Typography>
-                    <Typography sx={{ fontSize: "0.8rem", color: "#64748b", mt: 0.35 }}>
+                    <Typography sx={{ fontSize: "0.8rem", fontWeight: 600, color: textSub, mt: 0.3, whiteSpace: "nowrap" }}>
                       {memberRole}
                     </Typography>
                   </Box>
                 </Box>
 
-                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                  {/* Duty Badge */}
+                  {isPunchedIn && !hasPunchedOut ? (
+                    <Chip
+                      icon={<Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: SUCCESS, animation: "livePulse 1.5s infinite", "@keyframes livePulse": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } } }} />}
+                      label="On Duty"
+                      size="small"
+                      sx={{ bgcolor: alpha(SUCCESS, 0.12), color: SUCCESS, fontWeight: 800, fontSize: "0.72rem", height: 26, px: 0.5, border: `1px solid ${alpha(SUCCESS, 0.25)}` }}
+                    />
+                  ) : (
+                    <Chip
+                      icon={<LocationOff sx={{ fontSize: "13px !important", color: "#ef4444 !important" }} />}
+                      label="Location Off"
+                      size="small"
+                      sx={{ bgcolor: "rgba(239, 68, 68, 0.12)", color: "#ef4444", fontWeight: 800, fontSize: "0.72rem", height: 26, px: 0.5, border: "1px solid rgba(239, 68, 68, 0.25)" }}
+                    />
+                  )}
+
+                  {/* Network Chip */}
+                  <Chip
+                    icon={
+                      !networkStatus.isOnline ? (
+                        <WifiOff sx={{ fontSize: "14px !important", color: `${networkStatus.color} !important` }} />
+                      ) : networkStatus.type === "cellular" ? (
+                        <SignalCellularAlt sx={{ fontSize: "14px !important", color: `${networkStatus.color} !important` }} />
+                      ) : networkStatus.type === "ethernet" ? (
+                        <Lan sx={{ fontSize: "14px !important", color: `${networkStatus.color} !important` }} />
+                      ) : (
+                        <Wifi sx={{ fontSize: "14px !important", color: `${networkStatus.color} !important` }} />
+                      )
+                    }
+                    label={networkStatus.label}
+                    size="small"
+                    sx={{
+                      bgcolor: networkStatus.bg,
+                      color: networkStatus.color,
+                      fontWeight: 700,
+                      fontSize: "0.72rem",
+                      height: 26,
+                      px: 0.5,
+                      border: `1px solid ${alpha(networkStatus.color, 0.25)}`,
+                    }}
+                  />
+
+                  {/* Battery Chip */}
                   <Chip
                     size="small"
                     label={`${batteryChip.label}${batteryInfo.isCharging ? " • Charging" : ""}`}
-                    sx={{ bgcolor: batteryChip.bg, color: batteryChip.color, fontWeight: 700, border: `1px solid ${batteryChip.border}` }}
+                    sx={{ bgcolor: batteryChip.bg, color: batteryChip.color, fontWeight: 700, fontSize: "0.72rem", height: 26, border: `1px solid ${batteryChip.border}` }}
                   />
+
                   {memberPhone && (
                     <Chip
                       size="small"
                       label={memberPhone}
-                      sx={{ bgcolor: "#f8fafc", color: "#334155", fontWeight: 600, border: "1px solid #e2e8f0" }}
+                      sx={{ bgcolor: isDark ? "rgba(255, 255, 255, 0.05)" : "#f8fafc", color: textMuted, fontWeight: 600, fontSize: "0.72rem", height: 26, border: `1px solid ${cardBorder}` }}
                     />
                   )}
                   {memberEmail && (
                     <Chip
                       size="small"
                       label={memberEmail}
-                      sx={{ bgcolor: alpha(PRIMARY, 0.06), color: PRIMARY, fontWeight: 600 }}
+                      sx={{ bgcolor: alpha(PRIMARY, 0.06), color: PRIMARY, fontWeight: 600, fontSize: "0.72rem", height: 26 }}
                     />
                   )}
                 </Box>
               </Box>
             )}
 
-            <Box sx={{
-              bgcolor: "#fff",
-              borderRadius: "16px",
-              border: "1px solid #e8edf2",
-              boxShadow: "0 4px 24px rgba(0,0,0,0.04)",
-              p: { xs: 2, sm: 2.5 },
-            }}>
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, gap: 2, flexWrap: "wrap" }}>
-                <Box>
-                  <Typography sx={{ fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "#64748b" }}>
-                    Day Summary
-                  </Typography>
-                  <Typography sx={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a" }}>
-                    {selectedDayLabel}
-                  </Typography>
-                </Box>
-                <Chip
-                  size="small"
-                  label={`${expenseCount} expense${expenseCount === 1 ? "" : "s"} · ${formatCurrency(expenseTotal)}`}
-                  sx={{ bgcolor: alpha(PRIMARY, 0.08), color: PRIMARY, fontWeight: 700 }}
-                />
-              </Box>
-
-              <Box sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))" },
-                gap: 1.25,
-              }}>
-                {summaryCards.map((item) => (
-                  <Box
-                    key={item.label}
-                    sx={{
-                      borderRadius: "14px",
-                      border: "1px solid #e8edf2",
-                      bgcolor: "#fafbfc",
-                      p: 1.25,
-                      minWidth: 0,
-                    }}
-                  >
-                    <Typography sx={{ fontSize: "0.68rem", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      {item.label}
-                    </Typography>
-                    <Typography sx={{ fontSize: "0.92rem", fontWeight: 800, color: "#0f172a", mt: 0.35, wordBreak: "break-word" }}>
-                      {item.value}
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
-            </Box>
 
             {/* Map */}
             <Box sx={{
-              borderRadius: "16px", overflow: "hidden", border: "1px solid #e2e8f0",
+              borderRadius: "16px", overflow: "hidden", border: `1px solid ${cardBorder}`,
               height: fullscreen ? "70vh" : { xs: 300, sm: 400, lg: 460 },
               boxShadow: "0 4px 24px rgba(0,0,0,0.06)", transition: "height 0.3s ease",
               position: "relative",
             }}>
-              <Box sx={{
-                position: "absolute",
-                top: 12,
-                left: 12,
-                zIndex: 1000,
-                bgcolor: "rgba(255,255,255,0.96)",
-                backdropFilter: "blur(10px)",
-                border: "1px solid rgba(226,232,240,0.95)",
-                borderRadius: "14px",
-                px: 1.5,
-                py: 1.1,
-                boxShadow: "0 8px 24px rgba(15,23,42,0.08)",
-                maxWidth: { xs: "calc(100% - 110px)", sm: 320 },
-              }}>
-                <Typography sx={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#64748b", mb: 0.2 }}>
-                  Route View
-                </Typography>
-                <Typography sx={{ fontSize: { xs: "0.92rem", sm: "1rem" }, fontWeight: 800, color: "#0f172a", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {memberName}
-                </Typography>
-                <Typography sx={{ fontSize: "0.75rem", color: "#64748b", mt: 0.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {memberRole}{updatedLabel ? ` · Updated ${updatedLabel}` : ""}
-                </Typography>
-              </Box>
+             
 
               <Tooltip title={fullscreen ? "Exit fullscreen" : "Fullscreen"} placement="left">
-                <Box onClick={() => setFullscreen(p => !p)} sx={{ position: "absolute", top: 50, right: 10, zIndex: 1000, bgcolor: "#fff", borderRadius: "10px", p: 0.75, cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", border: "1px solid #e2e8f0", display: "flex", "&:hover": { bgcolor: "#f8fafc" } }}>
+                <Box onClick={() => setFullscreen(p => !p)} sx={{ position: "absolute", top: 50, right: 10, zIndex: 1000, bgcolor: cardBg, borderRadius: "10px", p: 0.75, cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", border: `1px solid ${cardBorder}`, display: "flex", "&:hover": { bgcolor: "#f8fafc" } }}>
                   {fullscreen ? <FullscreenExit sx={{ fontSize: 18, color: "#374151" }} /> : <Fullscreen sx={{ fontSize: 18, color: "#374151" }} />}
                 </Box>
               </Tooltip>
@@ -1565,7 +1648,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                 </Box>
               )}
 
-              <Tooltip title="Go to my location" placement="left">
+              <Tooltip title="Live location" placement="left">
                 <Box onClick={handleLocateMe} sx={{ position: "absolute", top: 96, right: 10, zIndex: 1000, bgcolor: locating ? PRIMARY : "#fff", borderRadius: "10px", p: 0.75, cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", border: `1px solid ${locating ? PRIMARY : "#e2e8f0"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", "&:hover": { bgcolor: locating ? PRIMARY : alpha(PRIMARY, 0.08), borderColor: PRIMARY } }}>
                   {locating ? <CircularProgress size={18} sx={{ color: "#fff" }} /> : <GpsFixed sx={{ fontSize: 18, color: PRIMARY }} />}
                 </Box>
@@ -1582,6 +1665,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
     height="100%"
     locateTrigger={locateTrigger}
     onDistanceChange={setMapDistance}
+    onCurrentLocationChange={setCurrentLocation}
     punchInLocation={punchInLocation}
     punchOutLocation={punchOutLocation}
     visits={visibleVisits}
@@ -1611,138 +1695,116 @@ export default function MemberVisitHistory({ userId: propUserId }) {
 
             {/* Stats row */}
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))" }, gap: 2 }}>
-              <Box sx={{ bgcolor: "#fff", borderRadius: "14px", p: 2.5, border: "1px solid #e8edf2", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", "&:hover": { boxShadow: "0 4px 16px rgba(69,105,234,0.1)", borderColor: alpha(PRIMARY, 0.3) }, transition: "all 0.2s" }}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-                  <Route sx={{ fontSize: 20, color: PRIMARY }} />
-                  <Typography sx={{ color: "#64748b", fontWeight: 500, fontSize: "0.78rem" }}>Distance</Typography>
+              {/* Card 1: Distance */}
+              <Box sx={{
+                bgcolor: cardBg, borderRadius: "16px", p: 2.25,
+                border: `1px solid ${cardBorder}`, boxShadow: "0 2px 12px rgba(0,0,0,0.03)",
+                transition: "all 0.25s ease",
+                "&:hover": { transform: "translateY(-3px)", boxShadow: "0 8px 24px rgba(37, 99, 235, 0.12)", borderColor: alpha(PRIMARY, 0.4) }
+              }}>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.25 }}>
+                  <Typography sx={{ color: textSub, fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.5px" }}>Distance</Typography>
+                  <Box sx={{ width: 34, height: 34, borderRadius: "10px", bgcolor: alpha(PRIMARY, 0.1), color: PRIMARY, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Route sx={{ fontSize: 18 }} />
+                  </Box>
                 </Box>
                 {loading ? <Skeleton width={60} height={32} /> : (
                   <>
-<Typography sx={{ fontSize: "1.4rem", fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px", lineHeight: 1 }}>
-  {displayDistanceKm.toFixed(2)}{" "}
-  <Typography component="span" sx={{ fontSize: "0.75rem", fontWeight: 400, color: "#94a3b8" }}>km</Typography>
-</Typography>
-<Typography sx={{ fontSize: "0.65rem", color: "#94a3b8", mt: 0.5 }}>
-  {mapDistanceKm > 0 ? "Tracked route distance" : gpsDistanceKm > 0 ? "GPS route distance" : "Visit route distance"}
-</Typography>
-{totalDist >= 0.05 && (
-  <Typography sx={{ fontSize: "0.65rem", color: alpha(PRIMARY, 0.6), mt: 0.25 }}>
-    {totalDist.toFixed(1)} km road
-  </Typography>
-)}
+                    <Typography sx={{ fontSize: "1.5rem", fontWeight: 800, color: textTitle, letterSpacing: "-0.5px", lineHeight: 1 }}>
+                      {displayDistanceKm.toFixed(2)}{" "}
+                      <Typography component="span" sx={{ fontSize: "0.78rem", fontWeight: 600, color: textSub }}>km</Typography>
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.68rem", color: textMuted, mt: 0.75, fontWeight: 500 }}>
+                      {mapDistanceKm > 0 ? "Tracked route distance" : gpsDistanceKm > 0 ? "GPS route distance" : "Visit route distance"}
+                    </Typography>
                   </>
                 )}
               </Box>
 
-              <Box sx={{ bgcolor: "#fff", borderRadius: "14px", p: 2.5, border: "1px solid #e8edf2", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", "&:hover": { boxShadow: "0 4px 16px rgba(69,105,234,0.1)", borderColor: alpha(PRIMARY, 0.3) }, transition: "all 0.2s" }}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-                  <LocationOn sx={{ fontSize: 20, color: PRIMARY }} />
-                  <Typography sx={{ color: "#64748b", fontWeight: 500, fontSize: "0.78rem" }}>Visits</Typography>
+              {/* Card 2: Visits */}
+              <Box sx={{
+                bgcolor: cardBg, borderRadius: "16px", p: 2.25,
+                border: `1px solid ${cardBorder}`, boxShadow: "0 2px 12px rgba(0,0,0,0.03)",
+                transition: "all 0.25s ease",
+                "&:hover": { transform: "translateY(-3px)", boxShadow: "0 8px 24px rgba(16, 185, 129, 0.12)", borderColor: alpha(SUCCESS, 0.4) }
+              }}>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.25 }}>
+                  <Typography sx={{ color: textSub, fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.5px" }}>Visits</Typography>
+                  <Box sx={{ width: 34, height: 34, borderRadius: "10px", bgcolor: alpha(SUCCESS, 0.1), color: SUCCESS, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <LocationOn sx={{ fontSize: 18 }} />
+                  </Box>
                 </Box>
                 {loading ? <Skeleton width={60} height={32} /> : (
-                  <Typography sx={{ fontSize: "1.4rem", fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px", lineHeight: 1 }}>
-                    {totalStopCount}{" "}
-                    <Typography component="span" sx={{ fontSize: "0.75rem", fontWeight: 400, color: "#94a3b8" }}>stops</Typography>
-                  </Typography>
-                )}
-              </Box>
-
-              <Box sx={{ bgcolor: "#fff", borderRadius: "14px", p: 2.5, border: "1px solid #e8edf2", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", "&:hover": { boxShadow: "0 4px 16px rgba(69,105,234,0.1)", borderColor: alpha(PRIMARY, 0.3) }, transition: "all 0.2s" }}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-                  <Timer sx={{ fontSize: 20, color: PRIMARY }} />
-                  <Typography sx={{ color: "#64748b", fontWeight: 500, fontSize: "0.78rem" }}>Avg. Time</Typography>
-                </Box>
-                {loading ? <Skeleton width={60} height={32} /> : (
-                  <Typography sx={{ fontSize: "1.4rem", fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px", lineHeight: 1 }}>
-                    {avgTime}{" "}
-                    <Typography component="span" sx={{ fontSize: "0.75rem", fontWeight: 400, color: "#94a3b8" }}>mins</Typography>
-                  </Typography>
-                )}
-              </Box>
-
-              <Box sx={{ bgcolor: "#fff", borderRadius: "14px", p: 2.5, border: "1px solid #e8edf2", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", "&:hover": { boxShadow: "0 4px 16px rgba(69,105,234,0.1)", borderColor: alpha(PRIMARY, 0.3) }, transition: "all 0.2s" }}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-                  <ReceiptLong sx={{ fontSize: 20, color: PRIMARY }} />
-                  <Typography sx={{ color: "#64748b", fontWeight: 500, fontSize: "0.78rem" }}>Expenses</Typography>
-                </Box>
-                {loading ? <Skeleton width={80} height={32} /> : (
                   <>
-                    <Typography sx={{ fontSize: "1.4rem", fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px", lineHeight: 1 }}>
-                      {formatCurrency(expenseTotal)}{" "}
-                      <Typography component="span" sx={{ fontSize: "0.75rem", fontWeight: 400, color: "#94a3b8" }}>total</Typography>
+                    <Typography sx={{ fontSize: "1.5rem", fontWeight: 800, color: textTitle, letterSpacing: "-0.5px", lineHeight: 1 }}>
+                      {totalStopCount}{" "}
+                      <Typography component="span" sx={{ fontSize: "0.78rem", fontWeight: 600, color: textSub }}>stops</Typography>
                     </Typography>
-                    <Typography sx={{ fontSize: "0.65rem", color: "#94a3b8", mt: 0.5 }}>
-                      {expenseCount} expense{expenseCount === 1 ? "" : "s"} in this range
+                    <Typography sx={{ fontSize: "0.68rem", color: textMuted, mt: 0.75, fontWeight: 500 }}>
+                      {completedCount} completed · {inProgressCount} active
+                    </Typography>
+                  </>
+                )}
+              </Box>
+
+              {/* Card 3: Avg Time */}
+              <Box sx={{
+                bgcolor: cardBg, borderRadius: "16px", p: 2.25,
+                border: `1px solid ${cardBorder}`, boxShadow: "0 2px 12px rgba(0,0,0,0.03)",
+                transition: "all 0.25s ease",
+                "&:hover": { transform: "translateY(-3px)", boxShadow: "0 8px 24px rgba(245, 158, 11, 0.12)", borderColor: alpha(WARNING, 0.4) }
+              }}>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.25 }}>
+                  <Typography sx={{ color: textSub, fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.5px" }}>Avg. Time</Typography>
+                  <Box sx={{ width: 34, height: 34, borderRadius: "10px", bgcolor: alpha(WARNING, 0.1), color: WARNING, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Timer sx={{ fontSize: 18 }} />
+                  </Box>
+                </Box>
+                {loading ? <Skeleton width={60} height={32} /> : (
+                  <>
+                    <Typography sx={{ fontSize: "1.5rem", fontWeight: 800, color: textTitle, letterSpacing: "-0.5px", lineHeight: 1 }}>
+                      {avgTime}{" "}
+                      <Typography component="span" sx={{ fontSize: "0.78rem", fontWeight: 600, color: textSub }}>mins</Typography>
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.68rem", color: textMuted, mt: 0.75, fontWeight: 500 }}>
+                      Per stop duration
+                    </Typography>
+                  </>
+                )}
+              </Box>
+
+              {/* Card 4: Expense */}
+              <Box sx={{
+                bgcolor: cardBg, borderRadius: "16px", p: 2.25,
+                border: `1px solid ${cardBorder}`, boxShadow: "0 2px 12px rgba(0,0,0,0.03)",
+                transition: "all 0.25s ease",
+                "&:hover": { transform: "translateY(-3px)", boxShadow: "0 8px 24px rgba(139, 92, 246, 0.12)", borderColor: alpha("#8b5cf6", 0.4) }
+              }}>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.25 }}>
+                  <Typography sx={{ color: textSub, fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.5px" }}>Expense</Typography>
+                  <Box sx={{ width: 34, height: 34, borderRadius: "10px", bgcolor: alpha("#8b5cf6", 0.1), color: "#8b5cf6", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <ReceiptLong sx={{ fontSize: 18 }} />
+                  </Box>
+                </Box>
+                {loading ? <Skeleton width={60} height={32} /> : (
+                  <>
+                    <Typography sx={{ fontSize: "1.5rem", fontWeight: 800, color: textTitle, letterSpacing: "-0.5px", lineHeight: 1 }}>
+                      {formatCurrency(expenseTotal)}
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.68rem", color: textMuted, mt: 0.75, fontWeight: 500 }}>
+                      {expenseCount} submitted items
                     </Typography>
                   </>
                 )}
               </Box>
             </Box>
 
-            {!loading && (
-              <Box sx={{ bgcolor: "#fff", borderRadius: "14px", p: 2.5, border: "1px solid #e8edf2" }}>
-                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, gap: 2, flexWrap: "wrap" }}>
-                  <Typography sx={{ fontWeight: 800, fontSize: "0.9rem", color: "#0f172a" }}>Recent Expenses</Typography>
-                  <Chip
-                    size="small"
-                    label={`${expenseCount} record${expenseCount === 1 ? "" : "s"}`}
-                    sx={{ bgcolor: alpha(PRIMARY, 0.08), color: PRIMARY, fontWeight: 700 }}
-                  />
-                </Box>
-
-                {expenses.length > 0 ? (
-                  <Box sx={{ display: "grid", gap: 1 }}>
-                    {expenses.slice(0, 5).map((expense) => (
-                      <Box
-                        key={expense._id || expense.id}
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 2,
-                          p: 1.25,
-                          borderRadius: "12px",
-                          border: "1px solid #edf2f7",
-                          bgcolor: "#fafbfc",
-                        }}
-                      >
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography sx={{ fontSize: "0.84rem", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {expense.title || "Expense"}
-                          </Typography>
-                          <Typography sx={{ fontSize: "0.72rem", color: "#64748b", mt: 0.2 }}>
-                            {(expense.category || "General")} · {expense.expenseDate ? new Date(expense.expenseDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : selectedDayLabel}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ textAlign: "right", flexShrink: 0 }}>
-                          <Typography sx={{ fontSize: "0.86rem", fontWeight: 900, color: PRIMARY }}>
-                            {formatCurrency(expense.amount)}
-                          </Typography>
-                          <Chip
-                            size="small"
-                            label={String(expense.status || "Pending").replace(/[-_]+/g, " ").replace(/\b\w/g, (match) => match.toUpperCase())}
-                            sx={{ mt: 0.4, height: 20, fontSize: "0.62rem", fontWeight: 700, bgcolor: alpha("#94a3b8", 0.12), color: "#475569" }}
-                          />
-                        </Box>
-                      </Box>
-                    ))}
-                  </Box>
-                ) : (
-                  <Box sx={{ py: 2, textAlign: "center", color: "#94a3b8" }}>
-                    <ReceiptLong sx={{ fontSize: 28, mb: 0.5, color: "#cbd5e1" }} />
-                    <Typography sx={{ fontSize: "0.82rem", fontWeight: 600 }}>
-                      No expenses found for this range
-                    </Typography>
-                  </Box>
-                )}
-              </Box>
-            )}
 
             {/* Completion bar */}
             {!loading && visibleVisits.length > 0 && (
-              <Box sx={{ bgcolor: "#fff", borderRadius: "14px", p: 2.5, border: "1px solid #e8edf2" }}>
+              <Box sx={{ bgcolor: cardBg, borderRadius: "14px", p: 2.5, border: `1px solid ${cardBorder}` }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
-                  <Typography sx={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a" }}>Visit Completion</Typography>
+                  <Typography sx={{ fontWeight: 700, fontSize: "0.85rem", color: textTitle }}>Visit Completion</Typography>
                   <Typography sx={{ fontWeight: 800, fontSize: "1rem", color: PRIMARY }}>
                     {Math.round((completedCount / visibleVisits.length) * 100)}%
                   </Typography>
@@ -1753,7 +1815,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                   {cancelledCount  > 0 && <Box sx={{ width: `${(cancelledCount  / visibleVisits.length) * 100}%`, bgcolor: ERROR, opacity: 0.45 }} />}
                 </Box>
                 <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-                  {[
+{[
                     { label: "Done",      count: completedCount,  color: SUCCESS },
                     { label: "Active",    count: inProgressCount, color: PRIMARY },
                     { label: "Cancelled", count: cancelledCount,  color: ERROR   },
@@ -1771,20 +1833,161 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                 </Box>
               </Box>
             )}
+
+            {/* Current Location Box (Bottom Position) */}
+            <Box sx={{
+              bgcolor: cardBg,
+              borderRadius: "20px",
+              border: `1px solid ${cardBorder}`,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.05)",
+              p: { xs: 2.5, sm: 3 },
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+            }}>
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1.5 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                  <Box sx={{
+                    width: 42, height: 42, borderRadius: "14px",
+                    bgcolor: alpha(isPunchedIn && !hasPunchedOut ? SUCCESS : PRIMARY, 0.12),
+                    color: isPunchedIn && !hasPunchedOut ? SUCCESS : PRIMARY,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: `0 4px 12px ${alpha(isPunchedIn && !hasPunchedOut ? SUCCESS : PRIMARY, 0.2)}`,
+                  }}>
+                    <LocationOn sx={{ fontSize: 22 }} />
+                  </Box>
+                  <Box>
+                    <Typography sx={{ fontWeight: 800, fontSize: "0.98rem", color: textTitle, lineHeight: 1.2 }}>
+                      Current Location
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.75rem", fontWeight: 500, color: textSub, mt: 0.3 }}>
+                      {isPunchedIn && !hasPunchedOut ? "Live Real-Time Duty Location" : "Last Recorded Position"}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                  {/* Network Status Chip */}
+                  <Chip
+                    icon={
+                      !networkStatus.isOnline ? (
+                        <WifiOff sx={{ fontSize: "14px !important", color: `${networkStatus.color} !important` }} />
+                      ) : networkStatus.type === "cellular" ? (
+                        <SignalCellularAlt sx={{ fontSize: "14px !important", color: `${networkStatus.color} !important` }} />
+                      ) : networkStatus.type === "ethernet" ? (
+                        <Lan sx={{ fontSize: "14px !important", color: `${networkStatus.color} !important` }} />
+                      ) : (
+                        <Wifi sx={{ fontSize: "14px !important", color: `${networkStatus.color} !important` }} />
+                      )
+                    }
+                    label={networkStatus.label}
+                    size="small"
+                    sx={{
+                      bgcolor: networkStatus.bg,
+                      color: networkStatus.color,
+                      fontWeight: 700,
+                      fontSize: "0.72rem",
+                      height: 26,
+                      px: 0.5,
+                      border: `1px solid ${alpha(networkStatus.color, 0.25)}`,
+                    }}
+                  />
+
+                  {/* Duty Status Chip */}
+                  {isPunchedIn && !hasPunchedOut ? (
+                    <Chip
+                      icon={<Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: SUCCESS, animation: "livePulse 1.5s infinite", "@keyframes livePulse": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } } }} />}
+                      label="On Duty"
+                      size="small"
+                      sx={{ bgcolor: alpha(SUCCESS, 0.12), color: SUCCESS, fontWeight: 800, fontSize: "0.72rem", height: 26, px: 0.5, border: `1px solid ${alpha(SUCCESS, 0.25)}` }}
+                    />
+                  ) : (
+                    <Chip
+                      icon={<LocationOff sx={{ fontSize: "13px !important", color: "#ef4444 !important" }} />}
+                      label="Location Off"
+                      size="small"
+                      sx={{ bgcolor: "rgba(239, 68, 68, 0.12)", color: "#ef4444", fontWeight: 800, fontSize: "0.72rem", height: 26, px: 0.5, border: "1px solid rgba(239, 68, 68, 0.25)" }}
+                    />
+                  )}
+
+                  {/* Live Location Button */}
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={locating ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : <GpsFixed sx={{ fontSize: 15 }} />}
+                    onClick={handleLocateMe}
+                    sx={{
+                      bgcolor: PRIMARY,
+                      color: "#fff",
+                      fontWeight: 800,
+                      fontSize: "0.78rem",
+                      textTransform: "none",
+                      borderRadius: "12px",
+                      px: 2,
+                      py: 0.6,
+                      boxShadow: "0 4px 14px rgba(37, 99, 235, 0.3)",
+                      "&:hover": {
+                        bgcolor: "#1d4ed8",
+                        boxShadow: "0 6px 18px rgba(37, 99, 235, 0.4)",
+                        transform: "translateY(-1px)",
+                      },
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    Live Location
+                  </Button>
+                </Box>
+              </Box>
+
+              {/* Address card */}
+              <Box sx={{
+                bgcolor: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
+                borderRadius: "14px",
+                p: 2,
+                border: `1px solid ${dividerBorder}`,
+              }}>
+                <Typography sx={{ fontSize: "0.88rem", fontWeight: 700, color: textTitle, lineHeight: 1.5, mb: 1 }}>
+                  📍 {resolvedAddress || currentLocation?.address || (typeof punchInLocation?.address === "string" ? punchInLocation.address : punchInLocation?.address?.full || punchInLocation?.address?.short) || visibleVisits[0]?.address || "Location coordinates active"}
+                </Typography>
+
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}>
+                  <Typography sx={{ fontSize: "0.78rem", color: PRIMARY, fontFamily: "monospace", fontWeight: 700, bgcolor: alpha(PRIMARY, 0.08), px: 1.2, py: 0.3, borderRadius: "6px" }}>
+                    {Number(currentLocation?.lat || punchInLocation?.lat || visibleVisits[0]?.coordinates?.lat || 20.29044).toFixed(5)}, {Number(currentLocation?.lng || punchInLocation?.lng || visibleVisits[0]?.coordinates?.lng || 85.86197).toFixed(5)}
+                  </Typography>
+
+                  {(currentLocation?.time || currentLocation?.recordedAt || punchInLocation?.time) && (
+                    <Typography sx={{ fontSize: "0.75rem", color: textSub, fontWeight: 600 }}>
+                      Recorded {fmt(currentLocation?.time || currentLocation?.recordedAt || punchInLocation?.time)}
+                    </Typography>
+                  )}
+
+                  <Button
+                    component="a"
+                    href={`https://www.google.com/maps/search/?api=1&query=${currentLocation?.lat || punchInLocation?.lat || 20.29044},${currentLocation?.lng || punchInLocation?.lng || 85.86197}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    endIcon={<OpenInNew sx={{ fontSize: 13 }} />}
+                    sx={{ fontSize: "0.75rem", color: PRIMARY, fontWeight: 700, textTransform: "none", p: 0, minWidth: 0, "&:hover": { bgcolor: "transparent", textDecoration: "underline" } }}
+                  >
+                    Open Google Maps
+                  </Button>
+                </Box>
+              </Box>
+            </Box>
           </Box>
 
           {/* ── RIGHT — Visit Timeline ── */}
           <Box sx={{
-            bgcolor: "#fff", borderRadius: "16px", border: "1px solid #e8edf2",
-            boxShadow: "0 4px 24px rgba(0,0,0,0.05)", overflow: "hidden",
+            bgcolor: cardBg, borderRadius: "20px", border: `1px solid ${cardBorder}`,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.05)", overflow: "hidden",
             display: "flex", flexDirection: "column",
             position: { lg: "sticky" }, top: { lg: 16 },
-            maxHeight: { lg: "calc(100vh - 32px)" },
+            maxHeight: "calc(100vh - 110px)",
           }}>
             {/* Header */}
-            <Box sx={{ px: 3, py: 2.5, borderBottom: "1px solid #f1f5f9" }}>
+            <Box sx={{ px: 3, py: 2.5, borderBottom: `1px solid ${dividerBorder}` }}>
               <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 0.5 }}>
-                <Typography sx={{ fontWeight: 700, fontSize: "1rem", color: "#0f172a" }}>Visit Timeline</Typography>
+                <Typography sx={{ fontWeight: 700, fontSize: "1rem", color: textTitle }}>Visit Timeline</Typography>
                 <Tooltip title="Refresh">
                   <IconButton size="small" onClick={handleRefresh}
                     sx={{ color: "#94a3b8", "&:hover": { color: PRIMARY, bgcolor: alpha(PRIMARY, 0.06) } }}>
@@ -1811,7 +2014,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
             </Box>
 
             {/* Filter bar */}
-            <Box sx={{ px: 3, py: 1.25, borderBottom: "1px solid #f1f5f9", bgcolor: "#fafbfc", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Box sx={{ px: 3, py: 1.25, borderBottom: `1px solid ${dividerBorder}`, bgcolor: barBg, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <CalendarToday sx={{ fontSize: 13, color: PRIMARY }} />
                
@@ -1895,10 +2098,10 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                     </Box>
                   ) : (
                     <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, minHeight: 200 }}>
-                      <Box sx={{ width: 48, height: 48, borderRadius: "50%", bgcolor: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", mb: 1.5 }}>
+                      <Box sx={{ width: 48, height: 48, borderRadius: "50%", bgcolor: isDark ? "rgba(255,255,255,0.06)" : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", mb: 1.5 }}>
                         <MyLocation sx={{ fontSize: 22, color: "#cbd5e1" }} />
                       </Box>
-                      <Typography sx={{ fontWeight: 600, color: "#94a3b8", fontSize: "0.88rem", mb: 0.4 }}>Not Punched In</Typography>
+                      <Typography sx={{ fontWeight: 600, color: textSub, fontSize: "0.88rem", mb: 0.4 }}>Not Punched In</Typography>
                       <Typography sx={{ color: "#cbd5e1", fontSize: "0.75rem", textAlign: "center" }}>Punch in to start tracking visits</Typography>
                     </Box>
                   )}

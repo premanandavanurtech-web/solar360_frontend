@@ -59,7 +59,7 @@ let company = {
   phone: "7008790475",
   email: "sahooconstruction00@gmail.com",
   emailAlt: "scspmsgops@gmail.com",
-  logo: "/solar-crm-logo-clean.png",
+  logo: "/solar360-logo-clean.png",
 }
 
 let quote = {

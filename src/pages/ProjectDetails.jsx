@@ -27,6 +27,7 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useTheme,
 } from "@mui/material";
 import {
   AccessTime,
@@ -286,6 +287,17 @@ const hasValue = (value) => value !== undefined && value !== null && value !== "
 
 const formatOptionalMoney = (value) => (hasValue(value) ? formatMoney(value) : "Not available");
 
+const getValidLeadId = (proj) => {
+  if (!proj) return "";
+  if (proj.source === "installerWorksheet") {
+    return String(proj.worksheetProjectId || proj.worksheetId || "");
+  }
+  if (proj.leadId) return String(proj.leadId);
+  if (proj._id) return String(proj._id);
+  if (proj.id) return String(proj.id);
+  return "";
+};
+
 const getCustomerName = (project) =>
   [project?.firstName, project?.lastName].filter(Boolean).join(" ") || project?.customerName || "Unnamed project";
 
@@ -515,6 +527,11 @@ const getPersonName = (person) => {
   return [person.firstName, person.lastName].filter(Boolean).join(" ") || person.name || person.email || "";
 };
 
+const getPersonListNames = (people = []) =>
+  (Array.isArray(people) ? people : [])
+    .map(getPersonName)
+    .filter(Boolean);
+
 const getSiteSurvey = (project) =>
   project?.siteSurvey && typeof project.siteSurvey === "object" ? project.siteSurvey : null;
 
@@ -563,6 +580,22 @@ const getSurveyPhotoUrls = (siteSurvey) =>
   (Array.isArray(siteSurvey?.photos) ? siteSurvey.photos : [])
     .map(getPhotoUrl)
     .filter((url, index, arr) => url && arr.indexOf(url) === index);
+
+const getWorksheetPhotoItems = (project) =>
+  (Array.isArray(project?.photos) ? project.photos : [])
+    .map((photo, index) => ({
+      photo,
+      url: getPhotoUrl(photo),
+      index,
+    }))
+    .filter((item) => item.url);
+
+const getGpsMapUrl = (location) => {
+  const lat = Number(location?.latitude ?? location?.lat);
+  const lng = Number(location?.longitude ?? location?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "";
+  return `https://www.google.com/maps?q=${lat},${lng}`;
+};
 
 const getSiteSurveyNotes = (siteSurvey) => {
   const notes = siteSurvey?.remarks || siteSurvey?.notes || siteSurvey?.comment || "";
@@ -680,14 +713,18 @@ const buildProjectActivityEntries = (project) => {
     });
 };
 
-const MetricCard = ({ icon, label, value, color }) => (
+const MetricCard = ({ icon, label, value, color }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
+  return (
   <Card
     elevation={0}
     sx={{
       height: "100%",
       borderRadius: RADIUS,
-      border: `1px solid ${BORDER}`,
-      bgcolor: PANEL,
+      border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`,
+      bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit",
       boxShadow: SHADOW_SM,
       transition: "box-shadow 0.2s ease, transform 0.2s ease",
       "&:hover": { boxShadow: SHADOW_MD, transform: "translateY(-2px)" },
@@ -709,7 +746,7 @@ const MetricCard = ({ icon, label, value, color }) => (
         {icon}
       </Box>
       <Box>
-        <Typography variant="h6" fontWeight={800} color={INK} lineHeight={1.15} letterSpacing="-0.01em">
+        <Typography variant="h6" fontWeight={800} color={isDark ? "#f8fafc" : INK} lineHeight={1.15} letterSpacing="-0.01em">
           {value}
         </Typography>
         <Typography variant="caption" fontWeight={700} sx={{ color: MUTED, textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -718,9 +755,12 @@ const MetricCard = ({ icon, label, value, color }) => (
       </Box>
     </Stack>
   </Card>
-);
+  );
+};
 
 const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const siteSurvey = getSiteSurvey(project);
   const surveyGeneral = siteSurvey?.general || {};
   const photoUrls = getSurveyPhotoUrls(siteSurvey);
@@ -748,7 +788,7 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
             <Box sx={{ width: 34, height: 34, borderRadius: "9px", bgcolor: alpha(WARNING, 0.12), color: WARNING, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <FactCheck sx={{ fontSize: 18 }} />
             </Box>
-            <Typography variant="subtitle1" fontWeight={800} color={INK} letterSpacing="-0.01em">
+            <Typography variant="subtitle1" fontWeight={800} color={isDark ? "#f8fafc" : INK} letterSpacing="-0.01em">
               Site Survey Details
             </Typography>
             <Chip
@@ -764,12 +804,12 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
       </DialogTitle>
 
       <DialogContent sx={{ p: 3 }}>
-        <Grid container spacing={2} sx={{ p: 2, mb: 2.5, borderRadius: RADIUS_SM, border: `1px solid ${BORDER}`, bgcolor: SURFACE }}>
+        <Grid container spacing={2} sx={{ p: 2, mb: 2.5, borderRadius: RADIUS_SM, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: SURFACE }}>
           <Grid item xs={12} md={4}>
             <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Visit Date
             </Typography>
-            <Typography variant="body2" fontWeight={800} color={INK}>
+            <Typography variant="body2" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
               {formatDate(siteSurvey.savedAt || project?.visitDate, "dd MMM yyyy")}
             </Typography>
           </Grid>
@@ -777,7 +817,7 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
             <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Inspector
             </Typography>
-            <Typography variant="body2" fontWeight={800} color={INK}>
+            <Typography variant="body2" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
               {getPersonName(project?.assignedUser || project?.assignedManager) || "Not assigned"}
             </Typography>
           </Grid>
@@ -785,13 +825,13 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
             <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Customer
             </Typography>
-            <Typography variant="body2" fontWeight={800} color={INK}>
+            <Typography variant="body2" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
               {getCustomerName(project)}
             </Typography>
           </Grid>
         </Grid>
 
-        <Typography variant="caption" fontWeight={800} color={INK} sx={{ display: "block", mb: 1.25, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        <Typography variant="caption" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ display: "block", mb: 1.25, textTransform: "uppercase", letterSpacing: "0.06em" }}>
           General
         </Typography>
         <Divider sx={{ mb: 1.5, borderColor: BORDER }} />
@@ -806,8 +846,8 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
                   minHeight: 74,
                   p: 1.5,
                   borderRadius: RADIUS_SM,
-                  border: `1px solid ${BORDER}`,
-                  bgcolor: PANEL,
+                  border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`,
+                  bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit",
                 }}
               >
                 <Box
@@ -833,7 +873,7 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
                   <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", lineHeight: 1.2, letterSpacing: "0.03em" }}>
                     {label}
                   </Typography>
-                  <Typography variant="body2" fontWeight={800} color={INK} sx={{ mt: 0.45, wordBreak: "break-word" }}>
+                  <Typography variant="body2" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ mt: 0.45, wordBreak: "break-word" }}>
                     {formatSurveyValue(surveyGeneral[key])}
                   </Typography>
                 </Box>
@@ -841,7 +881,7 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
             </Grid>
           ))}
           <Grid item xs={12} sm={6} md={3}>
-            <Stack direction="row" spacing={1.5} sx={{ minHeight: 74, p: 1.5, borderRadius: RADIUS_SM, border: `1px solid ${BORDER}`, bgcolor: PANEL }}>
+            <Stack direction="row" spacing={1.5} sx={{ minHeight: 74, p: 1.5, borderRadius: RADIUS_SM, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: PANEL }}>
               <Box sx={{ width: 34, height: 34, flexShrink: 0, borderRadius: "9px", bgcolor: alpha(WARNING, 0.1), color: WARNING, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Typography variant="caption" fontWeight={800}>#</Typography>
               </Box>
@@ -849,14 +889,14 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
                 <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", lineHeight: 1.2, letterSpacing: "0.03em" }}>
                   GPS Longitude
                 </Typography>
-                <Typography variant="body2" fontWeight={800} color={INK} sx={{ mt: 0.45 }}>
+                <Typography variant="body2" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ mt: 0.45 }}>
                   {formatSurveyValue(siteSurvey.longitude)}
                 </Typography>
               </Box>
             </Stack>
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
-            <Stack direction="row" spacing={1.5} sx={{ minHeight: 74, p: 1.5, borderRadius: RADIUS_SM, border: `1px solid ${BORDER}`, bgcolor: PANEL }}>
+            <Stack direction="row" spacing={1.5} sx={{ minHeight: 74, p: 1.5, borderRadius: RADIUS_SM, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: PANEL }}>
               <Box sx={{ width: 34, height: 34, flexShrink: 0, borderRadius: "9px", bgcolor: alpha(WARNING, 0.1), color: WARNING, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Typography variant="caption" fontWeight={800}>#</Typography>
               </Box>
@@ -864,7 +904,7 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
                 <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", lineHeight: 1.2, letterSpacing: "0.03em" }}>
                   GPS Latitude
                 </Typography>
-                <Typography variant="body2" fontWeight={800} color={INK} sx={{ mt: 0.45 }}>
+                <Typography variant="body2" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ mt: 0.45 }}>
                   {formatSurveyValue(siteSurvey.latitude)}
                 </Typography>
               </Box>
@@ -874,7 +914,7 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
 
         {photoUrls.length > 0 && (
           <Box sx={{ mt: 2.5 }}>
-            <Typography variant="caption" fontWeight={800} color={INK} sx={{ display: "block", mb: 1.25, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <Typography variant="caption" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ display: "block", mb: 1.25, textTransform: "uppercase", letterSpacing: "0.06em" }}>
               Photos
             </Typography>
             <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
@@ -891,7 +931,7 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
                     borderRadius: RADIUS_SM,
                     objectFit: "cover",
                     cursor: "pointer",
-                    border: `1px solid ${BORDER}`,
+                    border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`,
                     transition: "transform 0.15s ease",
                     "&:hover": { transform: "scale(1.03)" },
                   }}
@@ -902,7 +942,7 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
         )}
 
         {siteSurveyNotes && (
-          <Box sx={{ mt: 2.5, p: 1.75, borderRadius: RADIUS_SM, border: `1px solid ${BORDER}`, bgcolor: SURFACE }}>
+          <Box sx={{ mt: 2.5, p: 1.75, borderRadius: RADIUS_SM, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: SURFACE }}>
             <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Notes
             </Typography>
@@ -932,6 +972,8 @@ const SurveyDetailModal = ({ open, project, onClose, onOpenEditor }) => {
 };
 
 const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const [surveyOpen, setSurveyOpen] = useState(false);
   const [activityFilter, setActivityFilter] = useState("all");
   const siteSurveyReady = hasSiteSurveyData(project);
@@ -951,6 +993,22 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
     [filteredActivityEntries]
   );
   const installerName = getPersonName(project?.siteInstaller || project?.assignedInstaller || project?.installationUser);
+  const isWorksheetProject = project?.source === "installerWorksheet";
+  const createdByName = project?.createdByName || getPersonName(project?.assignedManager);
+  const supervisorName = project?.supervisorName || getPersonName(project?.assignedUser);
+  const teammateNames = getPersonListNames(project?.teammates);
+  const worksheetPhotos = getWorksheetPhotoItems(project);
+  const worksheetGpsUrl = getGpsMapUrl(project?.gpsLocation);
+  const worksheetFields = [
+    { label: "Customer Name", value: project?.consumerName || [project?.firstName, project?.lastName].filter(Boolean).join(" ") },
+    { label: "Project Type", value: project?.projectType || project?.leadType || project?.requirementType },
+    { label: "Capacity", value: project?.capacity || (project?.capacityKw ? `${project.capacityKw} KW` : "") || project?.plantCapacity },
+    { label: "Installation Day", value: project?.installationDay ? `Day ${project.installationDay}` : "" },
+    { label: "Section", value: project?.section || project?.ulaSection || project?.city },
+    { label: "Consumer A/C No.", value: project?.consumerAccountNo },
+    { label: "Contact Number", value: project?.contactNo || project?.phone || project?.phoneNumber },
+    { label: "Address", value: project?.address || project?.siteLocation || project?.gpsLocation?.address, wide: true },
+  ];
   const statusLabel = formatStatusLabel(project?.status || project?.registrationStatus);
   const activityFilters = [
     { key: "all", label: "All" },
@@ -962,11 +1020,11 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
 
   return (
     <Stack spacing={2.5}>
-      <Paper elevation={0} sx={{ p: 3, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+      <Paper elevation={0} sx={{ p: 3, borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", boxShadow: SHADOW_SM }}>
         <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={2} sx={{ mb: 3 }}>
           <Stack direction="row" spacing={1.25} alignItems="center">
             <InfoOutlined sx={{ fontSize: 20, color: BRAND }} />
-            <Typography variant="h6" fontWeight={800} color={INK} letterSpacing="-0.01em">
+            <Typography variant="h6" fontWeight={800} color={isDark ? "#f8fafc" : INK} letterSpacing="-0.01em">
               Project Details
             </Typography>
           </Stack>
@@ -995,7 +1053,7 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
                     Project Code
                   </Typography>
                 </Stack>
-                <Typography variant="subtitle1" fontWeight={800} color={INK}>
+                <Typography variant="subtitle1" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
                   {project?.projectCode || project?.leadId || project?._id?.slice(-8) || "Not set"}
                 </Typography>
               </Box>
@@ -1016,7 +1074,7 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
                   <IconButton
                     size="small"
                     onClick={() => onGoToStage?.(normalizeProjectStage(project))}
-                    sx={{ width: 30, height: 30, border: `1px solid ${BORDER}`, borderRadius: RADIUS_SM, color: INK, "&:hover": { borderColor: alpha(BRAND, 0.4), bgcolor: alpha(BRAND, 0.04) } }}
+                    sx={{ width: 30, height: 30, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, borderRadius: RADIUS_SM, color: INK, "&:hover": { borderColor: alpha(BRAND, 0.4), bgcolor: alpha(BRAND, 0.04) } }}
                   >
                     <Edit sx={{ fontSize: 15 }} />
                   </IconButton>
@@ -1030,7 +1088,7 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
                     Created
                   </Typography>
                 </Stack>
-                <Typography variant="subtitle1" fontWeight={800} color={INK}>
+                <Typography variant="subtitle1" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
                   {formatDate(project?.projectConvertedAt || project?.createdAt)}
                 </Typography>
               </Box>
@@ -1038,38 +1096,189 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
           </Grid>
 
           <Grid item xs={12} md={6}>
-            <Box>
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.8 }}>
-                <Build sx={{ fontSize: 17, color: MUTED_2 }} />
-                <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  Site Installer
-                </Typography>
-              </Stack>
-              <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap>
-                <Typography variant="subtitle1" fontWeight={700} sx={{ color: installerName ? INK : MUTED_2 }}>
-                  {installerName || "Not assigned"}
-                </Typography>
-                {!installerName && (
-                  <Button
-                    size="small"
-                    onClick={() => onGoToStage?.("installation")}
-                    startIcon={<Typography component="span" fontWeight={800}>+</Typography>}
-                    sx={{ minWidth: 0, px: 1.25, py: 0.5, borderRadius: "6px", bgcolor: alpha(WARNING, 0.1), color: WARNING, fontWeight: 800, textTransform: "none" }}
-                  >
-                    Assign
-                  </Button>
-                )}
-              </Stack>
-            </Box>
+            <Stack spacing={3}>
+              {isWorksheetProject && (
+                <>
+                  <Box>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.8 }}>
+                      <Workspaces sx={{ fontSize: 17, color: MUTED_2 }} />
+                      <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                        Created By
+                      </Typography>
+                    </Stack>
+                    <Typography variant="subtitle1" fontWeight={700} sx={{ color: createdByName ? INK : MUTED_2 }}>
+                      {createdByName || "Not available"}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.8 }}>
+                      <Build sx={{ fontSize: 17, color: MUTED_2 }} />
+                      <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                        Supervisor
+                      </Typography>
+                    </Stack>
+                    <Typography variant="subtitle1" fontWeight={700} sx={{ color: supervisorName ? INK : MUTED_2 }}>
+                      {supervisorName || "Not assigned"}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.8 }}>
+                      <TaskAlt sx={{ fontSize: 17, color: MUTED_2 }} />
+                      <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                        Team Members
+                      </Typography>
+                    </Stack>
+                    {teammateNames.length > 0 ? (
+                      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                        {teammateNames.map((name) => (
+                          <Chip
+                            key={name}
+                            label={name}
+                            size="small"
+                            sx={{ borderRadius: "6px", bgcolor: alpha(BRAND, 0.08), color: INK, fontWeight: 700 }}
+                          />
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Typography variant="subtitle1" fontWeight={700} sx={{ color: MUTED_2 }}>
+                        No team members added
+                      </Typography>
+                    )}
+                  </Box>
+                </>
+              )}
+
+              {!isWorksheetProject && (
+                <Box>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.8 }}>
+                    <Build sx={{ fontSize: 17, color: MUTED_2 }} />
+                    <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Site Installer
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap>
+                    <Typography variant="subtitle1" fontWeight={700} sx={{ color: installerName ? INK : MUTED_2 }}>
+                      {installerName || "Not assigned"}
+                    </Typography>
+                    {!installerName && (
+                      <Button
+                        size="small"
+                        onClick={() => onGoToStage?.("installation")}
+                        startIcon={<Typography component="span" fontWeight={800}>+</Typography>}
+                        sx={{ minWidth: 0, px: 1.25, py: 0.5, borderRadius: "6px", bgcolor: alpha(WARNING, 0.1), color: WARNING, fontWeight: 800, textTransform: "none" }}
+                      >
+                        Assign
+                      </Button>
+                    )}
+                  </Stack>
+                </Box>
+              )}
+            </Stack>
           </Grid>
         </Grid>
+
+        {isWorksheetProject && (
+          <>
+            <Divider sx={{ my: 3, borderColor: BORDER_SOFT }} />
+
+            <Stack spacing={2.5}>
+              <Box>
+                <Typography variant="subtitle2" fontWeight={900} color={isDark ? "#f8fafc" : INK} sx={{ mb: 1.5 }}>
+                  Customer & Installation Details
+                </Typography>
+                <Grid container spacing={1.5}>
+                  {worksheetFields.map((field) => (
+                    <Grid item xs={12} sm={field.wide ? 12 : 6} md={field.wide ? 12 : 3} key={field.label}>
+                      <Box sx={{ p: 1.5, borderRadius: RADIUS_SM, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0e1220" : SURFACE, minHeight: 78 }}>
+                        <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          {field.label}
+                        </Typography>
+                        <Typography variant="body2" fontWeight={800} color={field.value ? INK : MUTED_2} sx={{ mt: 0.75, wordBreak: "break-word" }}>
+                          {field.value || "Not available"}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+
+              <Box>
+                <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={1.5} sx={{ mb: 1.5 }}>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <PhotoCameraOutlined sx={{ fontSize: 18, color: MUTED_2 }} />
+                    <Typography variant="subtitle2" fontWeight={900} color={isDark ? "#f8fafc" : INK}>
+                      Geo Tagged Photos
+                    </Typography>
+                    <Chip label={`${worksheetPhotos.length} photo${worksheetPhotos.length === 1 ? "" : "s"}`} size="small" sx={{ height: 22, borderRadius: "6px", bgcolor: alpha(BRAND, 0.08), color: BRAND, fontWeight: 800 }} />
+                  </Stack>
+                  {worksheetGpsUrl && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<LocationOn sx={{ fontSize: 16 }} />}
+                      onClick={() => window.open(worksheetGpsUrl, "_blank", "noopener,noreferrer")}
+                      sx={{ borderRadius: RADIUS_SM, textTransform: "none", fontWeight: 800, borderColor: BORDER, color: INK }}
+                    >
+                      Open GPS Location
+                    </Button>
+                  )}
+                </Stack>
+
+                {worksheetPhotos.length > 0 ? (
+                  <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
+                    {worksheetPhotos.map(({ photo, url, index }) => {
+                      const photoGpsUrl = getGpsMapUrl(photo);
+                      return (
+                        <Box key={`${url}-${index}`} sx={{ width: 148, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, borderRadius: RADIUS_SM, overflow: "hidden", bgcolor: PANEL }}>
+                          <Box
+                            component="img"
+                            src={url}
+                            alt={`Geo tagged project photo ${index + 1}`}
+                            onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+                            sx={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", display: "block", cursor: "pointer", bgcolor: SURFACE }}
+                          />
+                          <Stack spacing={0.5} sx={{ p: 1 }}>
+                            <Typography variant="caption" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
+                              Photo {index + 1}
+                            </Typography>
+                            <Typography variant="caption" color={isDark ? "#94a3b8" : MUTED} sx={{ lineHeight: 1.35 }}>
+                              {photo?.capturedAt ? formatDate(photo.capturedAt, "dd MMM yyyy, hh:mm a") : "Capture time not available"}
+                            </Typography>
+                            {photoGpsUrl && (
+                              <Button
+                                size="small"
+                                startIcon={<LocationOn sx={{ fontSize: 14 }} />}
+                                onClick={() => window.open(photoGpsUrl, "_blank", "noopener,noreferrer")}
+                                sx={{ alignSelf: "flex-start", minWidth: 0, p: 0, color: BRAND, fontSize: 12, fontWeight: 800, textTransform: "none" }}
+                              >
+                                Map
+                              </Button>
+                            )}
+                          </Stack>
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                ) : (
+                  <Box sx={{ p: 2, borderRadius: RADIUS_SM, border: `1px dashed ${BORDER}`, bgcolor: SURFACE }}>
+                    <Typography variant="body2" color={MUTED_2} fontWeight={700}>
+                      No geo tagged photos uploaded for this project.
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </Stack>
+          </>
+        )}
       </Paper>
 
-      <Paper elevation={0} sx={{ p: 3, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+      <Paper elevation={0} sx={{ p: 3, borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", boxShadow: SHADOW_SM }}>
         <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }} spacing={2} sx={{ mb: 2.5 }}>
           <Stack direction="row" spacing={1.25} alignItems="center">
             <AccessTime sx={{ fontSize: 20, color: BRAND }} />
-            <Typography variant="h6" fontWeight={800} color={INK} letterSpacing="-0.01em">
+            <Typography variant="h6" fontWeight={800} color={isDark ? "#f8fafc" : INK} letterSpacing="-0.01em">
               Activity Timeline
             </Typography>
           </Stack>
@@ -1129,7 +1338,7 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
                       </Box>
                       <Box sx={{ minWidth: 0 }}>
                         <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap>
-                          <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ wordBreak: "break-word" }}>
+                          <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ wordBreak: "break-word" }}>
                             {entry.title}
                           </Typography>
                           <Chip
@@ -1180,28 +1389,34 @@ const RegistrationWorkspace = ({
   onClear,
   onCancel,
   onSave,
-}) => (
-  <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+  readOnly = false,
+  onEdit,
+}) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
+  return (
+  <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", boxShadow: SHADOW_SM }}>
     <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2.5 }}>
       <Stack direction="row" spacing={1.5} alignItems="center">
         {workspaceHeaderIcon(FactCheck)}
         <Box>
-          <Typography variant="subtitle2" fontWeight={800} color={INK}>
+          <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
             Registration Workspace
           </Typography>
           <Typography variant="caption" sx={{ color: MUTED }}>
-            Fill in the registration details below
+            {readOnly ? "Registration details are locked. Click Edit to make changes." : "Fill in the registration details below"}
           </Typography>
         </Box>
       </Stack>
       <Button
         size="small"
         variant="outlined"
-        startIcon={<Clear sx={{ fontSize: 16 }} />}
-        onClick={onClear}
+        startIcon={readOnly ? <Edit sx={{ fontSize: 16 }} /> : <Clear sx={{ fontSize: 16 }} />}
+        onClick={readOnly ? onEdit : onClear}
         sx={{ alignSelf: { xs: "flex-start", sm: "center" }, borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none" }}
       >
-        Clear Form
+        {readOnly ? "Edit" : "Clear Form"}
       </Button>
     </Stack>
 
@@ -1216,6 +1431,7 @@ const RegistrationWorkspace = ({
           placeholder="Enter full address"
           value={formData.address}
           onChange={(event) => onChange("address", event.target.value)}
+          disabled={readOnly}
           error={!!errors.address}
           helperText={errors.address}
         />
@@ -1228,6 +1444,7 @@ const RegistrationWorkspace = ({
           placeholder="Enter city"
           value={formData.city}
           onChange={(event) => onChange("city", event.target.value)}
+          disabled={readOnly}
           error={!!errors.city}
           helperText={errors.city}
         />
@@ -1240,13 +1457,14 @@ const RegistrationWorkspace = ({
           placeholder="Enter pincode"
           value={formData.pincode}
           onChange={(event) => onChange("pincode", event.target.value)}
+          disabled={readOnly}
           inputProps={{ maxLength: 6 }}
           error={!!errors.pincode}
           helperText={errors.pincode}
         />
       </Grid>
       <Grid item xs={12}>
-        <FormControl fullWidth size="small" error={!!errors.solarRequirement}>
+        <FormControl fullWidth size="small" error={!!errors.solarRequirement} disabled={readOnly}>
           <InputLabel>Solar Requirement *</InputLabel>
           <Select
             label="Solar Requirement *"
@@ -1271,11 +1489,12 @@ const RegistrationWorkspace = ({
           label="Registration Date"
           value={formData.dateOfRegistration}
           onChange={(event) => onChange("dateOfRegistration", event.target.value)}
+          disabled={readOnly}
           InputLabelProps={{ shrink: true }}
         />
       </Grid>
       <Grid item xs={12} md={6}>
-        <FormControl fullWidth size="small">
+        <FormControl fullWidth size="small" disabled={readOnly}>
           <InputLabel>Registration Status</InputLabel>
           <Select
             label="Registration Status"
@@ -1289,7 +1508,7 @@ const RegistrationWorkspace = ({
         </FormControl>
       </Grid>
       <Grid item xs={12}>
-        <FormControl fullWidth size="small">
+        <FormControl fullWidth size="small" disabled={readOnly}>
           <InputLabel>Lead Status</InputLabel>
           <Select
             label="Lead Status"
@@ -1311,34 +1530,50 @@ const RegistrationWorkspace = ({
           label="Registration Notes"
           placeholder="Add notes about this registration..."
           value={formData.registrationNotes}
+          disabled={readOnly}
           onChange={(event) => onChange("registrationNotes", event.target.value)}
         />
       </Grid>
       <Grid item xs={12} md={4}>
         <Stack direction={{ xs: "column", sm: "row", md: "row" }} spacing={1} sx={{ height: "100%" }} alignItems="flex-end">
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={onCancel}
-            sx={{ borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none" }}
-          >
-            Cancel
-          </Button>
-          <Button
-            fullWidth
-            variant="contained"
-            startIcon={<Save sx={{ fontSize: 16 }} />}
-            onClick={onSave}
-            disabled={saving || !project?._id}
-            sx={{ borderRadius: RADIUS_SM, bgcolor: BRAND, fontWeight: 800, textTransform: "none", boxShadow: "none", "&:hover": { bgcolor: BRAND_DARK, boxShadow: "none" } }}
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </Button>
+          {readOnly ? (
+            <Button
+              fullWidth
+              variant="contained"
+              startIcon={<Edit sx={{ fontSize: 16 }} />}
+              onClick={onEdit}
+              sx={{ borderRadius: RADIUS_SM, bgcolor: BRAND, fontWeight: 800, textTransform: "none", boxShadow: "none", "&:hover": { bgcolor: BRAND_DARK, boxShadow: "none" } }}
+            >
+              Edit
+            </Button>
+          ) : (
+            <>
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={onCancel}
+                sx={{ borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none" }}
+              >
+                Cancel
+              </Button>
+              <Button
+                fullWidth
+                variant="contained"
+                startIcon={<Save sx={{ fontSize: 16 }} />}
+                onClick={onSave}
+                disabled={saving || !project?._id}
+                sx={{ borderRadius: RADIUS_SM, bgcolor: BRAND, fontWeight: 800, textTransform: "none", boxShadow: "none", "&:hover": { bgcolor: BRAND_DARK, boxShadow: "none" } }}
+              >
+                {saving ? "Saving..." : "Save Changes"}
+              </Button>
+            </>
+          )}
         </Stack>
       </Grid>
     </Grid>
   </Paper>
-);
+  );
+};
 
 const DocumentWorkspace = ({
   project,
@@ -1360,16 +1595,18 @@ const DocumentWorkspace = ({
   onReject,
   onDelete,
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const uploadedCount = documentSlots.filter((slot) => slot.uploaded).length;
   const progress = uploadedCount > 0 ? 100 : 0;
 
   return (
-    <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+    <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", boxShadow: SHADOW_SM }}>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2.5 }}>
         <Stack direction="row" spacing={1.5} alignItems="center">
           {workspaceHeaderIcon(DescriptionOutlined)}
           <Box>
-            <Typography variant="subtitle2" fontWeight={800} color={INK}>
+            <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
               Documents
             </Typography>
             <Typography variant="caption" sx={{ color: MUTED }}>
@@ -1397,7 +1634,7 @@ const DocumentWorkspace = ({
             </Typography>
           </Stack>
           {documentUploadLinks.map((link) => (
-            <Paper key={link} elevation={0} sx={{ px: 1, py: 0.85, borderRadius: 2, border: `1px solid ${BORDER}`, bgcolor: "#f8fafc" }}>
+            <Paper key={link} elevation={0} sx={{ px: 1, py: 0.85, borderRadius: 2, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: "#f8fafc" }}>
               <Stack direction="row" spacing={1} alignItems="center">
                 <LinkIcon sx={{ fontSize: 14, color: BRAND, flexShrink: 0 }} />
                 <Typography
@@ -1470,7 +1707,7 @@ const DocumentWorkspace = ({
                   height: "100%",
                   borderRadius: RADIUS_SM,
                   border: isVerified ? `1.5px solid ${SUCCESS}` : isRejected ? `1.5px solid ${DANGER}` : `1px solid ${BORDER}`,
-                  bgcolor: PANEL,
+                  bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit",
                   overflow: "hidden",
                   transition: "box-shadow 0.2s ease",
                   cursor: "pointer",
@@ -1505,7 +1742,7 @@ const DocumentWorkspace = ({
                   )}
                 </Stack>
                 <Stack spacing={1.25} sx={{ p: 1.5 }}>
-                  <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ lineHeight: 1.2 }}>
+                  <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ lineHeight: 1.2 }}>
                     {slot.label}
                   </Typography>
                   {slot.fileName && (
@@ -1546,7 +1783,7 @@ const DocumentWorkspace = ({
                         <Button size="small" startIcon={<Clear sx={{ fontSize: 13 }} />} onClick={(event) => { event.stopPropagation(); onReject(slot); }} sx={{ flex: 1, fontSize: "0.7rem", fontWeight: 800, py: 0.8, borderRadius: 1.5, bgcolor: "#fff1f2", color: DANGER, border: "1px solid #fecdd3" }}>
                           Reject
                         </Button>
-                        <IconButton size="small" onClick={(event) => { event.stopPropagation(); onDownloadDocument(displayUrl, slot.fileName || slot.label); }} sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: SURFACE, border: `0.5px solid ${BORDER}` }}>
+                        <IconButton size="small" onClick={(event) => { event.stopPropagation(); onDownloadDocument(displayUrl, slot.fileName || slot.label); }} sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: isDark ? "#0e1220" : SURFACE, border: `0.5px solid ${BORDER}` }}>
                           <Download sx={{ fontSize: 14, color: MUTED }} />
                         </IconButton>
                       </Stack>
@@ -1619,7 +1856,7 @@ const DocumentWorkspace = ({
                   />
                 </Box>
               ) : (
-                <Box sx={{ height: 280, bgcolor: SURFACE, display: "grid", placeItems: "center" }}>
+                <Box sx={{ height: 280, bgcolor: isDark ? "#0e1220" : SURFACE, display: "grid", placeItems: "center" }}>
                   <Stack alignItems="center" spacing={1}>
                     {previewDoc.isPdf ? <PictureAsPdfOutlined sx={{ fontSize: 48, color: MUTED_2 }} /> : <InsertDriveFileOutlined sx={{ fontSize: 48, color: MUTED_2 }} />}
                     <Typography variant="caption" sx={{ color: MUTED_2 }}>Preview not available</Typography>
@@ -1634,7 +1871,7 @@ const DocumentWorkspace = ({
                 </Typography>
               ) : <Box sx={{ flex: 1 }} />}
               <Button onClick={onClosePreview} sx={{ borderRadius: 2, border: `0.5px solid ${BORDER}`, color: MUTED, fontSize: "0.8rem", fontWeight: 700 }}>Close</Button>
-              <Button startIcon={<Download sx={{ fontSize: 14 }} />} onClick={() => onDownloadDocument(toBackendAssetUrl(previewDoc.url), previewDoc.fileName)} sx={{ borderRadius: 2, border: `0.5px solid ${BORDER}`, bgcolor: SURFACE, color: INK, fontSize: "0.8rem", fontWeight: 700 }}>Download</Button>
+              <Button startIcon={<Download sx={{ fontSize: 14 }} />} onClick={() => onDownloadDocument(toBackendAssetUrl(previewDoc.url), previewDoc.fileName)} sx={{ borderRadius: 2, border: `0.5px solid ${BORDER}`, bgcolor: isDark ? "#0e1220" : SURFACE, color: INK, fontSize: "0.8rem", fontWeight: 700 }}>Download</Button>
               <Button variant="contained" startIcon={<OpenInNew sx={{ fontSize: 14 }} />} onClick={() => onOpenDocument(toBackendAssetUrl(previewDoc.url))} sx={{ borderRadius: 2, bgcolor: BRAND, color: "#fff", fontSize: "0.8rem", fontWeight: 800, boxShadow: "none" }}>Open in new tab</Button>
             </DialogActions>
           </>
@@ -1653,6 +1890,8 @@ const PaymentWorkspace = ({
   onClear,
   onCancel,
   onSave,
+  readOnly = false,
+  onEdit,
 }) => {
   const paymentType = formData.paymentType || "Bank Loan";
   const isCash = paymentType === "Cash";
@@ -1668,12 +1907,12 @@ const PaymentWorkspace = ({
   };
 
   return (
-    <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+    <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", boxShadow: SHADOW_SM }}>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2.5 }}>
         <Stack direction="row" spacing={1.5} alignItems="center">
           {workspaceHeaderIcon(Payments)}
           <Box>
-            <Typography variant="subtitle2" fontWeight={800} color={INK}>
+            <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
               Payment Workspace
             </Typography>
             <Typography variant="caption" sx={{ color: MUTED }}>
@@ -1688,12 +1927,12 @@ const PaymentWorkspace = ({
         <Button
           size="small"
           variant="outlined"
-          startIcon={<Clear sx={{ fontSize: 16 }} />}
-          onClick={onClear}
+          startIcon={readOnly ? <Edit sx={{ fontSize: 16 }} /> : <Clear sx={{ fontSize: 16 }} />}
+        onClick={readOnly ? onEdit : onClear}
           sx={{ alignSelf: { xs: "flex-start", sm: "center" }, borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none" }}
         >
-          Clear Form
-        </Button>
+        {readOnly ? "Edit" : "Clear Form"}
+      </Button>
       </Stack>
 
       <Grid container spacing={2}>
@@ -1836,7 +2075,7 @@ const workflowStatusHeader = (Icon, title, customerName, onCancel) => (
         <Icon sx={{ fontSize: 24 }} />
       </Box>
       <Box>
-        <Typography variant="h6" fontWeight={800} color={INK} sx={{ lineHeight: 1.15 }} letterSpacing="-0.01em">
+        <Typography variant="h6" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ lineHeight: 1.15 }} letterSpacing="-0.01em">
           {title}
         </Typography>
         <Typography variant="body2" sx={{ color: MUTED }}>
@@ -1879,6 +2118,8 @@ const InstallationWorkspace = ({
   onChange,
   onCancel,
   onSave,
+  readOnly = false,
+  onEdit,
 }) => {
   const currentInstallation =
     INSTALLATION_STATUS_OPTIONS.find((status) => status.value === project?.installationStatus)?.label ||
@@ -1886,13 +2127,13 @@ const InstallationWorkspace = ({
   const currentLead = project?.status || "";
 
   return (
-    <Paper elevation={0} sx={{ borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, overflow: "hidden", boxShadow: SHADOW_SM }}>
+    <Paper elevation={0} sx={{ borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", overflow: "hidden", boxShadow: SHADOW_SM }}>
       {workflowStatusHeader(Build, "Update Installation Status", getCustomerName(project), onCancel)}
 
       <Box sx={{ p: 2.5 }}>
         <Grid container spacing={2} sx={{ mb: 2.5 }}>
           <Grid item xs={12} sm={6}>
-            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ mb: 0.75 }}>
               Current Installation Status
             </Typography>
             <Chip
@@ -1903,7 +2144,7 @@ const InstallationWorkspace = ({
             />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ mb: 0.75 }}>
               Current Lead Status
             </Typography>
             <Chip
@@ -1963,7 +2204,8 @@ const InstallationWorkspace = ({
             label="Installation Date"
             value={formData.installationDate}
             onChange={(event) => onChange("installationDate", event.target.value)}
-            InputLabelProps={{ shrink: true }}
+            disabled={readOnly}
+          InputLabelProps={{ shrink: true }}
           />
 
           <TextField
@@ -1999,6 +2241,8 @@ const DisbursementWorkspace = ({
   onChange,
   onCancel,
   onSave,
+  readOnly = false,
+  onEdit,
 }) => {
   const currentDisbursement =
     DISBURSEMENT_STATUS_OPTIONS.find((status) => status.value === project?.disbursementStatus)?.label ||
@@ -2008,13 +2252,13 @@ const DisbursementWorkspace = ({
   const selectedLead = DISBURSEMENT_LEAD_STATUS_OPTIONS.find((status) => status.value === formData.status);
 
   return (
-    <Paper elevation={0} sx={{ borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, overflow: "hidden", boxShadow: SHADOW_SM }}>
+    <Paper elevation={0} sx={{ borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", overflow: "hidden", boxShadow: SHADOW_SM }}>
       {workflowStatusHeader(Payments, "Update Disbursement Status", getCustomerName(project), onCancel)}
 
       <Box sx={{ p: 2.5 }}>
         <Grid container spacing={2} sx={{ mb: 2.5 }}>
           <Grid item xs={12} sm={6}>
-            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ mb: 0.75 }}>
               Current Disbursement Status
             </Typography>
             <Chip
@@ -2025,7 +2269,7 @@ const DisbursementWorkspace = ({
             />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ mb: 0.75 }}>
               Current Lead Status
             </Typography>
             <Chip
@@ -2115,7 +2359,8 @@ const DisbursementWorkspace = ({
                   onChange={(event) => onChange("disbursementDate", event.target.value)}
                   error={!!errors.disbursementDate}
                   helperText={errors.disbursementDate}
-                  InputLabelProps={{ shrink: true }}
+                  disabled={readOnly}
+          InputLabelProps={{ shrink: true }}
                 />
               </Grid>
             </Grid>
@@ -2155,6 +2400,8 @@ const LoanPendingWorkspace = ({
   onChange,
   onCancel,
   onSave,
+  readOnly = false,
+  onEdit,
 }) => {
   const currentBank =
     BANK_STATUS_OPTIONS.find((status) => status.value === project?.bankAtPendingStatus)?.label ||
@@ -2170,13 +2417,13 @@ const LoanPendingWorkspace = ({
     BANK_LEAD_STATUS_OPTIONS.find((status) => status.value === formData.status) || BANK_LEAD_STATUS_OPTIONS[0];
 
   return (
-    <Paper elevation={0} sx={{ borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, overflow: "hidden", boxShadow: SHADOW_SM }}>
+    <Paper elevation={0} sx={{ borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", overflow: "hidden", boxShadow: SHADOW_SM }}>
       {workflowStatusHeader(AccountBalance, "Update Bank Status", getCustomerName(project), onCancel)}
 
       <Box sx={{ p: 2.5 }}>
         <Stack spacing={2.5}>
           <Box>
-            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ mb: 0.75 }}>
               Current Bank Status
             </Typography>
             <Chip
@@ -2191,7 +2438,7 @@ const LoanPendingWorkspace = ({
           </Box>
 
           <Box>
-            <Typography variant="subtitle2" fontWeight={800} color={INK} sx={{ mb: 0.75 }}>
+            <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ mb: 0.75 }}>
               Current Lead Status
             </Typography>
             <Chip
@@ -2293,13 +2540,17 @@ const LoanPendingWorkspace = ({
 };
 
 function ProjectDetails() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const { projectId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const { fetchAPI } = useAuth();
+  const initialProject = location.state?.project || null;
+  const isWorksheetProject = initialProject?.source === "installerWorksheet";
 
-  const [project, setProject] = useState(location.state?.project || null);
-  const [loading, setLoading] = useState(!location.state?.project);
+  const [project, setProject] = useState(initialProject);
+  const [loading, setLoading] = useState(!initialProject);
   const [error, setError] = useState("");
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
   const [selectedWorkflowStage, setSelectedWorkflowStage] = useState(() => {
@@ -2318,6 +2569,7 @@ function ProjectDetails() {
   });
   const [registrationErrors, setRegistrationErrors] = useState({});
   const [savingRegistration, setSavingRegistration] = useState(false);
+  const [registrationEditMode, setRegistrationEditMode] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     paymentType: "Bank Loan",
     paymentAmount: "",
@@ -2372,6 +2624,12 @@ function ProjectDetails() {
   const hasInitialProjectRef = useRef(Boolean(location.state?.project));
 
   const fetchProject = useCallback(async () => {
+    if (isWorksheetProject) {
+      setError("");
+      setLoading(false);
+      return;
+    }
+
     if (!projectId) {
       setError("Project ID is missing.");
       setLoading(false);
@@ -2394,7 +2652,7 @@ function ProjectDetails() {
     } finally {
       setLoading(false);
     }
-  }, [fetchAPI, projectId]);
+  }, [fetchAPI, isWorksheetProject, projectId]);
 
   useEffect(() => {
     fetchProject();
@@ -2407,6 +2665,7 @@ function ProjectDetails() {
   const currentStageKey = normalizeProjectStage(project || location.state?.projectStage);
   const currentStage = getStageMeta(currentStageKey);
   const selectedWorkflow = getStageMeta(selectedWorkflowStage);
+  const registrationReadOnly = isStrictWorkflowStageComplete(project, "registration") && !registrationEditMode;
   const documentSlots = useMemo(() => getDocumentSlots(project), [project]);
   const firstAvailableWorkflowStage = useMemo(() => getFirstAvailableWorkflowStage(project), [project]);
   const selectedWorkflowLock = useMemo(
@@ -2591,6 +2850,7 @@ function ProjectDetails() {
   const resetRegistrationForm = useCallback(() => {
     setRegistrationForm(getRegistrationForm(project));
     setRegistrationErrors({});
+    setRegistrationEditMode(false);
   }, [getRegistrationForm, project]);
 
   const saveRegistration = useCallback(async () => {
@@ -2607,16 +2867,16 @@ function ProjectDetails() {
         city: registrationForm.city.trim(),
         pincode: registrationForm.pincode.trim(),
         solarRequirement: registrationForm.solarRequirement.trim(),
-        registrationStatus: registrationForm.registrationStatus,
+        registrationStatus: "completed",
         registrationNotes: registrationForm.registrationNotes.trim(),
-        status: registrationForm.status,
+        status: "Document Submission",
       };
 
       if (registrationForm.dateOfRegistration) {
         payload.dateOfRegistration = registrationForm.dateOfRegistration;
       }
 
-      const response = await fetchAPI(`/lead/updateLead/${project._id}`, {
+      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -2627,7 +2887,9 @@ function ProjectDetails() {
       }
 
       const updatedProject = response?.result?.lead || response?.result || { ...project, ...payload };
-      setProject(updatedProject);
+      setProject(updatedProject);
+      setRegistrationEditMode(false);
+      setSelectedWorkflowStage("document");
       setSnackbar({ open: true, message: "Registration updated successfully", severity: "success" });
     } catch (err) {
       setSnackbar({ open: true, message: err.message || "Failed to update registration", severity: "error" });
@@ -2748,7 +3010,7 @@ function ProjectDetails() {
         payload.loanApprovalDate = paymentForm.loanApprovalDate;
       }
 
-      const response = await fetchAPI(`/lead/updateLead/${project._id}`, {
+      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -2815,7 +3077,7 @@ function ProjectDetails() {
         payload.installationDate = installationForm.installationDate;
       }
 
-      const response = await fetchAPI(`/lead/updateLead/${project._id}`, {
+      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -2896,7 +3158,7 @@ function ProjectDetails() {
         payload.disbursementDate = disbursementForm.disbursementDate;
       }
 
-      const response = await fetchAPI(`/lead/updateLead/${project._id}`, {
+      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -2965,7 +3227,7 @@ function ProjectDetails() {
         bankAtPendingNotes: loanPendingForm.bankAtPendingNotes.trim(),
       };
 
-      const response = await fetchAPI(`/lead/updateLead/${project._id}`, {
+      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -3047,7 +3309,7 @@ function ProjectDetails() {
     }
 
     try {
-      const response = await fetchAPI(`/lead/updateLead/${project._id}`, {
+      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ documentStatus: nextStatus }),
@@ -3116,7 +3378,7 @@ function ProjectDetails() {
     }
 
     try {
-      const response = await fetchAPI(`/lead/updateLead/${project._id}`, {
+      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -3205,7 +3467,7 @@ function ProjectDetails() {
 
     try {
       setUploadingSlotKey(slotKey);
-      const response = await fetchAPI(`/lead/upload/${project._id}/upload-documents`, {
+      const response = await fetchAPI(`/lead/upload/${getValidLeadId(project)}/upload-documents`, {
         method: "PUT",
         body: formDataToSend,
       });
@@ -3239,7 +3501,7 @@ function ProjectDetails() {
 
   if (loading && !project) {
     return (
-      <Box sx={{ p: { xs: 2, md: 4 }, minHeight: "100vh", bgcolor: SURFACE }}>
+      <Box sx={{ p: { xs: 1.5, md: 3 }, bgcolor: isDark ? "#050811" : SURFACE }}>
         <Skeleton variant="rounded" height={90} sx={{ mb: 2, borderRadius: RADIUS }} />
         <Skeleton variant="rounded" height={120} sx={{ mb: 2, borderRadius: RADIUS }} />
         <Skeleton variant="rounded" height={260} sx={{ borderRadius: RADIUS }} />
@@ -3248,19 +3510,19 @@ function ProjectDetails() {
   }
 
   return (
-    <Box sx={{ p: { xs: 2, md: 4 }, minHeight: "100vh", bgcolor: SURFACE }}>
+    <Box sx={{ p: { xs: 2, md: 4 }, bgcolor: isDark ? "#050811" : SURFACE }}>
       <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2} sx={{ mb: 2.5 }}>
         <Box>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="caption" sx={{ color: MUTED_2 }}>Projects</Typography>
-            <Typography variant="caption" sx={{ color: MUTED_2 }}>/</Typography>
-            <Typography variant="caption" fontWeight={700} color={INK}>
+            <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : MUTED_2 }}>Projects</Typography>
+            <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : MUTED_2 }}>/</Typography>
+            <Typography variant="caption" fontWeight={700} color={isDark ? "#f8fafc" : INK}>
               {project?.projectCode || project?.leadId || projectId}
             </Typography>
           </Stack>
           <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.25 }}>
             <Tooltip title="Back to projects">
-              <IconButton size="small" onClick={() => navigate("/projects")} sx={{ border: `1px solid ${BORDER}`, bgcolor: PANEL, "&:hover": { bgcolor: SURFACE } }}>
+              <IconButton size="small" onClick={() => navigate("/projects")} sx={{ border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", "&:hover": { bgcolor: isDark ? "#0e1220" : SURFACE } }}>
                 <ArrowBack sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
@@ -3278,10 +3540,10 @@ function ProjectDetails() {
               Created {formatDate(project?.projectConvertedAt || project?.createdAt)}
             </Typography>
           </Stack>
-          <Typography variant="h5" fontWeight={800} color={INK} sx={{ lineHeight: 1.15 }} letterSpacing="-0.015em">
+          <Typography variant="h5" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ lineHeight: 1.15 }} letterSpacing="-0.015em">
             {getProjectTitle(project)}
           </Typography>
-          <Typography variant="body2" sx={{ color: MUTED, mt: 0.75 }}>
+          <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : MUTED, mt: 0.75 }}>
             {getProjectSubtitle(project)}
           </Typography>
         </Box>
@@ -3292,7 +3554,7 @@ function ProjectDetails() {
             variant="outlined"
             startIcon={<Edit sx={{ fontSize: 16 }} />}
             onClick={editProject}
-            sx={{ borderRadius: RADIUS_SM, borderColor: BORDER, color: INK, fontWeight: 700, textTransform: "none", bgcolor: PANEL, "&:hover": { borderColor: alpha(BRAND, 0.4), bgcolor: alpha(BRAND, 0.04) } }}
+            sx={{ borderRadius: RADIUS_SM, borderColor: isDark ? "rgba(255,255,255,0.12)" : BORDER, color: isDark ? "#f8fafc" : INK, fontWeight: 700, textTransform: "none", bgcolor: isDark ? "#0b0e1a" : PANEL, "&:hover": { borderColor: "#3b82f6", bgcolor: isDark ? "#0e1220" : alpha(BRAND, 0.04) } }}
           >
             Edit
           </Button>
@@ -3351,13 +3613,13 @@ function ProjectDetails() {
             onClick={() => selectWorkflowStage(firstAvailableWorkflowStage)}
             disabled={!project?._id}
             sx={{
-              bgcolor: "#fff",
-              color: INK,
+              bgcolor: "#ea580c",
+              color: "#ffffff",
               fontWeight: 800,
               textTransform: "none",
               borderRadius: RADIUS_SM,
               boxShadow: "none",
-              "&:hover": { bgcolor: alpha("#fff", 0.9), boxShadow: "none" },
+              "&:hover": { bgcolor: "#c2410c", boxShadow: "0 4px 14px rgba(234,88,12,0.4)" },
               "&.Mui-disabled": { bgcolor: alpha("#fff", 0.25), color: alpha("#fff", 0.5) },
             }}
           >
@@ -3366,13 +3628,13 @@ function ProjectDetails() {
         </Stack>
       </Paper>
 
-      <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+      <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", boxShadow: SHADOW_SM }}>
         <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1} sx={{ mb: 2.5 }}>
           <Box>
             <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
               Stage Progress
             </Typography>
-            <Typography variant="subtitle2" fontWeight={800} color={INK}>
+            <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
               Lifecycle status of every project stage
             </Typography>
           </Box>
@@ -3395,9 +3657,9 @@ function ProjectDetails() {
                         width: 34,
                         height: 34,
                         borderRadius: "50%",
-                        bgcolor: done || active ? color : "#fff",
-                        border: `1px solid ${done || active ? color : BORDER}`,
-                        color: done || active ? "#fff" : NEUTRAL,
+                        bgcolor: done || active ? color : (isDark ? "#1e293b" : "#fff"),
+                        border: `1px solid ${done || active ? color : (isDark ? "rgba(255,255,255,0.12)" : BORDER)}`,
+                        color: done || active ? "#fff" : (isDark ? "#94a3b8" : NEUTRAL),
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -3410,7 +3672,7 @@ function ProjectDetails() {
                     <Typography variant="caption" sx={{ color: MUTED_2 }} fontWeight={700}>
                       Stage {index + 1}
                     </Typography>
-                    <Typography variant="caption" color={INK} fontWeight={800} textAlign="center" sx={{ lineHeight: 1.2 }}>
+                    <Typography variant="caption" color={isDark ? "#f8fafc" : INK} fontWeight={800} textAlign="center" sx={{ lineHeight: 1.2 }}>
                       {stage.label}
                     </Typography>
                     <Chip
@@ -3426,7 +3688,7 @@ function ProjectDetails() {
                     />
                   </Stack>
                   {index < PROJECT_STAGES.length - 1 && (
-                    <Divider sx={{ flex: 1, minWidth: 42, mt: 2.1, borderColor: done ? alpha(SUCCESS, 0.4) : BORDER }} />
+                    <Divider sx={{ flex: 1, minWidth: 42, mt: 2.1, borderColor: done ? (isDark ? "#10b981" : alpha(SUCCESS, 0.4)) : (isDark ? "rgba(255,255,255,0.12)" : BORDER) }} />
                   )}
                 </React.Fragment>
               );
@@ -3440,7 +3702,7 @@ function ProjectDetails() {
           <Typography variant="caption" fontWeight={800} sx={{ color: MUTED_2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
             Project Workflow
           </Typography>
-          <Typography variant="subtitle2" fontWeight={800} color={INK}>
+          <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
             {completedStageCount} of {PROJECT_STAGES.length} stages complete
           </Typography>
         </Box>
@@ -3449,7 +3711,7 @@ function ProjectDetails() {
         </Typography>
       </Stack>
 
-      <Paper elevation={0} sx={{ p: 1.5, mb: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+      <Paper elevation={0} sx={{ p: 1.5, mb: 2.5, borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", boxShadow: SHADOW_SM }}>
         <Stack direction="row" spacing={1} sx={{ overflowX: "auto", pb: 0.5 }}>
           {WORKFLOW_TABS.map((stage) => {
             const Icon = stage.icon;
@@ -3480,7 +3742,7 @@ function ProjectDetails() {
                       "&.Mui-disabled": {
                         color: MUTED_2,
                         borderColor: BORDER_SOFT,
-                        bgcolor: SURFACE,
+                        bgcolor: isDark ? "#0e1220" : SURFACE,
                       },
                     }}
                   >
@@ -3520,6 +3782,8 @@ function ProjectDetails() {
               onClear={clearRegistrationForm}
               onCancel={resetRegistrationForm}
               onSave={saveRegistration}
+              readOnly={registrationReadOnly}
+              onEdit={() => setRegistrationEditMode(true)}
             />
           ) : selectedWorkflowStage === "document" ? (
             <DocumentWorkspace
@@ -3584,10 +3848,10 @@ function ProjectDetails() {
               onSave={saveLoanPending}
             />
           ) : (
-            <Paper elevation={0} sx={{ minHeight: 220, p: 3, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+            <Paper elevation={0} sx={{ minHeight: 220, p: 3, borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", boxShadow: SHADOW_SM }}>
               <Stack alignItems="center" justifyContent="center" spacing={1.25} sx={{ minHeight: 170, textAlign: "center" }}>
                 <TaskAlt sx={{ fontSize: 44, color: alpha(INK, 0.25) }} />
-                <Typography variant="subtitle1" fontWeight={800} color={INK}>
+                <Typography variant="subtitle1" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
                   {selectedWorkflow.label} Workspace
                 </Typography>
                 <Typography variant="body2" sx={{ color: MUTED, maxWidth: 520 }}>
@@ -3608,10 +3872,10 @@ function ProjectDetails() {
         {selectedWorkflowStage !== "summary" && (
         <Grid item xs={12} md={4}>
           <Stack spacing={2.5}>
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: `1px solid ${BORDER}`, bgcolor: PANEL, boxShadow: SHADOW_SM }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", boxShadow: SHADOW_SM }}>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
                 <InfoOutlined sx={{ fontSize: 18, color: BRAND }} />
-                <Typography variant="subtitle2" fontWeight={800} color={INK}>
+                <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
                   Current Stage Info
                 </Typography>
               </Stack>

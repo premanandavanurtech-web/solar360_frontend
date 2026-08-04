@@ -3,8 +3,10 @@ import { useState, useCallback, useRef } from "react";
 
 // ✅ FIX: API key must never be hardcoded in frontend source —
 //         it would be visible to anyone who inspects the bundle.
-//         Store it in your .env file as VITE_GOOGLE_MAPS_API_KEY.
-const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyCqM7uF9c0ZMQjdssHqSMJJ3mBcmz5RNS0";
+const GOOGLE_API_KEY =
+  (typeof process !== "undefined" && process.env?.REACT_APP_GOOGLE_MAPS_API_KEY) ||
+  (typeof process !== "undefined" && process.env?.VITE_GOOGLE_MAPS_API_KEY) ||
+  "AIzaSyAqn70bioCdQL50Jj9nXsUIq0yGumoV9E8";
 
 export const useGeo = () => {
   const [state, setState] = useState({

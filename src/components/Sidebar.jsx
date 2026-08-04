@@ -43,30 +43,19 @@ import {
   Menu as MenuIcon,
   Close as CloseIcon,
   RequestQuote,
+  Settings as SettingsIcon,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
-import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import ViewInAr from "@mui/icons-material/ViewInAr";
 import { useAuth } from "../contexts/AuthContext";
 import sidebarLogo from "../assets/sidebar-logo.webp";
 
-// ─── Design tokens (WHITE SIDEBAR + BLUE ACCENTS) ────────────────────────────
-const NAVY        = "#0f1f3d";
-const NAVY_DEEP   = "#1a237e";
-const NAVY_MID    = "#1a237e";
-const BLUE        = "#1e40af";          // primary blue
-const BLUE_LIGHT  = "#3b82f6";          // lighter blue
-const BLUE_GLOW   = "rgba(30,64,175,0.12)";
+// ─── Design Tokens ─────────────────────────────────────────────────────────────
+const BLUE = "#1e40af";
+const BLUE_LIGHT = "#3b82f6";
 const BLUE_GRADIENT = "linear-gradient(135deg, rgba(30,64,175,0.15) 0%, rgba(59,130,246,0.05) 100%)";
-
-const TEXT_PRIMARY   = "#1f2937";       // dark gray
-const TEXT_SECONDARY = "#6b7280";       // medium gray
-const BORDER_COLOR   = "rgba(30,64,175,0.12)";
-const HOVER_BG       = "rgba(30,64,175,0.06)";
-const ACTIVE_BG      = BLUE_GLOW;
-
-const SIDEBAR_BG = "#ffffff";
+const DARK_BLUE_GRADIENT = "linear-gradient(135deg, rgba(37,99,235,0.25) 0%, rgba(30,64,175,0.1) 100%)";
 
 const normalizeRole = (role) => {
   const value = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -96,6 +85,8 @@ const MOBILE_WIDTH     = 272;
 // ─── Sidebar Component ────────────────────────────────────────────────────────
 const Sidebar = ({ open, toggleDrawer, onClose }) => {
   const theme    = useTheme();
+  const isDark   = theme.palette.mode === "dark";
+
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
   const navigate = useNavigate();
@@ -116,6 +107,16 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
     !isMobile && (!open || (!isTablet && isCollapsed));
   const { user } = useAuth();
   const userRole = normalizeRole(user?.role);
+
+  // Dynamic colors based on light vs dark theme
+  const sidebarBg = isDark ? "#060b13" : "#ffffff";
+  const borderCol = isDark ? "rgba(255,255,255,0.07)" : "rgba(30,64,175,0.12)";
+  const textPri   = isDark ? "#f1f5f9" : "#1f2937";
+  const textSec   = isDark ? "#94a3b8" : "#6b7280";
+  const activeBg  = isDark ? "#132238" : "rgba(30,64,175,0.1)";
+  const activeBdr = isDark ? "1.5px solid #3b82f6" : "1.5px solid rgba(30,64,175,0.3)";
+  const activeIcon= isDark ? "#60a5fa" : BLUE;
+  const sectionBg = isDark ? "rgba(255,255,255,0.04)" : "rgba(30,64,175,0.08)";
 
   // ── Menu items ─────────────────────────────────────────────────────────────
   const menuItems = useMemo(
@@ -152,6 +153,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
       { text: "Reports",       icon: <Insights />,          path: "/reports",          roles: ["Admin_panel","ZSM","Incharge"] },
       { text: "Installer Work Register", icon: <Insights />, path: "/work-register", roles: ["ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","Admin_panel","ZSM","Incharge"] },
       { text: "Notifications", icon: <Notifications />,     path: "/notifications",    roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
+      { text: "Settings",      icon: <SettingsIcon />,      path: "/settings",         roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
     ],
     [userRole],
   );
@@ -171,6 +173,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         { text: "Attendance",  icon: <CalendarMonth />,itemNames: ["Team Attendance","My Attendance","Leave Management","Leave Types","Holiday Management"] },
         { text: "Team",        icon: <Groups />,       itemNames: ["Location Visit","Expense","Users"] },
         { text: "Insights",    icon: <Insights />,     itemNames: ["Reports","Installer Work Register","Notifications"] },
+        { text: "Settings",    icon: <SettingsIcon />, itemNames: ["Settings"] },
       ]
         .map((section) => ({
           ...section,
@@ -205,7 +208,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
   const getUserInitials  = () =>
     `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || ""}`.toUpperCase() || "U";
 
-  // ── Collapsed icon button ──────────────────────────────────────────────────
+  // ── Collapsed Icon Item ────────────────────────────────────────────────────
   const renderMenuItem = (item) => {
     const active = isActive(item.path);
     const btn = (
@@ -218,34 +221,34 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
           borderRadius: "12px",
           mx: effectiveCollapsed ? 0.5 : 1,
           my: 0.5,
-          bgcolor: active ? "rgba(30,64,175,0.1)" : "transparent",
-          color: TEXT_PRIMARY,
+          bgcolor: active ? activeBg : "transparent",
+          color: textPri,
           minHeight: isMobile ? 52 : 46,
           py: isMobile ? 1.3 : 1,
           transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
           position: "relative",
           overflow: "hidden",
-          border: active ? "1.5px solid rgba(30,64,175,0.3)" : "1.5px solid transparent",
-          boxShadow: active ? "0 2px 8px rgba(30,64,175,0.12)" : "none",
+          border: active ? activeBdr : "1.5px solid transparent",
+          boxShadow: active ? (isDark ? "0 4px 14px rgba(37,99,235,0.3)" : "0 2px 8px rgba(30,64,175,0.12)") : "none",
           "&::before": active ? {
             content: '""',
             position: "absolute",
             inset: 0,
-            background: BLUE_GRADIENT,
+            background: isDark ? DARK_BLUE_GRADIENT : BLUE_GRADIENT,
             pointerEvents: "none",
           } : {},
           "&:hover": { 
-            bgcolor: active ? "rgba(30,64,175,0.15)" : "rgba(30,64,175,0.08)",
+            bgcolor: active ? (isDark ? "rgba(37,99,235,0.25)" : "rgba(30,64,175,0.15)") : (isDark ? "rgba(59,130,246,0.1)" : "rgba(30,64,175,0.08)"),
             transform: isMobile ? "none" : "translateX(5px)",
-            boxShadow: "0 4px 16px rgba(30,64,175,0.15)",
-            border: `1.5px solid rgba(30,64,175,0.25)`,
+            boxShadow: isDark ? "0 4px 16px rgba(37,99,235,0.2)" : "0 4px 16px rgba(30,64,175,0.15)",
+            border: active ? activeBdr : (isDark ? "1.5px solid rgba(59,130,246,0.3)" : "1.5px solid rgba(30,64,175,0.25)"),
           },
         }}
       >
         <ListItemIcon
           sx={{
             minWidth: effectiveCollapsed ? "auto" : 40,
-            color: active ? BLUE : TEXT_SECONDARY,
+            color: active ? activeIcon : textSec,
             "& svg": { fontSize: isMobile ? "1.35rem" : "1.25rem" },
             transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
             transform: active ? "scale(1.1)" : "scale(1)",
@@ -257,13 +260,13 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         </ListItemIcon>
         {!effectiveCollapsed && (
           <ListItemText
-            primary={item.text}
+            primary={item.label || item.text}
             primaryTypographyProps={{
               fontSize: isMobile ? "0.92rem" : "0.875rem",
               fontWeight: active ? 700 : 500,
               letterSpacing: "0.01em",
               noWrap: true,
-              color: active ? BLUE : TEXT_SECONDARY,
+              color: active ? activeIcon : textSec,
               transition: "all 0.25s ease",
             }}
           />
@@ -272,13 +275,13 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
     );
 
     return effectiveCollapsed ? (
-      <Tooltip key={item.path} title={item.text} placement="right" arrow>{btn}</Tooltip>
+      <Tooltip key={item.path} title={item.label || item.text} placement="right" arrow>{btn}</Tooltip>
     ) : (
       <React.Fragment key={item.path}>{btn}</React.Fragment>
     );
   };
 
-  // ── Submenu item ───────────────────────────────────────────────────────────
+  // ── Submenu Item ───────────────────────────────────────────────────────────
   const renderSubmenuItem = (item) => {
     const active = isActive(item.path);
     return (
@@ -290,25 +293,23 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
           px: 1.1, py: 0.75, my: 0.3,
           borderRadius: "10px",
           position: "relative",
-          color: active ? BLUE : TEXT_SECONDARY,
-          bgcolor: active ? "rgba(30,64,175,0.12)" : "transparent",
-          border: active ? "1px solid rgba(30,64,175,0.25)" : "1px solid transparent",
+          color: active ? activeIcon : textSec,
+          bgcolor: active ? activeBg : "transparent",
+          border: active ? activeBdr : "1px solid transparent",
           transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-          boxShadow: active ? "0 2px 6px rgba(30,64,175,0.1)" : "none",
+          boxShadow: active ? (isDark ? "0 2px 8px rgba(37,99,235,0.25)" : "0 2px 6px rgba(30,64,175,0.1)") : "none",
           "&:hover": {
-            bgcolor: active ? "rgba(30,64,175,0.18)" : "rgba(30,64,175,0.08)",
-            color: active ? BLUE_LIGHT : TEXT_PRIMARY,
+            bgcolor: active ? (isDark ? "rgba(37,99,235,0.3)" : "rgba(30,64,175,0.18)") : (isDark ? "rgba(59,130,246,0.12)" : "rgba(30,64,175,0.08)"),
+            color: active ? BLUE_LIGHT : textPri,
             transform: isMobile ? "none" : "translateX(3px)",
-            boxShadow: "0 3px 10px rgba(30,64,175,0.12)",
-            border: `1px solid rgba(30,64,175,0.2)`,
+            boxShadow: isDark ? "0 3px 12px rgba(37,99,235,0.2)" : "0 3px 10px rgba(30,64,175,0.12)",
           },
         }}
       >
-        {/* Blue indicator bar with animation */}
         {active && (
           <Box sx={{
             position: "absolute", left: 0, top: 8, bottom: 8,
-            width: 3, borderRadius: 999, bgcolor: BLUE,
+            width: 3, borderRadius: 999, bgcolor: isDark ? "#3b82f6" : BLUE,
             animation: "slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
             "@keyframes slideIn": {
               from: { left: -4, opacity: 0 },
@@ -328,7 +329,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
           {item.icon}
         </ListItemIcon>
         <ListItemText
-          primary={item.text}
+          primary={item.label || item.text}
           primaryTypographyProps={{
             fontSize: isMobile ? "0.88rem" : "0.81rem",
             fontWeight: active ? 700 : 500,
@@ -340,7 +341,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
     );
   };
 
-  // ── Section header ─────────────────────────────────────────────────────────
+  // ── Section Header ─────────────────────────────────────────────────────────
   const renderMenuSection = (section) => {
     const isOpen        = openSection === section.text;
     const hasActiveItem = section.items.some((item) => isActive(item.path));
@@ -353,15 +354,14 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
             minHeight: isMobile ? 50 : 46,
             mx: 0.75, px: 1.25,
             borderRadius: "12px",
-            color: TEXT_PRIMARY,
-            bgcolor: hasActiveItem ? "rgba(30,64,175,0.1)" : "transparent",
-            border: hasActiveItem ? "1.5px solid rgba(30,64,175,0.25)" : "1.5px solid transparent",
+            color: textPri,
+            bgcolor: hasActiveItem ? activeBg : "transparent",
+            border: hasActiveItem ? activeBdr : "1.5px solid transparent",
             transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-            boxShadow: hasActiveItem ? "0 2px 8px rgba(30,64,175,0.12)" : "none",
+            boxShadow: hasActiveItem ? (isDark ? "0 2px 10px rgba(37,99,235,0.2)" : "0 2px 8px rgba(30,64,175,0.12)") : "none",
             "&:hover": { 
-              bgcolor: hasActiveItem ? "rgba(30,64,175,0.15)" : "rgba(30,64,175,0.06)",
-              boxShadow: "0 3px 12px rgba(30,64,175,0.12)",
-              border: `1.5px solid rgba(30,64,175,0.2)`,
+              bgcolor: hasActiveItem ? (isDark ? "rgba(37,99,235,0.25)" : "rgba(30,64,175,0.15)") : (isDark ? "rgba(255,255,255,0.06)" : "rgba(30,64,175,0.06)"),
+              boxShadow: isDark ? "0 3px 12px rgba(37,99,235,0.2)" : "0 3px 12px rgba(30,64,175,0.12)",
             },
           }}
         >
@@ -370,13 +370,12 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
               width: 36, height: 36, mr: 1.25,
               borderRadius: "10px",
               display: "grid", placeItems: "center",
-              bgcolor: hasActiveItem ? "rgba(30,64,175,0.15)" : "rgba(30,64,175,0.08)",
-              color: hasActiveItem ? BLUE : TEXT_SECONDARY,
+              bgcolor: hasActiveItem ? (isDark ? "rgba(37,99,235,0.25)" : "rgba(30,64,175,0.15)") : sectionBg,
+              color: hasActiveItem ? activeIcon : textSec,
               flexShrink: 0,
-              border: hasActiveItem ? `1.5px solid rgba(30,64,175,0.3)` : `1.5px solid rgba(30,64,175,0.1)`,
+              border: hasActiveItem ? activeBdr : `1.5px solid ${borderCol}`,
               transition: "all 0.25s ease",
               "& svg": { fontSize: "1.15rem" },
-              boxShadow: hasActiveItem ? "0 2px 6px rgba(30,64,175,0.1)" : "none",
             }}
           >
             {section.icon}
@@ -388,14 +387,14 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
               fontWeight: 700,
               letterSpacing: "0.015em",
               noWrap: true,
-              color: hasActiveItem ? BLUE : TEXT_SECONDARY,
+              color: hasActiveItem ? activeIcon : textSec,
               transition: "all 0.25s ease",
             }}
           />
           <ExpandMore
             sx={{
               fontSize: "1.25rem",
-              color: hasActiveItem ? BLUE : TEXT_SECONDARY,
+              color: hasActiveItem ? activeIcon : textSec,
               transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
               transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
             }}
@@ -408,7 +407,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
               mt: 0.5, mb: 0.8,
               ml: isMobile ? 3.1 : 2.8,
               mr: 0.9, pl: 1.15,
-              borderLeft: `2px solid rgba(30,64,175,0.15)`,
+              borderLeft: `2px solid ${isDark ? "rgba(59,130,246,0.3)" : "rgba(30,64,175,0.15)"}`,
             }}
           >
             {section.items.map(renderSubmenuItem)}
@@ -418,7 +417,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
     );
   };
 
-  // ── Scroll area ────────────────────────────────────────────────────────────
+  // ── Scroll Area ────────────────────────────────────────────────────────────
   const scrollArea = (
     <Box
       sx={{
@@ -426,9 +425,8 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         py: 1.5, px: 0.5,
         "&::-webkit-scrollbar": { width: "4px" },
         "&::-webkit-scrollbar-thumb": { 
-          background: "rgba(30,64,175,0.25)", 
+          background: isDark ? "rgba(59,130,246,0.3)" : "rgba(30,64,175,0.25)", 
           borderRadius: "6px",
-          "&:hover": { background: "rgba(30,64,175,0.4)" },
         },
         "&::-webkit-scrollbar-track": { background: "transparent" },
       }}
@@ -441,7 +439,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
     </Box>
   );
 
-  // ── Logo bar ───────────────────────────────────────────────────────────────
+  // ── Logo Bar ───────────────────────────────────────────────────────────────
   const logoBar = (
     <Box
       sx={{
@@ -449,9 +447,9 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         display: "flex", alignItems: "center",
         justifyContent: effectiveCollapsed ? "center" : "flex-start",
         gap: 1.5,
-        borderBottom: `1.5px solid ${BORDER_COLOR}`,
+        borderBottom: `1.5px solid ${borderCol}`,
         minHeight: 68, flexShrink: 0,
-        background: SIDEBAR_BG,
+        background: sidebarBg,
       }}
     >
       <Box
@@ -462,24 +460,24 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
           bgcolor: "#fff",
           display: "flex", alignItems: "center", justifyContent: "center",
           flexShrink: 0, overflow: "hidden",
-          border: `1px solid ${BORDER_COLOR}`,
+          border: `1px solid ${borderCol}`,
           boxShadow: "0 6px 16px rgba(30,64,175,0.14)",
           transition: "all 0.25s ease",
         }}
       >
         <Box
-          component="img" src={sidebarLogo} alt="Solar CRM"
+          component="img" src={sidebarLogo} alt="Solar 360"
           onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = sidebarLogo; }}
           sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.4 }}
         />
       </Box>
       {!effectiveCollapsed && (
         <Box sx={{ overflow: "hidden" }}>
-          <Typography variant="subtitle1" color={TEXT_PRIMARY} fontWeight={800}
+          <Typography variant="subtitle1" color={textPri} fontWeight={800}
             sx={{ lineHeight: 1.2, letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>
             Vanurtech Pvt Ltd
           </Typography>
-          <Typography variant="caption" sx={{ color: TEXT_SECONDARY, fontSize: "0.68rem" }}>
+          <Typography variant="caption" sx={{ color: textSec, fontSize: "0.68rem" }}>
             Solar Software Inc
           </Typography>
         </Box>
@@ -487,43 +485,40 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
     </Box>
   );
 
-  // ── Mobile header ──────────────────────────────────────────────────────────
+  // ── Mobile Header ──────────────────────────────────────────────────────────
   const mobileHeader = (
     <Box
       sx={{
         px: 2.5, py: 1.8,
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        borderBottom: `1.5px solid ${BORDER_COLOR}`,
+        borderBottom: `1.5px solid ${borderCol}`,
         flexShrink: 0, minHeight: 68,
-        background: SIDEBAR_BG,
+        background: sidebarBg,
       }}
     >
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
         <Box sx={{
-          width: 40, height: 40, borderRadius: "12px", bgcolor: "#fff",
+          height: 42, minWidth: 64, px: 1, borderRadius: "12px", bgcolor: "#fff",
           display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
-          border: `1px solid ${BORDER_COLOR}`,
+          border: `1px solid ${borderCol}`,
           boxShadow: "0 6px 16px rgba(30,64,175,0.14)",
         }}>
-          <Box component="img" src={sidebarLogo} alt="Solar CRM"
+          <Box component="img" src={sidebarLogo} alt="Solar 360"
             onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = sidebarLogo; }}
-            sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.4 }}
+            sx={{ height: "85%", width: "auto", maxWidth: "100%", objectFit: "contain" }}
           />
         </Box>
         <Box>
-          <Typography variant="subtitle1" color={TEXT_PRIMARY} fontWeight={800} sx={{ lineHeight: 1.2 }}>
-            Solar CRM
+          <Typography variant="subtitle1" color={textPri} fontWeight={800} sx={{ lineHeight: 1.2 }}>
+            Vanurtech Pvt Ltd
           </Typography>
-          <Typography variant="caption" sx={{ color: TEXT_SECONDARY, fontSize: "0.68rem" }}>
-            CRM Dashboard
+          <Typography variant="caption" sx={{ color: textSec, fontSize: "0.68rem" }}>
+            Solar Software Inc
           </Typography>
         </Box>
       </Box>
       <IconButton onClick={onClose} size="small"
-        sx={{ color: TEXT_SECONDARY, bgcolor: "rgba(30,64,175,0.1)", borderRadius: "10px",
-          transition: "all 0.25s ease",
-          "&:hover": { bgcolor: "rgba(30,64,175,0.15)", color: BLUE, boxShadow: "0 2px 8px rgba(30,64,175,0.15)" }, 
-          width: 36, height: 36 }}>
+        sx={{ color: textSec, bgcolor: isDark ? "rgba(255,255,255,0.08)" : "rgba(30,64,175,0.1)", borderRadius: "10px", width: 36, height: 36 }}>
         <CloseIcon fontSize="small" />
       </IconButton>
     </Box>
@@ -531,17 +526,13 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
 
   // ── Footer ─────────────────────────────────────────────────────────────────
   const footer = (
-    <Box sx={{ p: effectiveCollapsed ? 1.5 : 2, borderTop: `1.5px solid ${BORDER_COLOR}`,
-      flexShrink: 0, background: SIDEBAR_BG }}>
-      {/* Collapse toggle — desktop only */}
+    <Box sx={{ p: effectiveCollapsed ? 1.5 : 2, borderTop: `1.5px solid ${borderCol}`,
+      flexShrink: 0, background: sidebarBg }}>
       {!isMobile && !isTablet && (
         <Box sx={{ display: "flex", justifyContent: "center", mb: effectiveCollapsed ? 1 : 1.5 }}>
           <Tooltip title={effectiveCollapsed ? "Expand sidebar" : "Collapse sidebar"} placement="right" arrow>
             <IconButton onClick={() => setIsCollapsed((v) => !v)} size="small"
-              sx={{ color: TEXT_SECONDARY, bgcolor: "rgba(30,64,175,0.1)", borderRadius: "10px",
-                transition: "all 0.25s ease",
-                "&:hover": { bgcolor: "rgba(30,64,175,0.15)", color: BLUE, boxShadow: "0 2px 8px rgba(30,64,175,0.15)" }, 
-                width: 36, height: 36 }}>
+              sx={{ color: textSec, bgcolor: isDark ? "rgba(255,255,255,0.08)" : "rgba(30,64,175,0.1)", borderRadius: "10px", width: 36, height: 36 }}>
               {effectiveCollapsed ? <ChevronRight fontSize="small" /> : <ChevronLeft fontSize="small" />}
             </IconButton>
           </Tooltip>
@@ -558,22 +549,21 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
             <Avatar
               sx={{
                 width: 36, height: 36, flexShrink: 0,
-                bgcolor: "rgba(30,64,175,0.15)",
-                border: `2px solid ${BLUE}`,
+                bgcolor: isDark ? "rgba(37,99,235,0.3)" : "rgba(30,64,175,0.15)",
+                border: `2px solid ${isDark ? "#3b82f6" : BLUE}`,
                 fontSize: "0.75rem", fontWeight: 800,
-                color: BLUE,
-                boxShadow: "0 2px 6px rgba(30,64,175,0.15)",
+                color: isDark ? "#60a5fa" : BLUE,
               }}
             >
               {getUserInitials()}
             </Avatar>
             <Box sx={{ overflow: "hidden" }}>
               <Typography variant="caption"
-                sx={{ color: TEXT_PRIMARY, fontWeight: 700, display: "block", lineHeight: 1.2,
+                sx={{ color: textPri, fontWeight: 700, display: "block", lineHeight: 1.2,
                   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {user?.firstName} {user?.lastName}
               </Typography>
-              <Typography variant="caption" sx={{ color: TEXT_SECONDARY, fontSize: "0.63rem" }}>
+              <Typography variant="caption" sx={{ color: textSec, fontSize: "0.63rem" }}>
                 v2.2.0
               </Typography>
             </Box>
@@ -581,10 +571,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         )}
         <Tooltip title="Logout" placement={effectiveCollapsed ? "right" : "top"} arrow>
           <IconButton size="small" onClick={handleLogout}
-            sx={{ color: TEXT_SECONDARY, bgcolor: "rgba(30,64,175,0.1)", borderRadius: "10px",
-              transition: "all 0.25s ease",
-              "&:hover": { bgcolor: "rgba(239,68,68,0.15)", color: "#ef4444", boxShadow: "0 2px 8px rgba(239,68,68,0.2)" },
-              width: 36, height: 36, flexShrink: 0 }}>
+            sx={{ color: textSec, bgcolor: isDark ? "rgba(239,68,68,0.15)" : "rgba(30,64,175,0.1)", borderRadius: "10px", width: 36, height: 36, flexShrink: 0 }}>
             <Logout fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -592,9 +579,9 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
     </Box>
   );
 
-  // ── Drawer content ─────────────────────────────────────────────────────────
+  // ── Drawer Content ─────────────────────────────────────────────────────────
   const DesktopContent = (
-    <Box sx={{ height: "100vh", display: "flex", flexDirection: "column", background: SIDEBAR_BG }}>
+    <Box sx={{ height: "100vh", display: "flex", flexDirection: "column", background: sidebarBg }}>
       {logoBar}
       {scrollArea}
       {footer}
@@ -602,7 +589,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
   );
 
   const MobileContent = (
-    <Box sx={{ height: "100%", display: "flex", flexDirection: "column", background: SIDEBAR_BG, width: MOBILE_WIDTH }}>
+    <Box sx={{ height: "100%", display: "flex", flexDirection: "column", background: sidebarBg, width: MOBILE_WIDTH }}>
       {mobileHeader}
       {scrollArea}
       {footer}
@@ -621,8 +608,8 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
               width: effectiveCollapsed ? COLLAPSED_WIDTH : SIDEBAR_WIDTH,
               boxSizing: "border-box", overflowX: "hidden",
               transition: "width 0.3s cubic-bezier(0.4,0,0.2,1)",
-              backgroundColor: "transparent", border: "none",
-              boxShadow: `2px 0 12px rgba(30,64,175,0.12)`,
+              backgroundColor: sidebarBg, borderRight: `1px solid ${borderCol}`,
+              boxShadow: isDark ? "4px 0 16px rgba(0,0,0,0.4)" : "2px 0 12px rgba(30,64,175,0.12)",
             },
           }}
         >
@@ -638,8 +625,8 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
             zIndex: (t) => t.zIndex.drawer + 2,
             "& .MuiDrawer-paper": {
               width: MOBILE_WIDTH, maxWidth: "88vw",
-              backgroundColor: "transparent", border: "none",
-              boxShadow: "4px 0 16px rgba(30,64,175,0.15)",
+              backgroundColor: sidebarBg, borderRight: `1px solid ${borderCol}`,
+              boxShadow: "4px 0 16px rgba(0,0,0,0.4)",
             },
           }}
         >
@@ -647,113 +634,6 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         </SwipeableDrawer>
       )}
     </>
-  );
-};
-
-// ─── Mobile Top AppBar ────────────────────────────────────────────────────────
-export const MobileTopBar = ({ onMenuClick, title = "Dashboard" }) => {
-  const theme    = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  if (!isMobile) return null;
-
-  return (
-    <AppBar position="fixed" elevation={0}
-      sx={{
-        background: `linear-gradient(90deg, ${BLUE} 0%, ${NAVY} 100%)`,
-        borderBottom: `1.5px solid rgba(30,64,175,0.2)`,
-        zIndex: theme.zIndex.drawer + 1,
-        boxShadow: "0 2px 12px rgba(30,64,175,0.15)",
-      }}
-    >
-      <Toolbar sx={{ minHeight: "60px !important", px: { xs: 1.5, sm: 2 }, gap: 1 }}>
-        <IconButton edge="start" onClick={onMenuClick}
-          sx={{
-            color: "#fff", mr: 0.5,
-            bgcolor: "rgba(255,255,255,0.15)", borderRadius: "10px",
-            width: 40, height: 40,
-            transition: "all 0.25s ease",
-            "&:hover": { bgcolor: "rgba(255,255,255,0.25)", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" },
-          }}
-        >
-          <MenuIcon />
-        </IconButton>
-
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
-          <Box sx={{
-            width: 32, height: 32, borderRadius: "8px", bgcolor: "#fff",
-            display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-          }}>
-            <Box component="img" src={sidebarLogo} alt="Solar CRM"
-              onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = sidebarLogo; }}
-              sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.35 }}
-            />
-          </Box>
-          <Typography variant="subtitle1"
-            sx={{ color: "#fff", fontWeight: 800, letterSpacing: "-0.01em", fontSize: "1rem" }}>
-            Solar CRM
-          </Typography>
-        </Box>
-
-        <Typography variant="caption"
-          sx={{
-            color: "rgba(255,255,255,0.9)", fontSize: "0.72rem", fontWeight: 600,
-            bgcolor: "rgba(255,255,255,0.15)", px: 1.2, py: 0.6, borderRadius: "8px",
-            letterSpacing: "0.02em", display: { xs: "none", sm: "block" },
-            border: "1px solid rgba(255,255,255,0.25)",
-            transition: "all 0.25s ease",
-          }}
-        >
-          {title}
-        </Typography>
-
-        <Avatar sx={{
-          width: 34, height: 34,
-          bgcolor: "rgba(255,255,255,0.2)", border: `1.5px solid rgba(255,255,255,0.4)`,
-          fontSize: "0.75rem", fontWeight: 800, color: "#fff",
-        }}>
-          ST
-        </Avatar>
-      </Toolbar>
-    </AppBar>
-  );
-};
-
-// ─── Layout Wrapper ───────────────────────────────────────────────────────────
-export const AppLayout = ({ children }) => {
-  const theme    = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
-
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  const [isCollapsed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const s = localStorage.getItem("sidebarCollapsed");
-    return s ? JSON.parse(s) : false;
-  });
-
-  const effectiveCollapsed = isCollapsed && !isMobile && !isTablet;
-  const sidebarW = isMobile ? 0 : effectiveCollapsed ? COLLAPSED_WIDTH : SIDEBAR_WIDTH;
-
-  return (
-    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#f5f7fb" }}>
-      <MobileTopBar onMenuClick={() => setMobileOpen(true)} />
-      <Sidebar open={mobileOpen} toggleDrawer={() => setMobileOpen(true)} onClose={() => setMobileOpen(false)} />
-      <Box component="main"
-        sx={{
-          flex: 1,
-          ml: { xs: 0, sm: `${sidebarW}px` },
-          mt: { xs: "60px", sm: 0 },
-          minHeight: "100vh",
-          transition: "margin-left 0.3s cubic-bezier(0.4,0,0.2,1)",
-          overflow: "auto",
-          pb: { xs: "env(safe-area-inset-bottom)", sm: 0 },
-        }}
-      >
-        {children}
-      </Box>
-    </Box>
   );
 };
 

@@ -1,5 +1,5 @@
 // App.js
-import React from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -12,6 +12,7 @@ import { DashboardProvider } from "./contexts/DashboardContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import MainLayout from "./components/MainLayout";
 import Login from "./components/auth/Login";
+import ForgotPassword from "./components/auth/ForgotPassword";
 import Dashboard from "./pages/Dashboard";
 import TotalVisitsPage from "./pages/TotalVisits";
 import Reports from "./pages/Reports";
@@ -43,64 +44,120 @@ import Projects from "./pages/Projects";
 import ProjectDetails from "./pages/ProjectDetails";
 import WorkRegister from "./pages/WorkRegister";
 import InventoryERP from "./pages/InventoryERP";
+import SettingsPage from "./pages/Settings";
 
-
-const theme = createTheme({
-  palette: {
-    primary: { main: "#3566bb", light: "#2172c9", dark: "#0a479b", contrastText: "#fff" },
-    secondary: { main: "#1a237e", light: "#534bae", dark: "#000051", contrastText: "#fff" },
-    background: { default: "#f8f9fa", paper: "#ffffff" },
-    error: { main: "#f44336" },
-    warning: { main: "#ff9800" },
-    info: { main: "#2196f3" },
-    success: { main: "#4caf50" },
-    text: { primary: "#1a1a1a", secondary: "#666666", disabled: "#999999" },
-    divider: "#e0e0e0",
-  },
-  typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-    h1: { fontWeight: 700, fontSize: "2.5rem" },
-    h2: { fontWeight: 700, fontSize: "2rem" },
-    h3: { fontWeight: 600, fontSize: "1.75rem" },
-    h4: { fontWeight: 600, fontSize: "1.5rem" },
-    h5: { fontWeight: 600, fontSize: "1.25rem" },
-    h6: { fontWeight: 600, fontSize: "1rem" },
-    body1: { fontSize: "1rem", lineHeight: 1.5 },
-    body2: { fontSize: "0.875rem", lineHeight: 1.43 },
-    button: { fontWeight: 600, textTransform: "none" },
-  },
-  shape: { borderRadius: 12 },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: "none", borderRadius: 12, fontWeight: 600, boxShadow: "none",
-          "&:hover": { boxShadow: "0 4px 12px rgba(255,140,0,0.3)" },
-        },
-        containedPrimary: {
-          background: "linear-gradient(45deg, #ff8c00 30%, #ff6b00 90%)",
-          "&:hover": { background: "linear-gradient(45deg, #ff6b00 30%, #ff5500 90%)" },
+const getAppTheme = (mode = "light") =>
+  createTheme({
+    palette: {
+      mode,
+      ...(mode === "dark"
+        ? {
+            primary: { main: "#3b82f6", light: "#60a5fa", dark: "#1d4ed8", contrastText: "#fff" },
+            secondary: { main: "#818cf8", light: "#a5b4fc", dark: "#4338ca", contrastText: "#fff" },
+            background: { default: "#050811", paper: "#0b0e1a" },
+            text: { primary: "#f8fafc", secondary: "#94a3b8", disabled: "#64748b" },
+            divider: "rgba(255, 255, 255, 0.08)",
+          }
+        : {
+            primary: { main: "#3566bb", light: "#2172c9", dark: "#0a479b", contrastText: "#fff" },
+            secondary: { main: "#1a237e", light: "#534bae", dark: "#000051", contrastText: "#fff" },
+            background: { default: "#f8f9fa", paper: "#ffffff" },
+            text: { primary: "#1a1a1a", secondary: "#666666", disabled: "#999999" },
+            divider: "#e0e0e0",
+          }),
+    },
+    typography: {
+      fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+      h1: { fontWeight: 700, fontSize: "2.5rem" },
+      h2: { fontWeight: 700, fontSize: "2rem" },
+      h3: { fontWeight: 600, fontSize: "1.75rem" },
+      h4: { fontWeight: 600, fontSize: "1.5rem" },
+      h5: { fontWeight: 600, fontSize: "1.25rem" },
+      h6: { fontWeight: 600, fontSize: "1rem" },
+      body1: { fontSize: "1rem", lineHeight: 1.5 },
+      body2: { fontSize: "0.875rem", lineHeight: 1.43 },
+      button: { fontWeight: 600, textTransform: "none" },
+    },
+    shape: { borderRadius: 12 },
+    components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          body: {
+            backgroundColor: mode === "dark" ? "#050811" : "#f8f9fa",
+            color: mode === "dark" ? "#f8fafc" : "#1a1a1a",
+          },
         },
       },
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            textTransform: "none", borderRadius: 12, fontWeight: 600, boxShadow: "none",
+          },
+        },
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: {
+            borderRadius: 16,
+            boxShadow: mode === "dark" ? "0 8px 32px rgba(0,0,0,0.5)" : "0 4px 20px rgba(0,0,0,0.08)",
+            border: mode === "dark" ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid rgba(0,0,0,0.06)",
+            backgroundImage: "none",
+            backgroundColor: mode === "dark" ? "#0e1626" : "#ffffff",
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            backgroundImage: "none",
+            backgroundColor: mode === "dark" ? "#0e1626" : "#ffffff",
+            border: mode === "dark" ? "1px solid rgba(255, 255, 255, 0.08)" : "none",
+          },
+        },
+      },
+      MuiTableCell: {
+        styleOverrides: {
+          root: {
+            borderColor: mode === "dark" ? "rgba(255, 255, 255, 0.08)" : "#f0f0f0",
+            color: mode === "dark" ? "#e2e8f0" : "inherit",
+          },
+          head: {
+            fontWeight: 700,
+            backgroundColor: mode === "dark" ? "#0a101d" : "#f8fafc",
+            color: mode === "dark" ? "#94a3b8" : "#475569",
+          },
+        },
+      },
+      MuiDrawer: {
+        styleOverrides: { paper: { borderRadius: "0 20px 20px 0", borderRight: "none", boxShadow: "4px 0 20px rgba(0,0,0,0.1)", backgroundColor: mode === "dark" ? "#060b13" : "#ffffff" } },
+      },
     },
-    MuiCard: {
-      styleOverrides: { root: { borderRadius: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", overflow: "visible" } },
-    },
-    MuiDrawer: {
-      styleOverrides: { paper: { borderRadius: "0 20px 20px 0", borderRight: "none", boxShadow: "4px 0 20px rgba(0,0,0,0.1)" } },
-    },
-  },
-});
+  });
 
 function App() {
+  const [themeMode, setThemeMode] = useState(() => {
+    return localStorage.getItem("appThemeMode") || "dark";
+  });
+
+  useEffect(() => {
+    const handleThemeChange = (e) => {
+      setThemeMode(e.detail || localStorage.getItem("appThemeMode") || "dark");
+    };
+    window.addEventListener("themeModeChange", handleThemeChange);
+    return () => window.removeEventListener("themeModeChange", handleThemeChange);
+  }, []);
+
+  const activeTheme = useMemo(() => getAppTheme(themeMode), [themeMode]);
+
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={activeTheme}>
       <CssBaseline />
       <AuthProvider>
         <DashboardProvider>
           <Router>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/s" element={<SharedThreeDDesignView />} />
               <Route path="/solar-design/view" element={<SharedThreeDDesignView />} />
               <Route path="/q/:shareToken" element={<Quotation />} />
@@ -130,8 +187,8 @@ function App() {
                       <Routes>
                         <Route path="dashboard" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Dashboard /></ProtectedRoute>} />
                         <Route path="total-visits" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><TotalVisitsPage /></ProtectedRoute>} />
-                         <Route path="reports" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Reports /></ProtectedRoute>} />
-                         <Route path="work-register" element={<ProtectedRoute allowedRoles={["ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","Admin_panel","ZSM","Incharge"]}><WorkRegister /></ProtectedRoute>} />
+                        <Route path="reports" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Reports /></ProtectedRoute>} />
+                        <Route path="work-register" element={<ProtectedRoute allowedRoles={["ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","Admin_panel","ZSM","Incharge"]}><WorkRegister /></ProtectedRoute>} />
                         <Route path="user-management" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><UserManagement /></ProtectedRoute>} />
                         <Route path="add-user" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge"]}><AddUserPage /></ProtectedRoute>} />
                         <Route path="import-leads" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><ImportLead /></ProtectedRoute>} />
@@ -145,14 +202,6 @@ function App() {
                         <Route path="quotation" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Quotation /></ProtectedRoute>} />
                         <Route path="all-quotes" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><AllQuotes /></ProtectedRoute>} />
                         <Route path="add-visit" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><VisitDetails /></ProtectedRoute>} />
-                        
-
-                        {/* ── ATTENDANCE ───────────────────────────────────────────────────
-                            /attendance              → own attendance (any role)
-                            /attendance/:userId      → view a team member's attendance (managers only)
-                                                       Attandance.jsx reads useParams().userId
-                            /team-attendance         → team member picker (managers only)
-                        ──────────────────────────────────────────────────────────────────── */}
                         <Route
                           path="attendance"
                           element={
@@ -209,9 +258,8 @@ function App() {
                             </ProtectedRoute>
                           }
                         />
-
                         <Route path="team-tracking" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><TeamTracking /></ProtectedRoute>} />
-                       <Route path="member-history/:userId" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><MemberVisitHistory /></ProtectedRoute>} />
+                        <Route path="member-history/:userId" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><MemberVisitHistory /></ProtectedRoute>} />
                         <Route path="notifications" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Notifications /></ProtectedRoute>} />
                         <Route path="all-leads/:leadId" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><LeadDetailsPage /></ProtectedRoute>} />
                         <Route path="all-leads" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><LeadOverview /></ProtectedRoute>} />
@@ -219,6 +267,7 @@ function App() {
                         <Route path="projects" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM"]}><Projects /></ProtectedRoute>} />
                         <Route path="inventory" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"]}><InventoryERP /></ProtectedRoute>} />
                         <Route path="inventory/:section" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"]}><InventoryERP /></ProtectedRoute>} />
+                        <Route path="settings" element={<ProtectedRoute allowedRoles={["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"]}><SettingsPage /></ProtectedRoute>} />
                         <Route path="*" element={<Navigate to="/dashboard" replace />} />
                       </Routes>
                     </MainLayout>

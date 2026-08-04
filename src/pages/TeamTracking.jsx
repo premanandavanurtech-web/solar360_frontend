@@ -95,7 +95,6 @@
     });
   };
 
-  // Map dutyStatus from backend → UI status key
   const getDutyStatus = (att, user) => {
     if (!att || !att.punchIn?.time) return "offline";
     if (att.punchIn?.time && !att.punchOut?.time) return "active";
@@ -103,58 +102,60 @@
     return "offline";
   };
 
-  // ── Status Config ─────────────────────────────────────────────────────────────
-  const STATUS_CONFIG = {
+  const getStatusConfig = (isDark) => ({
     active: {
       label: "On Duty",
-      bg: alpha("#10b981", 0.1),
-      color: "#059669",
+      bg: isDark ? "rgba(16, 185, 129, 0.15)" : alpha("#10b981", 0.1),
+      color: isDark ? "#34d399" : "#059669",
       dotColor: "#10b981",
+      border: isDark ? "rgba(16, 185, 129, 0.3)" : "rgba(16, 185, 129, 0.2)",
       pulse: true,
     },
     completed: {
       label: "Completed",
-      bg: alpha("#3b82f6", 0.1),
-      color: "#2563eb",
+      bg: isDark ? "rgba(59, 130, 246, 0.15)" : alpha("#3b82f6", 0.1),
+      color: isDark ? "#60a5fa" : "#2563eb",
       dotColor: "#3b82f6",
+      border: isDark ? "rgba(59, 130, 246, 0.3)" : "rgba(59, 130, 246, 0.2)",
       pulse: false,
     },
     offline: {
       label: "Not Punched In",
-      bg: "#f1f5f9",
-      color: "#64748b",
+      bg: isDark ? "rgba(255, 255, 255, 0.05)" : "#f1f5f9",
+      color: isDark ? "#94a3b8" : "#64748b",
       dotColor: "#94a3b8",
+      border: isDark ? "rgba(255, 255, 255, 0.1)" : "#e2e8f0",
       pulse: false,
     },
     location_off: {
       label: "Location Off",
-      bg: alpha("#ef4444", 0.1),
-      color: "#dc2626",
+      bg: isDark ? "rgba(239, 68, 68, 0.15)" : alpha("#ef4444", 0.1),
+      color: isDark ? "#f87171" : "#dc2626",
       dotColor: "#ef4444",
+      border: isDark ? "rgba(239, 68, 68, 0.3)" : "rgba(239, 68, 68, 0.2)",
       pulse: true,
     },
     no_signal: {
       label: "No Signal",
-      bg: alpha("#f59e0b", 0.12),
-      color: "#d97706",
+      bg: isDark ? "rgba(245, 158, 11, 0.15)" : alpha("#f59e0b", 0.12),
+      color: isDark ? "#fbbf24" : "#d97706",
       dotColor: "#f59e0b",
+      border: isDark ? "rgba(245, 158, 11, 0.3)" : "rgba(245, 158, 11, 0.2)",
       pulse: true,
     },
+  });
+
+  const getBatteryColor = (pct, isDark) => {
+    if (pct === null || pct === undefined) return { color: "#94a3b8", bg: isDark ? "rgba(255, 255, 255, 0.05)" : "#f1f5f9", border: isDark ? "rgba(255, 255, 255, 0.1)" : "#e2e8f0", label: "N/A" };
+    if (pct > 60) return { color: isDark ? "#34d399" : "#059669", bg: isDark ? "rgba(16, 185, 129, 0.15)" : alpha("#10b981", 0.1), border: isDark ? "rgba(16, 185, 129, 0.3)" : "rgba(16, 185, 129, 0.2)", label: `${pct}%` };
+    if (pct > 20) return { color: isDark ? "#fbbf24" : "#d97706", bg: isDark ? "rgba(245, 158, 11, 0.15)" : alpha("#f59e0b", 0.1), border: isDark ? "rgba(245, 158, 11, 0.3)" : "rgba(245, 158, 11, 0.2)", label: `${pct}%` };
+    return { color: isDark ? "#f87171" : "#dc2626", bg: isDark ? "rgba(239, 68, 68, 0.15)" : alpha("#ef4444", 0.1), border: isDark ? "rgba(239, 68, 68, 0.3)" : "rgba(239, 68, 68, 0.2)", label: `${pct}%` };
   };
-
-
-
-
-  const getBatteryColor = (pct) => {
-    if (pct === null || pct === undefined) return { color: "#94a3b8", bg: "#f1f5f9", label: "N/A" };
-    if (pct > 60) return { color: "#059669", bg: alpha("#10b981", 0.1), label: `${pct}%` };
-    if (pct > 20) return { color: "#d97706", bg: alpha("#f59e0b", 0.1), label: `${pct}%` };
-    return { color: "#dc2626", bg: alpha("#ef4444", 0.1), label: `${pct}%` };
-  };
-
 
   const BatteryChip = ({ percentage, isCharging }) => {
-    const { color, bg, label } = getBatteryColor(percentage);
+    const theme = useTheme();
+    const isDark = theme.palette.mode === "dark";
+    const { color, bg, border, label } = getBatteryColor(percentage, isDark);
     const icon =
       percentage === null ? "🔋" :
       isCharging          ? "⚡" :
@@ -168,14 +169,17 @@
         sx={{
           bgcolor: bg, color, fontWeight: 700,
           fontSize: "0.65rem", height: 24, borderRadius: "999px",
+          border: `1px solid ${border}`,
         }}
       />
     );
   };
 
-  // ── StatusChip ────────────────────────────────────────────────────────────────
   const StatusChip = ({ status }) => {
-    const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.offline;
+    const theme = useTheme();
+    const isDark = theme.palette.mode === "dark";
+    const statusCfg = getStatusConfig(isDark);
+    const cfg = statusCfg[status] || statusCfg.offline;
     return (
       <Chip
         size="small"
@@ -198,78 +202,78 @@
     );
   };
 
-  // ── Mobile Member Card ────────────────────────────────────────────────────────
-  const MemberCard = ({ member, onViewDetails }) => (
-    <Paper elevation={0} sx={{
-      borderRadius: "1rem", border: "1px solid #e8edf5", bgcolor: "#fff", p: 2,
-      transition: "all 0.2s",
-      "&:hover": { boxShadow: "0 8px 24px rgba(19,109,236,0.08)", borderColor: alpha(PRIMARY, 0.2), transform: "translateY(-1px)" },
-    }}>
-      {/* Top Row */}
-      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={1.5}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Badge overlap="circular" anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-            badgeContent={
-              <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: STATUS_CONFIG[member.status]?.dotColor, border: "2px solid #fff" }} />
-            }>
-            <Avatar sx={{ width: 46, height: 46, border: "2px solid #f0f4fa", bgcolor: member.avatarColor, fontWeight: 700, fontSize: "1rem" }}>
-              {member.initials}
-            </Avatar>
-          </Badge>
-          <Box>
-            <Typography fontWeight={700} fontSize="0.88rem" color="#0f172a" lineHeight={1.3}>{member.name}</Typography>
-            <Typography fontSize="0.7rem" color="#94a3b8" fontWeight={500}>{member.roleLabel}</Typography>
+  const MemberCard = ({ member, onViewDetails }) => {
+    const theme = useTheme();
+    const isDark = theme.palette.mode === "dark";
+    const statusCfg = getStatusConfig(isDark);
+    return (
+      <Paper elevation={0} sx={{
+        borderRadius: "1rem", border: "1px solid rgba(255, 255, 255, 0.08)", bgcolor: isDark ? "#0e1424" : "#ffffff", p: 2,
+        transition: "all 0.2s",
+        "&:hover": { boxShadow: "0 8px 24px rgba(19,109,236,0.08)", borderColor: alpha(PRIMARY, 0.2), transform: "translateY(-1px)" },
+      }}>
+        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={1.5}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Badge overlap="circular" anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+              badgeContent={
+                <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: statusCfg[member.status]?.dotColor, border: "2px solid #fff" }} />
+              }>
+              <Avatar sx={{ width: 46, height: 46, border: "2px solid #f0f4fa", bgcolor: member.avatarColor, fontWeight: 700, fontSize: "1rem" }}>
+                {member.initials}
+              </Avatar>
+            </Badge>
+            <Box>
+              <Typography fontWeight={700} fontSize="0.88rem" color={isDark ? "#ffffff" : "#0f172a"} lineHeight={1.3}>{member.name}</Typography>
+              <Typography fontSize="0.7rem" color={isDark ? "#94a3b8" : "#64748b"} fontWeight={500}>{member.roleLabel}</Typography>
+            </Box>
+          </Stack>
+          <StatusChip status={member.status} />
+        </Stack>
+
+        <Divider sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.06)" : "#f1f5f9", mb: 1.5 }} />
+
+        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flex: 1, minWidth: 0 }}>
+            <LocationOn sx={{ fontSize: 14, color: member.status === "offline" ? textSub : PRIMARY, flexShrink: 0 }} />
+            <Typography fontSize="0.75rem" color={isDark ? "#cbd5e1" : "#475569"} fontWeight={500} noWrap>
+              {member.location || "Location not available"}
+            </Typography>
+          </Stack>
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0, ml: 1 }}>
+            <AccessTime sx={{ fontSize: 13, color: "#cbd5e1" }} />
+            <Typography fontSize="0.7rem" color={isDark ? "#94a3b8" : "#64748b"}>{member.checkin || "—"}</Typography>
+          </Stack>
+        </Stack>
+
+        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
+          <Typography fontSize="0.68rem" color={isDark ? "#94a3b8" : "#64748b"} fontWeight={700} textTransform="uppercase" letterSpacing="0.04em">
+            Battery
+          </Typography>
+          <BatteryChip percentage={member.batteryPercentage} isCharging={member.isCharging} />
+        </Stack>
+
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Box sx={{ px: 1.25, py: 0.4, borderRadius: "0.375rem", bgcolor: alpha(PRIMARY, 0.06), display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+            <Storefront sx={{ fontSize: 12, color: PRIMARY }} />
+            <Typography fontSize="0.65rem" fontWeight={700} color={PRIMARY}>
+              {member.visits} visits today
+            </Typography>
           </Box>
+          <Button size="small" endIcon={<ChevronRight sx={{ fontSize: 14, ml: -0.5 }} />}
+            onClick={onViewDetails}
+            sx={{
+              color: PRIMARY, border: `1px solid ${alpha(PRIMARY, 0.2)}`, bgcolor: alpha(PRIMARY, 0.05),
+              fontWeight: 700, fontSize: "0.7rem", borderRadius: "0.5rem", textTransform: "none",
+              px: 1.5, py: 0.55,
+              "&:hover": { bgcolor: PRIMARY, color: "#fff", borderColor: PRIMARY },
+            }}>
+            Details
+          </Button>
         </Stack>
-        <StatusChip status={member.status} />
-      </Stack>
+      </Paper>
+    );
+  };
 
-      <Divider sx={{ borderColor: "#f1f5f9", mb: 1.5 }} />
-
-      {/* Location */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
-        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flex: 1, minWidth: 0 }}>
-          <LocationOn sx={{ fontSize: 14, color: member.status === "offline" ? "#cbd5e1" : PRIMARY, flexShrink: 0 }} />
-          <Typography fontSize="0.75rem" color="#475569" fontWeight={500} noWrap>
-            {member.location || "Location not available"}
-          </Typography>
-        </Stack>
-        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0, ml: 1 }}>
-          <AccessTime sx={{ fontSize: 13, color: "#cbd5e1" }} />
-          <Typography fontSize="0.7rem" color="#94a3b8">{member.checkin || "—"}</Typography>
-        </Stack>
-      </Stack>
-
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
-        <Typography fontSize="0.68rem" color="#94a3b8" fontWeight={700} textTransform="uppercase" letterSpacing="0.04em">
-          Battery
-        </Typography>
-        <BatteryChip percentage={member.batteryPercentage} isCharging={member.isCharging} />
-      </Stack>
-
-      {/* Footer */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Box sx={{ px: 1.25, py: 0.4, borderRadius: "0.375rem", bgcolor: alpha(PRIMARY, 0.06), display: "inline-flex", alignItems: "center", gap: 0.5 }}>
-          <Storefront sx={{ fontSize: 12, color: PRIMARY }} />
-          <Typography fontSize="0.65rem" fontWeight={700} color={PRIMARY}>
-            {member.visits} visits today
-          </Typography>
-        </Box>
-        <Button size="small" endIcon={<ChevronRight sx={{ fontSize: 14, ml: -0.5 }} />}
-          onClick={onViewDetails}
-          sx={{
-            color: PRIMARY, border: `1px solid ${alpha(PRIMARY, 0.2)}`, bgcolor: alpha(PRIMARY, 0.05),
-            fontWeight: 700, fontSize: "0.7rem", borderRadius: "0.5rem", textTransform: "none",
-            px: 1.5, py: 0.55,
-            "&:hover": { bgcolor: PRIMARY, color: "#fff", borderColor: PRIMARY },
-          }}>
-          Details
-        </Button>
-      </Stack>
-    </Paper>
-  );
-
-  // ── Table Row Skeleton ────────────────────────────────────────────────────────
   const TableRowSkeleton = () => (
     <TableRow>
       {[1,2,3,4,5,6,7].map((i) => (
@@ -280,11 +284,27 @@
     </TableRow>
   );
 
-  // ── Main Component ────────────────────────────────────────────────────────────
   export default function TeamTracking() {
     const theme = useTheme();
+    const isDark = theme.palette.mode === "dark";
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
     const navigate = useNavigate();
+
+    const pageBg = isDark ? "#060a12" : "#f8fafc";
+    const cardBg = isDark ? "#0e1424" : "#ffffff";
+    const cardBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0";
+    const cardHoverBorder = isDark ? "rgba(255, 255, 255, 0.15)" : "#cbd5e1";
+    const tableHeadBg = isDark ? "#090d18" : "#f8fafc";
+    const tableHeadText = isDark ? "#64748b" : "#475569";
+    const textTitle = isDark ? "#ffffff" : "#0f172a";
+    const textSub = isDark ? "#94a3b8" : "#64748b";
+    const textBody = isDark ? "#cbd5e1" : "#334155";
+    const rowHover = isDark ? "#131b30" : "#f1f5f9";
+    const rowBorder = isDark ? "rgba(255, 255, 255, 0.06)" : "#f1f5f9";
+    const btnBg = isDark ? "#0b101c" : "#ffffff";
+    const btnText = isDark ? "#ffffff" : "#0f172a";
+    const btnBorder = isDark ? "rgba(255, 255, 255, 0.15)" : "#e2e8f0";
+    const statusCfg = getStatusConfig(isDark);
 
     const [hoveredRow, setHoveredRow] = useState(null);
     const [page, setPage] = useState(1);
@@ -293,7 +313,6 @@
     const [teamMembers, setTeamMembers] = useState([]);
     const [summary, setSummary] = useState({ total: 0, active: 0, visitsToday: 0, pending: 0 });
 
-    // ── Fetch Data ──────────────────────────────────────────────────────────────
     const fetchData = useCallback(async (showSpinner = true) => {
       if (showSpinner) setLoading(true);
       else setRefreshing(true);
@@ -307,7 +326,7 @@
           String(now.getDate()).padStart(2, "0"),
         ].join("-");
 
-        // Step 1: Fetch field users: operation leads, incharges, and team members.
+        // Step 1: Fetch field users:// Step 1: Fetch field users: operation leads, incharges, and team members.
         let rawUsers = [];
         try {
           const usersRes = await axios.get(`${API}/api/v1/user/getAllUsers`, {
@@ -583,7 +602,7 @@ try {
           {!isMobile && (
             <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 2, mb: 4 }}>
               <Box>
-                <Typography variant="h4" fontWeight={800} sx={{ letterSpacing: "-0.5px", color: "#0f172a", lineHeight: 1.1 }}>
+                <Typography variant="h4" fontWeight={800} sx={{ letterSpacing: "-0.5px", color: textTitle, lineHeight: 1.1 }}>
                   Team Tracking
                 </Typography>
                 <Typography variant="body2" sx={{ color: "#94a3b8", mt: 0.5, fontWeight: 500 }}>
@@ -592,7 +611,7 @@ try {
               </Box>
               <Stack direction="row" spacing={1.5} alignItems="center">
                 <Tooltip title="Refresh">
-                  <IconButton onClick={() => fetchData(false)} sx={{ color: "#94a3b8", border: "1px solid #e2e8f0", borderRadius: "0.6rem", width: 38, height: 38 }}>
+                  <IconButton onClick={() => fetchData(false)} sx={{ color: isDark ? "#60a5fa" : "#0f172a", border: `1px solid ${btnBorder}`, bgcolor: btnBg, borderRadius: "0.6rem", width: 38, height: 38 }}>
                     <Refresh sx={{
                       fontSize: 18,
                       animation: refreshing ? "spin 0.8s linear infinite" : "none",
@@ -601,7 +620,7 @@ try {
                   </IconButton>
                 </Tooltip>
                 <Button variant="outlined" startIcon={<FilterList sx={{ fontSize: 17 }} />}
-                  sx={{ borderColor: "#e2e8f0", bgcolor: "#fff", color: "#475569", fontWeight: 600, fontSize: "0.8rem", borderRadius: "0.6rem", textTransform: "none", px: 2, py: 1, "&:hover": { bgcolor: "#f8fafc" } }}>
+                  sx={{ borderColor: btnBorder, bgcolor: btnBg, color: btnText, fontWeight: 600, fontSize: "0.8rem", borderRadius: "0.6rem", textTransform: "none", px: 2, py: 1, "&:hover": { bgcolor: rowHover } }}>
                   Filter
                 </Button>
                 <Button variant="contained" startIcon={<Add sx={{ fontSize: 18 }} />}
@@ -618,19 +637,19 @@ try {
             {SUMMARY_CARDS.map((card, i) => (
               <Grid item xs={6} sm={6} lg={3} key={i}>
                 <Paper elevation={0} sx={{
-                  p: { xs: 1.75, sm: 2.5 }, borderRadius: "0.875rem", border: "1px solid #e8edf5",
-                  bgcolor: "#fff", height: "100%", transition: "all 0.2s",
-                  "&:hover": { boxShadow: "0 6px 20px rgba(0,0,0,0.07)", transform: "translateY(-1px)" },
+                  p: { xs: 1.75, sm: 2.5 }, borderRadius: "16px", border: `1px solid ${cardBorder}`,
+                  bgcolor: cardBg, height: "100%", transition: "all 0.2s",
+                  "&:hover": { borderColor: cardHoverBorder, transform: "translateY(-1px)" },
                 }}>
                   <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: { xs: 1.5, sm: 2 } }}>
                     <Box>
-                      <Typography sx={{ color: "#94a3b8", fontWeight: 500, fontSize: { xs: "0.68rem", sm: "0.75rem" }, display: "block", mb: 0.5 }}>
+                      <Typography sx={{ color: textSub, fontWeight: 500, fontSize: { xs: "0.68rem", sm: "0.75rem" }, display: "block", mb: 0.5 }}>
                         {card.title}
                       </Typography>
                       {loading ? (
                         <Skeleton variant="text" width={60} height={40} />
                       ) : (
-                        <Typography fontWeight={800} sx={{ color: "#0f172a", fontSize: { xs: "1.6rem", sm: "1.9rem" }, lineHeight: 1, letterSpacing: "-0.5px" }}>
+                        <Typography fontWeight={800} sx={{ color: textTitle, fontSize: { xs: "1.6rem", sm: "1.9rem" }, lineHeight: 1, letterSpacing: "-0.5px" }}>
                           {card.value}
                         </Typography>
                       )}
@@ -731,7 +750,7 @@ try {
 
           {/* ── Desktop: Table ───────────────────────────────────────────── */}
           {!isMobile && (
-            <Paper elevation={0} sx={{ borderRadius: "1rem", border: "1px solid #e8edf5", bgcolor: "#fff", overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+            <Paper elevation={0} sx={{ borderRadius: "16px", border: `1px solid ${cardBorder}`, bgcolor: cardBg, overflow: "hidden" }}>
               <TableContainer>
                 <Table>
                   <TableHead>
@@ -763,8 +782,8 @@ try {
                           onMouseEnter={() => setHoveredRow(member.id)}
                           onMouseLeave={() => setHoveredRow(null)}
                           sx={{
-                            borderBottom: "1px solid #f8fafc", transition: "background 0.12s",
-                            "&:hover": { bgcolor: "#fafbff" },
+                            borderBottom: `1px solid ${rowBorder}`, transition: "background 0.12s", bgcolor: cardBg,
+                            "&:hover": { bgcolor: rowHover },
                             "&:last-child td": { borderBottom: "none" },
                           }}>
 
@@ -773,17 +792,17 @@ try {
                             <Stack direction="row" spacing={1.75} alignItems="center">
                               <Badge overlap="circular" anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
                                 badgeContent={
-                                  <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: STATUS_CONFIG[member.status]?.dotColor, border: "2px solid #fff" }} />
+                                  <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: getStatusConfig(isDark)[member.status]?.dotColor, border: "2px solid #fff" }} />
                                 }>
                                 <Avatar sx={{ width: 42, height: 42, border: "2px solid #f0f4fa", bgcolor: member.avatarColor, fontWeight: 700, fontSize: "0.9rem" }}>
                                   {member.initials}
                                 </Avatar>
                               </Badge>
                               <Box>
-                                <Typography variant="body2" fontWeight={700} sx={{ color: "#0f172a", fontSize: "0.85rem", lineHeight: 1.3 }}>
+                                <Typography variant="body2" fontWeight={700} sx={{ color: textTitle, fontSize: "0.85rem", lineHeight: 1.3 }}>
                                   {member.name}
                                 </Typography>
-                                <Typography variant="caption" sx={{ color: "#94a3b8", fontSize: "0.7rem", fontWeight: 500 }}>
+                                <Typography variant="caption" sx={{ color: textSub, fontSize: "0.7rem", fontWeight: 500 }}>
                                   {member.roleLabel}
                                 </Typography>
                               </Box>
@@ -799,7 +818,7 @@ try {
                           <TableCell align="center" sx={{ py: 2.25 }}>
                             <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
                               <LocationOn sx={{ fontSize: 15, color: member.status === "offline" ? "#cbd5e1" : PRIMARY }} />
-                              <Typography variant="body2" sx={{ color: "#475569", fontSize: "0.78rem", maxWidth: 200 }} noWrap>
+                              <Typography variant="body2" sx={{ color: textBody, fontSize: "0.78rem", maxWidth: 200 }} noWrap>
                                 {member.location || "Not punched in"}
                               </Typography>
                             </Stack>
@@ -878,7 +897,7 @@ try {
                                   })
                                 }
                                 sx={{
-                                  color: PRIMARY, borderColor: alpha(PRIMARY, 0.2), bgcolor: alpha(PRIMARY, 0.04),
+                                  color: isDark ? "#60a5fa" : PRIMARY, borderColor: isDark ? "rgba(59, 130, 246, 0.3)" : alpha(PRIMARY, 0.25), bgcolor: isDark ? "rgba(59, 130, 246, 0.12)" : alpha(PRIMARY, 0.05),
                                   fontWeight: 700, fontSize: "0.72rem", borderRadius: "0.5rem",
                                   textTransform: "none", px: 1.75, py: 0.6, transition: "all 0.15s",
                                   "&:hover": { bgcolor: PRIMARY, color: "#fff", borderColor: PRIMARY, boxShadow: `0 2px 8px ${alpha(PRIMARY, 0.3)}` },

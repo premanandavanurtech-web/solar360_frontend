@@ -1,10 +1,25 @@
 const normalizeOrigin = (value) => (value || "").trim().replace(/\/+$/, "");
 
-export const API_ORIGIN =
-  normalizeOrigin(process.env.REACT_APP_API_URL) ||
-  (process.env.NODE_ENV === "production"
-    ? "https://vanurtech-solar-backend-1.onrender.com"
-    : "https://vanurtech-solar-backend-1.onrender.com");
+export const API_ORIGIN = normalizeOrigin(
+  process.env.REACT_APP_API_URL || "https://solar-backend-6vaa.onrender.com"
+);
+
+export const LEGACY_API_ORIGINS = (process.env.REACT_APP_LEGACY_API_ORIGINS || "")
+  .split(",")
+  .map(normalizeOrigin)
+  .filter(Boolean);
+
+export const KNOWN_API_HOSTS = new Set(
+  [API_ORIGIN, ...LEGACY_API_ORIGINS]
+    .map((origin) => {
+      try {
+        return new URL(origin).hostname;
+      } catch {
+        return "";
+      }
+    })
+    .filter(Boolean)
+);
 
 export const API_BASE_URL = `${API_ORIGIN}/api/v1`;
 

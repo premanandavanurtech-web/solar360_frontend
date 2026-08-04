@@ -8,6 +8,10 @@ import {
   Checkbox,
   Chip,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Grid,
   IconButton,
@@ -27,11 +31,13 @@ import {
   Tooltip,
   Typography,
   alpha,
+  useTheme,
 } from "@mui/material";
 import {
   Add,
   ArrowBack,
   Check,
+  Close,
   DeleteOutline,
   EditOutlined,
   ErrorOutline,
@@ -54,12 +60,12 @@ import { useLocation, useNavigate } from "react-router-dom";
 import axiosInstance from "../utils/axiosConfig";
 import { toBackendAssetUrl } from "../utils/backendAssetUrl";
 
-const BLUE = "#2563eb";
-const INDIGO = "#4f46e5";
+const BLUE = "#1e40af";
+const INDIGO = "#4338ca";
 const SUCCESS = "#16a34a";
-const WARNING = "#d97706";
-const DANGER = "#dc2626";
-const TEXT = "#020617";
+const WARNING = "#f59e0b";
+const DANGER = "#ef4444";
+const TEXT = "#1e293b";
 const MUTED = "#64748b";
 
 const emptyCategory = {
@@ -79,7 +85,9 @@ const emptyItem = {
   hsnSacCode: "",
   unit: "pcs",
   description: "",
-  pricing: { purchaseCost: 0, sellingPrice: 0, taxPercent: 0, igst: 0, cgst: 0, sgst: 0 },
+  discountType: "Rs",
+  discount: 0,
+  pricing: { purchaseCost: 0, sellingPrice: 0, taxPercent: 0, igst: 0, cgst: 0, sgst: 0, taxMode: "igst", autoSplitTax: true, totalGst: "" },
   tracking: { expiryDate: "" },
   dimensions: { length: "", width: "", height: "", unit: "cm" },
   weight: { value: "", unit: "kg" },
@@ -104,41 +112,75 @@ const getResult = (response, fallback) => response?.data?.result ?? fallback;
 const getAvailableStock = (item) =>
   item.availableStock ?? (item.warehouseStock || []).reduce((sum, row) => sum + (Number(row.availableQty) || 0), 0);
 
-const softCard = {
+const getSoftCard = (isDark = false) => ({
   borderRadius: 2,
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 8px 18px rgba(15,23,42,0.08)",
-};
+  border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e5e7eb",
+  bgcolor: isDark ? "#0b101c" : "#fff",
+  boxShadow: isDark ? "0 8px 18px rgba(0,0,0,0.35)" : "0 8px 18px rgba(15,23,42,0.08)",
+});
 
-const inputSx = {
+const getInputSx = (isDark = false) => ({
   "& .MuiOutlinedInput-root": {
     borderRadius: 1.5,
     minHeight: 45,
-    bgcolor: "#fff",
-    boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+    bgcolor: isDark ? "#121929" : "#fff",
+    color: isDark ? "#f8fafc" : "#0f172a",
+    boxShadow: isDark ? "none" : "0 1px 2px rgba(15,23,42,0.04)",
+    "& fieldset": {
+      borderColor: isDark ? "rgba(255, 255, 255, 0.15)" : "#e5e7eb",
+    },
+    "&:hover fieldset": {
+      borderColor: isDark ? "#60a5fa" : BLUE,
+    },
+    "&.Mui-focused fieldset": {
+      borderColor: isDark ? "#60a5fa" : BLUE,
+    },
+  },
+  "& .MuiInputBase-input": {
+    color: isDark ? "#f8fafc" : "#0f172a",
+  },
+  "& .MuiInputBase-input::placeholder": {
+    color: isDark ? "#94a3b8" : "#8a94a6",
+    opacity: 1,
   },
   "& .MuiInputLabel-root": {
-    color: "#8a94a6",
+    color: isDark ? "#94a3b8" : "#8a94a6",
     fontWeight: 800,
     fontSize: 12,
     textTransform: "uppercase",
   },
-};
+  "& .MuiSvgIcon-root": {
+    color: isDark ? "#94a3b8" : "action.active",
+  },
+});
 
-const StatCard = ({ icon, label, value, color = BLUE }) => (
-  <Card sx={softCard}>
+const StatCard = ({ icon, label, value, color = BLUE, isDark = false }) => (
+  <Card sx={{
+    borderRadius: 3,
+    boxShadow: 'none',
+    border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e2e8f0',
+    backgroundColor: isDark ? '#0b101c' : '#fff',
+  }}>
     <CardContent sx={{ p: 2.5 }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+      <Stack direction="row" alignItems="center" spacing={2.5}>
+        <Box sx={{
+          width: 48,
+          height: 48,
+          borderRadius: '50%',
+          display: "grid",
+          placeItems: "center",
+          bgcolor: alpha(color, isDark ? 0.2 : 0.1),
+          color: isDark && (color === BLUE || color === INDIGO) ? '#60a5fa' : color
+        }}>
+          {icon}
+        </Box>
         <Box>
-          <Typography color="text.secondary" fontWeight={700}>
+          <Typography color={isDark ? "#94a3b8" : MUTED} sx={{ fontWeight: 600, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             {label}
           </Typography>
-          <Typography variant="h5" fontWeight={900} color={TEXT} sx={{ mt: 0.4 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: isDark ? "#f8fafc" : TEXT, mt: 0.5, lineHeight: 1.2 }}>
             {value}
           </Typography>
-        </Box>
-        <Box sx={{ width: 46, height: 46, borderRadius: 3, display: "grid", placeItems: "center", bgcolor: alpha(color, 0.14), color }}>
-          {icon}
         </Box>
       </Stack>
     </CardContent>
@@ -162,46 +204,56 @@ const PageIcon = ({ icon = <Inventory2 />, color = INDIGO }) => (
   </Box>
 );
 
-const Field = ({ label, value, onChange, children, ...props }) => (
+const Field = ({ label, value, onChange, children, isDark = false, ...props }) => (
   <TextField
     label={label}
     value={value ?? ""}
     onChange={(event) => onChange(event.target.value)}
     fullWidth
     size="small"
-    sx={{ ...inputSx, ...props.sx }}
+    sx={{ ...getInputSx(isDark), ...props.sx }}
     {...props}
   >
     {children}
   </TextField>
 );
 
-const SectionCard = ({ icon, title, color, required, defaultOpen = true, children }) => {
-  const [open, setOpen] = useState(defaultOpen);
+const SectionCard = ({ icon, title, color, required, defaultOpen = true, isOpen, onToggle, children, isDark = false }) => {
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const isCardOpen = isOpen !== undefined ? isOpen : internalOpen;
+
+  const handleToggle = () => {
+    if (onToggle) {
+      onToggle();
+    } else {
+      setInternalOpen((prev) => !prev);
+    }
+  };
+
   return (
-    <Card sx={{ ...softCard, boxShadow: "none" }}>
+    <Card sx={{ ...getSoftCard(isDark), boxShadow: "none" }}>
       <Stack
         direction="row"
         alignItems="center"
         justifyContent="space-between"
         sx={{ px: 2.5, py: 2, cursor: "pointer" }}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={handleToggle}
       >
         <Stack direction="row" alignItems="center" spacing={1.5}>
-          <Box sx={{ width: 34, height: 34, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: alpha(color, 0.1), color }}>
+          <Box sx={{ width: 34, height: 34, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: alpha(color, isDark ? 0.2 : 0.1), color: isDark && (color === BLUE || color === INDIGO) ? '#60a5fa' : color }}>
             {icon}
           </Box>
-          <Typography fontWeight={900} color={TEXT}>
+          <Typography fontWeight={900} color={isDark ? "#f8fafc" : TEXT}>
             {title}
           </Typography>
         </Stack>
         <Stack direction="row" alignItems="center" spacing={1}>
-          {required && <Chip size="small" label="REQUIRED" sx={{ bgcolor: alpha(BLUE, 0.08), color: BLUE, fontWeight: 800 }} />}
-          {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+          {required && <Chip size="small" label="REQUIRED" sx={{ bgcolor: alpha(BLUE, isDark ? 0.2 : 0.08), color: isDark ? "#60a5fa" : BLUE, fontWeight: 800 }} />}
+          {isCardOpen ? <ExpandLess fontSize="small" sx={{ color: isDark ? "#94a3b8" : "inherit" }} /> : <ExpandMore fontSize="small" sx={{ color: isDark ? "#94a3b8" : "inherit" }} />}
         </Stack>
       </Stack>
-      <Collapse in={open}>
-        <Divider />
+      <Collapse in={isCardOpen}>
+        <Divider sx={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }} />
         <Box sx={{ p: 2.5 }}>{children}</Box>
       </Collapse>
     </Card>
@@ -209,6 +261,8 @@ const SectionCard = ({ icon, title, color, required, defaultOpen = true, childre
 };
 
 function InventoryERP() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const location = useLocation();
   const navigate = useNavigate();
   const sectionFromPath = location.pathname.split("/")[2] || "category";
@@ -234,70 +288,226 @@ function InventoryERP() {
   const [subcategorySearch, setSubcategorySearch] = useState("");
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
 
+  const imagePreviewUrl = useMemo(() => {
+    if (!itemForm.image) return null;
+    if (itemForm.image instanceof File || itemForm.image instanceof Blob) {
+      return URL.createObjectURL(itemForm.image);
+    }
+    if (typeof itemForm.image === "string") {
+      if (itemForm.image.startsWith("http") || itemForm.image.startsWith("data:")) return itemForm.image;
+      const baseUrl = process.env.REACT_APP_API_URL || "";
+      return `${baseUrl}${itemForm.image.startsWith("/") ? "" : "/"}${itemForm.image}`;
+    }
+    return null;
+  }, [itemForm.image]);
+
+  const selectedCategory = useMemo(() => {
+    return categories.find((entry) => entry.category === itemForm.category) || null;
+  }, [categories, itemForm.category]);
+
+  const [addSubcategoryModalOpen, setAddSubcategoryModalOpen] = useState(false);
+  const [modalSubcategoryName, setModalSubcategoryName] = useState("");
+  const [modalSubSaving, setModalSubSaving] = useState(false);
+
+  const handleOpenAddSubcategoryModal = () => {
+    if (!selectedCategory) {
+      showToast("Please select a Category first", "error");
+      return;
+    }
+    setModalSubcategoryName("");
+    setAddSubcategoryModalOpen(true);
+  };
+
+  const handleCloseAddSubcategoryModal = () => {
+    setAddSubcategoryModalOpen(false);
+    setModalSubcategoryName("");
+  };
+
+  const handleSaveModalSubcategory = async () => {
+    if (!selectedCategory) {
+      showToast("Please select a Category first", "error");
+      return;
+    }
+    const value = modalSubcategoryName.trim();
+    if (!value) {
+      showToast("Subcategory name is required", "error");
+      return;
+    }
+    const current = selectedCategory.subcategories || [];
+    if (current.some((entry) => entry.toLowerCase() === value.toLowerCase())) {
+      showToast("Subcategory already exists", "error");
+      updateItem("subcategory", value);
+      handleCloseAddSubcategoryModal();
+      return;
+    }
+    setModalSubSaving(true);
+    try {
+      const nextSubs = [...current, value];
+      await updateCategorySubcategories(selectedCategory, nextSubs);
+      updateItem("subcategory", value);
+      showToast("Subcategory added successfully");
+      handleCloseAddSubcategoryModal();
+    } catch (error) {
+      showToast("Failed to add subcategory", "error");
+    } finally {
+      setModalSubSaving(false);
+    }
+  };
+
+  const handleQuickAddSubcategory = () => {
+    handleOpenAddSubcategoryModal();
+  };
+
+  const [addCategoryModalOpen, setAddCategoryModalOpen] = useState(false);
+  const [modalCategoryForm, setModalCategoryForm] = useState(emptyCategory);
+  const [modalSaving, setModalSaving] = useState(false);
+
+  const [openSection, setOpenSection] = useState("details");
+
+  const toggleSection = (sectionId) => {
+    setOpenSection((prev) => (prev === sectionId ? null : sectionId));
+  };
+
   const showToast = useCallback((message, severity = "success") => {
     setToast({ open: true, message, severity });
   }, []);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  const handleOpenAddCategoryModal = () => {
+    setModalCategoryForm(emptyCategory);
+    setAddCategoryModalOpen(true);
+  };
+
+  const handleCloseAddCategoryModal = () => {
+    setAddCategoryModalOpen(false);
+    setModalCategoryForm(emptyCategory);
+  };
+
+  const handleSaveModalCategory = async () => {
+    if (!modalCategoryForm.category.trim()) {
+      showToast("Category name is required", "error");
+      return;
+    }
+    setModalSaving(true);
     try {
-      const [dashboardRes, categoriesRes, itemsRes, warehousesRes, vendorsRes] = await Promise.all([
-        axiosInstance.get("/inventory/dashboard"),
-        axiosInstance.get("/inventory/categories"),
-        axiosInstance.get("/inventory/items", {
-          params: {
-            limit: pageSize,
-            page,
-            search: search || undefined,
-            category: itemFilter && !["low", "out"].includes(itemFilter) ? itemFilter : undefined,
-          },
-        }),
-        axiosInstance.get("/inventory/warehouses"),
-        axiosInstance.get("/inventory/vendors"),
-      ]);
-      setSummary(getResult(dashboardRes, {})?.summary || {});
-      setCategories(getResult(categoriesRes, []));
-      const itemResult = getResult(itemsRes, { items: [], pagination: {} });
-      setItems(itemResult.items || []);
-      setPagination(itemResult.pagination || { page, limit: pageSize, total: itemResult.items?.length || 0, pages: 1 });
-      setWarehouses(getResult(warehousesRes, []));
-      setVendors(getResult(vendorsRes, []));
+      const payload = {
+        ...modalCategoryForm,
+        subcategories: modalCategoryForm.subcategories
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter(Boolean),
+      };
+      const response = await axiosInstance.post("/inventory/categories", payload);
+      const newCat = getResult(response, payload);
+      const newCategoryName = newCat.category || modalCategoryForm.category;
+
+      await fetchCategories();
+
+      // Auto-select the newly created category in the item form
+      updateItem("category", newCategoryName);
+      updateItem("subcategory", "");
+
+      showToast("Category created successfully");
+      handleCloseAddCategoryModal();
     } catch (error) {
-      showToast(error?.response?.data?.message || "Failed to load inventory data", "error");
+      showToast(error?.response?.data?.message || "Failed to create category", "error");
     } finally {
-      setLoading(false);
+      setModalSaving(false);
+    }
+  };
+
+  const setScreen = (targetMode) => {
+    setMode(targetMode);
+    if (targetMode === "categories" || targetMode === "items") {
+      navigate(`/inventory${targetMode === "items" ? "/items" : ""}`);
+    }
+  };
+
+  useEffect(() => {
+    if (sectionFromPath === "items") {
+      setMode("items");
+    } else {
+      setMode("categories");
+    }
+  }, [sectionFromPath]);
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const response = await axiosInstance.get("/inventory/categories");
+      setCategories(getResult(response, []));
+    } catch (error) {
+      showToast("Failed to fetch inventory categories", "error");
+    }
+  }, [showToast]);
+
+  const fetchItems = useCallback(async () => {
+    try {
+      const response = await axiosInstance.get("/inventory/items", {
+        params: {
+          search,
+          page,
+          limit: pageSize,
+          category: itemFilter && !["low", "out"].includes(itemFilter) ? itemFilter : undefined,
+        },
+      });
+      const data = response.data?.result || {};
+      setItems(data.items || []);
+      setPagination(data.pagination || { page: 1, limit: pageSize, total: 0, pages: 1 });
+    } catch (error) {
+      showToast("Failed to fetch inventory items", "error");
     }
   }, [itemFilter, page, pageSize, search, showToast]);
+
+  const fetchSummary = useCallback(async () => {
+    try {
+      const response = await axiosInstance.get("/inventory/summary");
+      setSummary(getResult(response, {}));
+    } catch (error) {
+      // non-fatal
+    }
+  }, []);
+
+  const fetchWarehouses = useCallback(async () => {
+    try {
+      const response = await axiosInstance.get("/warehouses");
+      setWarehouses(getResult(response, []));
+    } catch (error) {
+      // non-fatal
+    }
+  }, []);
+
+  const fetchVendors = useCallback(async () => {
+    try {
+      const response = await axiosInstance.get("/vendors");
+      setVendors(getResult(response, []));
+    } catch (error) {
+      // non-fatal
+    }
+  }, []);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchCategories(), fetchItems(), fetchSummary(), fetchWarehouses(), fetchVendors()]);
+    setLoading(false);
+  }, [fetchCategories, fetchItems, fetchSummary, fetchWarehouses, fetchVendors]);
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
 
-  useEffect(() => {
-    setMode(sectionFromPath === "items" ? "items" : "categories");
-  }, [sectionFromPath]);
-
-  const setScreen = (nextMode) => {
-    setMode(nextMode);
-    if (nextMode === "categories") navigate("/inventory/category");
-    if (nextMode === "items") navigate("/inventory/items");
-  };
-
   const startCreateCategory = () => {
-    setCategoryForm(emptyCategory);
-    setMode("create-category");
+    handleOpenAddCategoryModal();
   };
 
   const startEditCategory = (entry) => {
     setCategoryMenuAnchor(null);
-    setCategoryForm({
+    setModalCategoryForm({
       _id: entry._id,
       category: entry.category || "",
       description: entry.description || "",
       subcategories: (entry.subcategories || []).join(", "),
       isActive: entry.isActive !== false,
     });
-    setMode("create-category");
+    setAddCategoryModalOpen(true);
   };
 
   const openCategoryMenu = (event, entry) => {
@@ -316,11 +526,6 @@ function InventoryERP() {
     setSubcategorySearch("");
     setMode("subcategories");
   };
-
-  const selectedCategory = useMemo(
-    () => categories.find((entry) => entry.category === itemForm.category),
-    [categories, itemForm.category],
-  );
 
   const categoryRows = useMemo(
     () =>
@@ -452,6 +657,8 @@ function InventoryERP() {
     append("openingWarehouse", itemForm.openingWarehouse);
     append("reorderLevel", itemForm.reorderLevel);
     append("maxStockLevel", itemForm.maxStockLevel);
+    append("discountType", itemForm.discountType);
+    append("discount", itemForm.discount);
     append("pricing", JSON.stringify(itemForm.pricing));
     append("tracking", JSON.stringify(itemForm.tracking));
     append("dimensions", JSON.stringify(itemForm.dimensions));
@@ -503,7 +710,7 @@ function InventoryERP() {
       dimensions: { ...emptyItem.dimensions, ...(item.dimensions || {}) },
       weight: { ...emptyItem.weight, ...(item.weight || {}) },
       purchaseInfo: { ...emptyItem.purchaseInfo, ...purchaseInfo, vendor: vendorId || "", vendorName: purchaseInfo.vendorName || purchaseInfo.vendor?.name || "" },
-      image: null,
+      image: item.image || null,
       openingStock: "",
       openingWarehouse: "",
     });
@@ -532,32 +739,171 @@ function InventoryERP() {
     return items;
   }, [itemFilter, items]);
 
+  const categoryModalNode = (
+    <Dialog
+      open={addCategoryModalOpen}
+      onClose={handleCloseAddCategoryModal}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          bgcolor: isDark ? "#0b101c" : "#ffffff",
+          color: isDark ? "#f8fafc" : "#0f172a",
+          backgroundImage: "none",
+          border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e5e7eb",
+        },
+      }}
+    >
+      <DialogTitle sx={{ m: 0, p: 2.5, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Box sx={{ width: 36, height: 36, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: alpha(BLUE, isDark ? 0.2 : 0.08), color: isDark ? "#60a5fa" : BLUE }}>
+            <Inventory2 fontSize="small" />
+          </Box>
+          <Typography variant="h6" fontWeight={900}>
+            {modalCategoryForm._id ? "Edit Category" : "Create New Category"}
+          </Typography>
+        </Stack>
+        <IconButton onClick={handleCloseAddCategoryModal} size="small" sx={{ color: isDark ? "#94a3b8" : "inherit" }}>
+          <Close />
+        </IconButton>
+      </DialogTitle>
+      <Divider sx={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }} />
+      <DialogContent sx={{ p: 3 }}>
+        <Stack spacing={2.5}>
+          <Field
+            isDark={isDark}
+            label="Category Name *"
+            placeholder="e.g. Solar Panels, Inverters"
+            value={modalCategoryForm.category}
+            onChange={(value) => setModalCategoryForm((prev) => ({ ...prev, category: value }))}
+          />
+          <Field
+            isDark={isDark}
+            label="Subcategories"
+            placeholder="Enter subcategories separated by commas (e.g. Monocrystalline, Polycrystalline)"
+            value={modalCategoryForm.subcategories}
+            onChange={(value) => setModalCategoryForm((prev) => ({ ...prev, subcategories: value }))}
+          />
+          <Field
+            isDark={isDark}
+            label="Description"
+            placeholder="Category description (optional)"
+            multiline
+            minRows={2}
+            value={modalCategoryForm.description}
+            onChange={(value) => setModalCategoryForm((prev) => ({ ...prev, description: value }))}
+          />
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Checkbox
+              checked={modalCategoryForm.isActive}
+              onChange={(event) => setModalCategoryForm((prev) => ({ ...prev, isActive: event.target.checked }))}
+              sx={{ color: isDark ? "#60a5fa" : BLUE, "&.Mui-checked": { color: isDark ? "#60a5fa" : BLUE } }}
+            />
+            <Typography fontWeight={800} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>Active Category</Typography>
+          </Stack>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5, pt: 1 }}>
+        <Button variant="outlined" onClick={handleCloseAddCategoryModal} sx={{ borderColor: isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : "#000", fontWeight: 800 }}>
+          Cancel
+        </Button>
+        <Button startIcon={<Check />} variant="contained" onClick={handleSaveModalCategory} disabled={modalSaving} sx={{ bgcolor: INDIGO, fontWeight: 900, px: 2.5 }}>
+          {modalSaving ? "Saving..." : modalCategoryForm._id ? "Update Category" : "Create Category"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
+  const subCategoryModalNode = (
+    <Dialog
+      open={addSubcategoryModalOpen}
+      onClose={handleCloseAddSubcategoryModal}
+      maxWidth="xs"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          bgcolor: isDark ? "#0b101c" : "#ffffff",
+          color: isDark ? "#f8fafc" : "#0f172a",
+          backgroundImage: "none",
+          border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e5e7eb",
+        },
+      }}
+    >
+      <DialogTitle sx={{ m: 0, p: 2.5, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Box sx={{ width: 36, height: 36, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: alpha(BLUE, isDark ? 0.2 : 0.08), color: isDark ? "#60a5fa" : BLUE }}>
+            <ListAlt fontSize="small" />
+          </Box>
+          <Typography variant="h6" fontWeight={900}>
+            Add Subcategory
+          </Typography>
+        </Stack>
+        <IconButton onClick={handleCloseAddSubcategoryModal} size="small" sx={{ color: isDark ? "#94a3b8" : "inherit" }}>
+          <Close />
+        </IconButton>
+      </DialogTitle>
+      <Divider sx={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }} />
+      <DialogContent sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Typography variant="body2" color={isDark ? "#cbd5e1" : MUTED} fontWeight={800}>
+            Category: <Box component="span" sx={{ color: isDark ? "#60a5fa" : BLUE, fontWeight: 900 }}>{selectedCategory?.category || "-"}</Box>
+          </Typography>
+          <Field
+            isDark={isDark}
+            label="Subcategory Name *"
+            placeholder="e.g. Monocrystalline, Polycrystalline"
+            value={modalSubcategoryName}
+            onChange={(value) => setModalSubcategoryName(value)}
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5, pt: 1 }}>
+        <Button variant="outlined" onClick={handleCloseAddSubcategoryModal} sx={{ borderColor: isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : "#000", fontWeight: 800 }}>
+          Cancel
+        </Button>
+        <Button startIcon={<Check />} variant="contained" onClick={handleSaveModalSubcategory} disabled={modalSubSaving} sx={{ bgcolor: INDIGO, fontWeight: 900, px: 2.5 }}>
+          {modalSubSaving ? "Saving..." : "Add Subcategory"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
+  const toastSnackbarNode = (
+    <Snackbar open={toast.open} autoHideDuration={3500} onClose={() => setToast((prev) => ({ ...prev, open: false }))}>
+      <Alert severity={toast.severity} variant="filled" sx={{ color: "#fff" }}>{toast.message}</Alert>
+    </Snackbar>
+  );
+
   if (mode === "create-category") {
     return (
-      <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: "#fff", minHeight: "100vh" }}>
-        <Button startIcon={<ArrowBack />} onClick={() => setScreen("categories")} sx={{ mb: 3, color: MUTED }}>
+      <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: isDark ? "#070b14" : "#fff", minHeight: "100vh", color: isDark ? "#f8fafc" : "inherit" }}>
+        <Button startIcon={<ArrowBack />} onClick={() => setScreen("categories")} sx={{ mb: 3, color: isDark ? "#94a3b8" : MUTED }}>
           Back to Categories
         </Button>
         <Stack direction="row" alignItems="center" spacing={1.6} sx={{ mb: 5 }}>
           <PageIcon icon={<Inventory2 />} />
           <Box>
-            <Typography variant="h3" fontWeight={900} color="#000">
+            <Typography variant="h3" fontWeight={900} color={isDark ? "#f8fafc" : "#000"}>
               {categoryForm._id ? "Edit Category" : "Create New Category"}
             </Typography>
-            <Typography color={MUTED}>{categoryForm._id ? "Update category details and status" : "Add a new category to organize your inventory"}</Typography>
+            <Typography color={isDark ? "#94a3b8" : MUTED}>{categoryForm._id ? "Update category details and status" : "Add a new category to organize your inventory"}</Typography>
           </Box>
         </Stack>
 
-        <Card sx={{ ...softCard, maxWidth: 780 }}>
+        <Card sx={{ ...getSoftCard(isDark), maxWidth: 780 }}>
           <CardContent sx={{ p: { xs: 2.5, md: 3.8 } }}>
             <Stack spacing={3}>
               <Field
+                isDark={isDark}
                 label="Category Name *"
                 placeholder="Enter category name"
                 value={categoryForm.category}
                 onChange={(value) => setCategoryForm((prev) => ({ ...prev, category: value }))}
               />
               <Field
+                isDark={isDark}
                 label="Description"
                 placeholder="Enter category description (optional)"
                 multiline
@@ -566,6 +912,7 @@ function InventoryERP() {
                 onChange={(value) => setCategoryForm((prev) => ({ ...prev, description: value }))}
               />
               <Field
+                isDark={isDark}
                 label="Subcategories"
                 placeholder="Panels, Inverters, Batteries"
                 value={categoryForm.subcategories}
@@ -575,12 +922,12 @@ function InventoryERP() {
                 <Checkbox
                   checked={categoryForm.isActive}
                   onChange={(event) => setCategoryForm((prev) => ({ ...prev, isActive: event.target.checked }))}
-                  sx={{ color: BLUE, "&.Mui-checked": { color: BLUE } }}
+                  sx={{ color: isDark ? "#60a5fa" : BLUE, "&.Mui-checked": { color: isDark ? "#60a5fa" : BLUE } }}
                 />
-                <Typography fontWeight={900}>Active</Typography>
+                <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>Active</Typography>
               </Stack>
               <Stack direction="row" spacing={1.5}>
-                <Button variant="outlined" onClick={() => setScreen("categories")} sx={{ px: 2.5, borderColor: "#e5e7eb", color: "#000", fontWeight: 800 }}>
+                <Button variant="outlined" onClick={() => setScreen("categories")} sx={{ px: 2.5, borderColor: isDark ? "rgba(255, 255, 255, 0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : "#000", fontWeight: 800 }}>
                   Cancel
                 </Button>
                 <Button startIcon={<Check />} variant="contained" onClick={saveCategory} disabled={saving} sx={{ px: 3, bgcolor: INDIGO, fontWeight: 900 }}>
@@ -590,33 +937,36 @@ function InventoryERP() {
             </Stack>
           </CardContent>
         </Card>
+        {categoryModalNode}
+        {subCategoryModalNode}
+        {toastSnackbarNode}
       </Box>
     );
   }
 
   if (mode === "create-item") {
     return (
-      <Box sx={{ bgcolor: "#f8fafc", minHeight: "100vh" }}>
-        <Paper square sx={{ px: { xs: 2, md: 4 }, py: 1.8, borderBottom: "1px solid #e5e7eb" }}>
+      <Box sx={{ bgcolor: isDark ? "#070b14" : "#f8fafc", minHeight: "100vh", color: isDark ? "#f8fafc" : "inherit" }}>
+        <Paper square sx={{ px: { xs: 2, md: 4 }, py: 1.8, bgcolor: isDark ? "#0b101c" : "#fff", borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #e5e7eb" }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
             <Stack direction="row" alignItems="center" spacing={1.5}>
-              <IconButton onClick={() => setScreen("items")} sx={{ border: "1px solid #e5e7eb", borderRadius: 2 }}>
+              <IconButton onClick={() => setScreen("items")} sx={{ border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #e5e7eb", color: isDark ? "#f8fafc" : "inherit", borderRadius: 2 }}>
                 <ArrowBack />
               </IconButton>
-              <Box sx={{ width: 38, height: 38, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: alpha(BLUE, 0.08), color: BLUE }}>
+              <Box sx={{ width: 38, height: 38, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: alpha(BLUE, isDark ? 0.2 : 0.08), color: isDark ? "#60a5fa" : BLUE }}>
                 <Inventory2 />
               </Box>
               <Box>
-                <Typography fontWeight={900} color={TEXT}>
+                <Typography fontWeight={900} color={isDark ? "#f8fafc" : TEXT}>
                   {itemForm._id ? "Edit item" : "Create item"}
                 </Typography>
-                <Typography variant="body2" color="#8a94a6">
+                <Typography variant="body2" color={isDark ? "#94a3b8" : "#8a94a6"}>
                   Fill in item details, pricing, and tax settings
                 </Typography>
               </Box>
             </Stack>
             <Stack direction="row" spacing={1}>
-              <Button variant="outlined" onClick={() => setScreen("items")} sx={{ borderColor: "#e5e7eb", color: TEXT, fontWeight: 800 }}>
+              <Button variant="outlined" onClick={() => setScreen("items")} sx={{ borderColor: isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : TEXT, fontWeight: 800 }}>
                 Cancel
               </Button>
               <Button startIcon={<Check />} variant="contained" onClick={saveItem} disabled={saving} sx={{ bgcolor: BLUE, fontWeight: 900 }}>
@@ -630,44 +980,79 @@ function InventoryERP() {
           <Grid container spacing={2.5}>
             <Grid item xs={12} lg={8}>
               <Stack spacing={2}>
-                <SectionCard icon={<Inventory2 />} title="Item details" color={BLUE} required>
+                <SectionCard isDark={isDark} icon={<Inventory2 />} title="Item details" color={BLUE} required isOpen={openSection === "details"} onToggle={() => toggleSection("details")}>
                   <Grid container spacing={2}>
                     <Grid item xs={12}>
-                      <Field label="Item Name *" placeholder="e.g. Apple iPhone 15" value={itemForm.itemName} onChange={(value) => updateItem("itemName", value)} />
+                      <Field isDark={isDark} label="Item Name *" placeholder="e.g. Apple iPhone 15" value={itemForm.itemName} onChange={(value) => updateItem("itemName", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Field label="SKU / Item Code" placeholder="e.g. APL-IPH15-BLK" value={itemForm.sku} onChange={(value) => updateItem("sku", value)} />
+                      <Field isDark={isDark} label="SKU / Item Code" placeholder="e.g. APL-IPH15-BLK" value={itemForm.sku} onChange={(value) => updateItem("sku", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Field label="HSN / SAC Code" placeholder="e.g. 8471" value={itemForm.hsnSacCode} onChange={(value) => updateItem("hsnSacCode", value)} />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Typography variant="caption" color="#8a94a6" fontWeight={900}>
-                        ITEM TYPE
-                      </Typography>
-                      <Grid container spacing={1.5} sx={{ mt: 0.4 }}>
-                        <Grid item xs={12} sm={6}>
-                          <Button fullWidth variant="outlined" startIcon={<Inventory2 />} sx={{ height: 46, borderRadius: 1.5, bgcolor: alpha(BLUE, 0.07), borderColor: BLUE, color: BLUE, fontWeight: 900 }}>
-                            Goods
-                          </Button>
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                          <Button fullWidth variant="outlined" startIcon={<TrendingUp />} sx={{ height: 46, borderRadius: 1.5, borderColor: "#e5e7eb", color: MUTED, fontWeight: 900 }}>
-                            Service
-                          </Button>
-                        </Grid>
-                      </Grid>
+                      <Field isDark={isDark} label="HSN / SAC Code" placeholder="e.g. 8471" value={itemForm.hsnSacCode} onChange={(value) => updateItem("hsnSacCode", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.8 }}>
+                        <Typography variant="caption" color={isDark ? "#94a3b8" : "#8a94a6"} fontWeight={900}>
+                          CATEGORY *
+                        </Typography>
+                        <Button
+                          type="button"
+                          size="small"
+                          startIcon={<Add fontSize="small" />}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleOpenAddCategoryModal();
+                          }}
+                          sx={{
+                            fontSize: "0.78rem",
+                            fontWeight: 800,
+                            textTransform: "none",
+                            color: isDark ? "#60a5fa" : BLUE,
+                            py: 0,
+                            px: 1,
+                            minWidth: 0,
+                          }}
+                        >
+                          Add Category
+                        </Button>
+                      </Stack>
                       <Field
+                        isDark={isDark}
                         select
-                        label="Category *"
+                        placeholder="Select Category"
                         value={itemForm.category}
                         onChange={(value) => {
-                          updateItem("category", value);
-                          updateItem("subcategory", "");
+                          if (value === "__add_new__") {
+                            handleOpenAddCategoryModal();
+                          } else {
+                            updateItem("category", value);
+                            updateItem("subcategory", "");
+                          }
                         }}
                       >
+                        <MenuItem
+                          value="__add_new__"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleOpenAddCategoryModal();
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleOpenAddCategoryModal();
+                          }}
+                          sx={{
+                            color: isDark ? "#60a5fa" : BLUE,
+                            fontWeight: 900,
+                            borderBottom: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e5e7eb",
+                            py: 1.2,
+                          }}
+                        >
+                          <Add fontSize="small" sx={{ mr: 1 }} /> Add Category
+                        </MenuItem>
                         {categories.map((entry) => (
                           <MenuItem key={entry.category} value={entry.category}>
                             {entry.category}
@@ -676,7 +1061,71 @@ function InventoryERP() {
                       </Field>
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Field select label="Subcategory" value={itemForm.subcategory} onChange={(value) => updateItem("subcategory", value)} disabled={!selectedCategory?.subcategories?.length}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.8 }}>
+                        <Typography variant="caption" color={isDark ? "#94a3b8" : "#8a94a6"} fontWeight={900}>
+                          SUBCATEGORY
+                        </Typography>
+                        {selectedCategory && (
+                          <Button
+                            type="button"
+                            size="small"
+                            startIcon={<Add fontSize="small" />}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleQuickAddSubcategory();
+                            }}
+                            sx={{
+                              fontSize: "0.78rem",
+                              fontWeight: 800,
+                              textTransform: "none",
+                              color: isDark ? "#60a5fa" : BLUE,
+                              py: 0,
+                              px: 1,
+                              minWidth: 0,
+                            }}
+                          >
+                            Add Subcategory
+                          </Button>
+                        )}
+                      </Stack>
+                      <Field
+                        isDark={isDark}
+                        select
+                        placeholder="Select Subcategory"
+                        value={itemForm.subcategory}
+                        onChange={(value) => {
+                          if (value === "__add_sub__") {
+                            handleQuickAddSubcategory();
+                          } else {
+                            updateItem("subcategory", value);
+                          }
+                        }}
+                        disabled={!selectedCategory}
+                      >
+                        {selectedCategory && (
+                          <MenuItem
+                            value="__add_sub__"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleQuickAddSubcategory();
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleQuickAddSubcategory();
+                            }}
+                            sx={{
+                              color: isDark ? "#60a5fa" : BLUE,
+                              fontWeight: 900,
+                              borderBottom: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e5e7eb",
+                              py: 1.2,
+                            }}
+                          >
+                            <Add fontSize="small" sx={{ mr: 1 }} /> Add Subcategory
+                          </MenuItem>
+                        )}
                         {(selectedCategory?.subcategories || []).map((sub) => (
                           <MenuItem key={sub} value={sub}>
                             {sub}
@@ -685,7 +1134,7 @@ function InventoryERP() {
                       </Field>
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Field select label="Unit of Measure" value={itemForm.unit} onChange={(value) => updateItem("unit", value)}>
+                      <Field isDark={isDark} select label="Unit of Measure" value={itemForm.unit} onChange={(value) => updateItem("unit", value)}>
                         {["pcs", "Nos", "kg", "meter", "set", "Other (custom)"].map((unit) => (
                           <MenuItem key={unit} value={unit}>
                             {unit}
@@ -694,36 +1143,140 @@ function InventoryERP() {
                       </Field>
                     </Grid>
                     <Grid item xs={12}>
-                      <Field label="Description" placeholder="Short description of this item..." multiline minRows={3} value={itemForm.description} onChange={(value) => updateItem("description", value)} />
+                      <Field isDark={isDark} label="Description" placeholder="Short description of this item..." multiline minRows={3} value={itemForm.description} onChange={(value) => updateItem("description", value)} />
                     </Grid>
                   </Grid>
                 </SectionCard>
 
-                <SectionCard icon={<Inventory2 />} title="Tax information" color={WARNING}>
+                <SectionCard isDark={isDark} icon={<Inventory2 />} title="Tax information" color={WARNING} isOpen={openSection === "tax"} onToggle={() => toggleSection("tax")}>
                   <Grid container spacing={1.5}>
                     <Grid item xs={12} md={6}>
-                      <Button fullWidth variant="outlined" sx={{ height: 42, borderRadius: 1.5, borderColor: WARNING, bgcolor: alpha(WARNING, 0.08), color: WARNING, fontWeight: 900 }}>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        onClick={() => updateItem("pricing.taxMode", "igst")}
+                        sx={{
+                          height: 42,
+                          borderRadius: 1.5,
+                          borderColor: (itemForm.pricing?.taxMode || "igst") === "igst" ? WARNING : (isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb"),
+                          bgcolor: (itemForm.pricing?.taxMode || "igst") === "igst" ? alpha(WARNING, isDark ? 0.2 : 0.08) : "transparent",
+                          color: (itemForm.pricing?.taxMode || "igst") === "igst" ? (isDark ? "#fbbf24" : WARNING) : (isDark ? "#94a3b8" : MUTED),
+                          fontWeight: 900,
+                        }}
+                      >
                         Inter-state (IGST)
                       </Button>
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Button fullWidth variant="outlined" sx={{ height: 42, borderRadius: 1.5, borderColor: "#e5e7eb", color: MUTED, fontWeight: 900 }}>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        onClick={() => updateItem("pricing.taxMode", "cgst_sgst")}
+                        sx={{
+                          height: 42,
+                          borderRadius: 1.5,
+                          borderColor: itemForm.pricing?.taxMode === "cgst_sgst" ? WARNING : (isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb"),
+                          bgcolor: itemForm.pricing?.taxMode === "cgst_sgst" ? alpha(WARNING, isDark ? 0.2 : 0.08) : "transparent",
+                          color: itemForm.pricing?.taxMode === "cgst_sgst" ? (isDark ? "#fbbf24" : WARNING) : (isDark ? "#94a3b8" : MUTED),
+                          fontWeight: 900,
+                        }}
+                      >
                         Intra-state (CGST+SGST)
                       </Button>
                     </Grid>
-                    <Grid item xs={12}>
-                      <Field label="IGST (%)" placeholder="e.g. 18" type="number" value={itemForm.pricing.igst} onChange={(value) => updateItem("pricing.igst", value)} />
-                    </Grid>
+
+                    {itemForm.pricing?.taxMode === "cgst_sgst" ? (
+                      <>
+                        <Grid item xs={12}>
+                          <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }}>
+                            <Checkbox
+                              checked={itemForm.pricing?.autoSplitTax !== false}
+                              onChange={(e) => {
+                                const auto = e.target.checked;
+                                updateItem("pricing.autoSplitTax", auto);
+                                if (auto) {
+                                  const num = Number(itemForm.pricing?.totalGst) || 0;
+                                  updateItem("pricing.cgst", num / 2);
+                                  updateItem("pricing.sgst", num / 2);
+                                }
+                              }}
+                              sx={{ p: 0, color: isDark ? "#fbbf24" : WARNING, "&.Mui-checked": { color: isDark ? "#fbbf24" : WARNING } }}
+                            />
+                            <Typography variant="body2" fontWeight={700} sx={{ color: isDark ? "#cbd5e1" : "#475569" }}>
+                              Auto-split total GST equally into CGST + SGST
+                            </Typography>
+                          </Stack>
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Field
+                            isDark={isDark}
+                            label="TOTAL GST (%)"
+                            placeholder="e.g. 18"
+                            type="number"
+                            value={itemForm.pricing?.totalGst ?? ""}
+                            onChange={(val) => {
+                              updateItem("pricing.totalGst", val);
+                              const num = Number(val) || 0;
+                              if (itemForm.pricing?.autoSplitTax !== false) {
+                                updateItem("pricing.cgst", num ? num / 2 : "");
+                                updateItem("pricing.sgst", num ? num / 2 : "");
+                              }
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Field
+                            isDark={isDark}
+                            label="SGST (%)"
+                            placeholder="Auto"
+                            type={itemForm.pricing?.autoSplitTax !== false ? "text" : "number"}
+                            value={
+                              itemForm.pricing?.autoSplitTax !== false
+                                ? (Number(itemForm.pricing?.totalGst) ? Number(itemForm.pricing?.totalGst) / 2 : "Auto")
+                                : (itemForm.pricing?.sgst ?? "")
+                            }
+                            disabled={itemForm.pricing?.autoSplitTax !== false}
+                            onChange={(val) => updateItem("pricing.sgst", val)}
+                          />
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Field
+                            isDark={isDark}
+                            label="CGST (%)"
+                            placeholder="Auto"
+                            type={itemForm.pricing?.autoSplitTax !== false ? "text" : "number"}
+                            value={
+                              itemForm.pricing?.autoSplitTax !== false
+                                ? (Number(itemForm.pricing?.totalGst) ? Number(itemForm.pricing?.totalGst) / 2 : "Auto")
+                                : (itemForm.pricing?.cgst ?? "")
+                            }
+                            disabled={itemForm.pricing?.autoSplitTax !== false}
+                            onChange={(val) => updateItem("pricing.cgst", val)}
+                          />
+                        </Grid>
+                      </>
+                    ) : (
+                      <Grid item xs={12}>
+                        <Field
+                          isDark={isDark}
+                          label="IGST (%)"
+                          placeholder="e.g. 18"
+                          type="number"
+                          value={itemForm.pricing?.igst ?? ""}
+                          onChange={(value) => updateItem("pricing.igst", value)}
+                        />
+                      </Grid>
+                    )}
                   </Grid>
                 </SectionCard>
 
-                <SectionCard icon={<ListAlt />} title="Inventory management" color="#0f766e">
-                  <Box sx={{ p: 1.7, border: "1px solid #bbf7d0", bgcolor: "#effdf7", borderRadius: 2, mb: 2 }}>
+                <SectionCard isDark={isDark} icon={<ListAlt />} title="Inventory management" color="#0f766e" isOpen={openSection === "inventory"} onToggle={() => toggleSection("inventory")}>
+                  <Box sx={{ p: 1.7, border: isDark ? "1px solid rgba(16,185,129,0.3)" : "1px solid #bbf7d0", bgcolor: isDark ? "rgba(16,185,129,0.08)" : "#effdf7", borderRadius: 2, mb: 2 }}>
                     <Stack direction="row" alignItems="center" spacing={1.3}>
-                      <Checkbox sx={{ p: 0 }} />
+                      <Checkbox sx={{ p: 0, color: isDark ? "#4ade80" : undefined, "&.Mui-checked": { color: isDark ? "#4ade80" : undefined } }} />
                       <Box>
-                        <Typography fontWeight={900}>Track stock levels</Typography>
-                        <Typography variant="body2" color="#0f766e">
+                        <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>Track stock levels</Typography>
+                        <Typography variant="body2" color={isDark ? "#4ade80" : "#0f766e"}>
                           Monitor and alert on inventory thresholds
                         </Typography>
                       </Box>
@@ -731,10 +1284,10 @@ function InventoryERP() {
                   </Box>
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
-                      <Field label="Opening Stock" placeholder="e.g. 100" type="number" value={itemForm.openingStock || ""} onChange={(value) => updateItem("openingStock", value)} />
+                      <Field isDark={isDark} label="Opening Stock" placeholder="e.g. 100" type="number" value={itemForm.openingStock || ""} onChange={(value) => updateItem("openingStock", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Field select label="Opening Warehouse" value={itemForm.openingWarehouse || ""} onChange={(value) => updateItem("openingWarehouse", value)} disabled={!warehouses.length}>
+                      <Field isDark={isDark} select label="Opening Warehouse" value={itemForm.openingWarehouse || ""} onChange={(value) => updateItem("openingWarehouse", value)} disabled={!warehouses.length}>
                         {warehouses.map((warehouse) => (
                           <MenuItem key={warehouse._id} value={warehouse._id}>
                             {warehouse.name} {warehouse.code ? `(${warehouse.code})` : ""}
@@ -743,30 +1296,30 @@ function InventoryERP() {
                       </Field>
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Field label="Low Stock Alert" placeholder="e.g. 10" type="number" value={itemForm.reorderLevel} onChange={(value) => updateItem("reorderLevel", value)} />
+                      <Field isDark={isDark} label="Low Stock Alert" placeholder="e.g. 10" type="number" value={itemForm.reorderLevel} onChange={(value) => updateItem("reorderLevel", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Field label="High Stock Limit" placeholder="e.g. 1000" type="number" value={itemForm.maxStockLevel || ""} onChange={(value) => updateItem("maxStockLevel", value)} />
+                      <Field isDark={isDark} label="High Stock Limit" placeholder="e.g. 1000" type="number" value={itemForm.maxStockLevel || ""} onChange={(value) => updateItem("maxStockLevel", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Field label="Expiry Date" type="date" value={itemForm.tracking.expiryDate} onChange={(value) => updateItem("tracking.expiryDate", value)} InputLabelProps={{ shrink: true }} />
+                      <Field isDark={isDark} label="Expiry Date" type="date" value={itemForm.tracking.expiryDate} onChange={(value) => updateItem("tracking.expiryDate", value)} InputLabelProps={{ shrink: true }} />
                     </Grid>
                   </Grid>
                 </SectionCard>
 
-                <SectionCard icon={<Straighten />} title="Dimensions & weight" color="#7c3aed">
+                <SectionCard isDark={isDark} icon={<Straighten />} title="Dimensions & weight" color="#7c3aed" isOpen={openSection === "dimensions"} onToggle={() => toggleSection("dimensions")}>
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={3}>
-                      <Field label="L" value={itemForm.dimensions.length} onChange={(value) => updateItem("dimensions.length", value)} />
+                      <Field isDark={isDark} label="L" value={itemForm.dimensions.length} onChange={(value) => updateItem("dimensions.length", value)} />
                     </Grid>
                     <Grid item xs={12} md={3}>
-                      <Field label="W" value={itemForm.dimensions.width} onChange={(value) => updateItem("dimensions.width", value)} />
+                      <Field isDark={isDark} label="W" value={itemForm.dimensions.width} onChange={(value) => updateItem("dimensions.width", value)} />
                     </Grid>
                     <Grid item xs={12} md={3}>
-                      <Field label="H" value={itemForm.dimensions.height} onChange={(value) => updateItem("dimensions.height", value)} />
+                      <Field isDark={isDark} label="H" value={itemForm.dimensions.height} onChange={(value) => updateItem("dimensions.height", value)} />
                     </Grid>
                     <Grid item xs={12} md={3}>
-                      <Field select label="Unit" value={itemForm.dimensions.unit} onChange={(value) => updateItem("dimensions.unit", value)}>
+                      <Field isDark={isDark} select label="Unit" value={itemForm.dimensions.unit} onChange={(value) => updateItem("dimensions.unit", value)}>
                         {["cm", "mm", "inch"].map((unit) => (
                           <MenuItem key={unit} value={unit}>
                             {unit}
@@ -775,7 +1328,7 @@ function InventoryERP() {
                       </Field>
                     </Grid>
                     <Grid item xs={12}>
-                      <Field label="Weight (kg)" placeholder="e.g. 1.5" value={itemForm.weight.value} onChange={(value) => updateItem("weight.value", value)} />
+                      <Field isDark={isDark} label="Weight (kg)" placeholder="e.g. 1.5" value={itemForm.weight.value} onChange={(value) => updateItem("weight.value", value)} />
                     </Grid>
                   </Grid>
                 </SectionCard>
@@ -784,62 +1337,108 @@ function InventoryERP() {
 
             <Grid item xs={12} lg={4}>
               <Stack spacing={2}>
-                <Card sx={{ ...softCard, boxShadow: "none" }}>
+                <Card sx={{ ...getSoftCard(isDark), boxShadow: "none" }}>
                   <Stack direction="row" alignItems="center" spacing={1.5} sx={{ p: 2.5 }}>
-                    <Box sx={{ width: 34, height: 34, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: "#f1f5f9", color: "#94a3b8" }}>
+                    <Box sx={{ width: 34, height: 34, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: isDark ? "rgba(255,255,255,0.05)" : "#f1f5f9", color: isDark ? "#94a3b8" : "#94a3b8" }}>
                       <ImageOutlined />
                     </Box>
-                    <Typography fontWeight={900}>Item image</Typography>
+                    <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>Item image</Typography>
                   </Stack>
-                  <Divider />
+                  <Divider sx={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }} />
                   <Box sx={{ p: 2.5 }}>
-                    <Box sx={{ border: "2px dashed #d8dee8", borderRadius: 3, p: 4, textAlign: "center" }}>
-                      <IconButton sx={{ border: "1px solid #e5e7eb", mb: 1 }}>
-                        <ImageOutlined />
-                      </IconButton>
-                      <Typography fontWeight={900}>Upload item image</Typography>
-                      <Typography variant="body2" color="#8a94a6" sx={{ my: 1 }}>
-                        Max 2 MB - PNG, JPG, WEBP
-                      </Typography>
-                      {itemForm.image && (
-                        <Typography variant="caption" color={MUTED} sx={{ display: "block", mb: 1 }}>
-                          {itemForm.image.name}
-                        </Typography>
-                      )}
-                      <Button component="label" variant="contained" sx={{ bgcolor: BLUE, borderRadius: 2, fontWeight: 900 }}>
-                        Browse file
-                        <input
-                          hidden
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp"
-                          onChange={(event) => updateItem("image", event.target.files?.[0] || null)}
+                    {imagePreviewUrl ? (
+                      <Box sx={{ border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #e5e7eb", borderRadius: 3, p: 2, textAlign: "center", bgcolor: isDark ? "rgba(255,255,255,0.02)" : "#f8fafc" }}>
+                        <Box
+                          component="img"
+                          src={imagePreviewUrl}
+                          alt="Item Preview"
+                          sx={{
+                            width: "100%",
+                            maxHeight: 220,
+                            objectFit: "contain",
+                            borderRadius: 2,
+                            mb: 1.5,
+                            border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #cbd5e1",
+                            bgcolor: isDark ? "#000" : "#fff",
+                          }}
                         />
-                      </Button>
-                    </Box>
+                        <Typography variant="body2" fontWeight={800} sx={{ color: isDark ? "#f8fafc" : "#0f172a", wordBreak: "break-all", mb: 1.5 }}>
+                          {typeof itemForm.image === "object" && itemForm.image ? itemForm.image.name : "Item Image"}
+                        </Typography>
+                        <Stack direction="row" spacing={1} justifyContent="center">
+                          <Button component="label" size="small" variant="outlined" sx={{ borderColor: isDark ? "rgba(255,255,255,0.2)" : "#cbd5e1", color: isDark ? "#60a5fa" : BLUE, fontWeight: 800 }}>
+                            Change File
+                            <input
+                              hidden
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              onChange={(event) => {
+                                if (event.target.files?.[0]) {
+                                  updateItem("image", event.target.files[0]);
+                                }
+                              }}
+                            />
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={() => updateItem("image", null)}
+                            sx={{ fontWeight: 800 }}
+                          >
+                            Remove
+                          </Button>
+                        </Stack>
+                      </Box>
+                    ) : (
+                      <Box sx={{ border: isDark ? "2px dashed rgba(255,255,255,0.15)" : "2px dashed #d8dee8", borderRadius: 3, p: 4, textAlign: "center", bgcolor: isDark ? "rgba(255,255,255,0.02)" : "transparent" }}>
+                        <IconButton sx={{ border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #e5e7eb", color: isDark ? "#f8fafc" : "inherit", mb: 1 }}>
+                          <ImageOutlined />
+                        </IconButton>
+                        <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>Upload item image</Typography>
+                        <Typography variant="body2" color={isDark ? "#94a3b8" : "#8a94a6"} sx={{ my: 1 }}>
+                          Max 2 MB - PNG, JPG, WEBP
+                        </Typography>
+                        <Button component="label" variant="contained" sx={{ bgcolor: BLUE, borderRadius: 2, fontWeight: 900, mt: 1 }}>
+                          Browse file
+                          <input
+                            hidden
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            onChange={(event) => {
+                              if (event.target.files?.[0]) {
+                                updateItem("image", event.target.files[0]);
+                              }
+                            }}
+                          />
+                        </Button>
+                      </Box>
+                    )}
                   </Box>
                 </Card>
 
-                <SectionCard icon={<Typography fontWeight={900}>Rs</Typography>} title="Pricing" color={SUCCESS}>
+                <SectionCard isDark={isDark} icon={<Typography fontWeight={900}>Rs</Typography>} title="Pricing" color={SUCCESS} isOpen={openSection === "pricing"} onToggle={() => toggleSection("pricing")}>
                   <Stack spacing={2}>
-                    <Field label="Selling Price (Rs)" type="number" value={itemForm.pricing.sellingPrice} onChange={(value) => updateItem("pricing.sellingPrice", value)} />
-                    <Field label="Cost Price (Rs)" type="number" value={itemForm.pricing.purchaseCost} onChange={(value) => updateItem("pricing.purchaseCost", value)} />
+                    <Field isDark={isDark} label="Selling Price (Rs)" type="number" value={itemForm.pricing.sellingPrice} onChange={(value) => updateItem("pricing.sellingPrice", value)} />
+                    <Field isDark={isDark} label="Cost Price (Rs)" type="number" value={itemForm.pricing.purchaseCost} onChange={(value) => updateItem("pricing.purchaseCost", value)} />
                     <Grid container spacing={1}>
                       <Grid item xs={4}>
-                        <Field select label="Discount" value="Rs" onChange={() => {}}>
+                        <Field isDark={isDark} select label="Discount" value={itemForm.discountType || "Rs"} onChange={(val) => updateItem("discountType", val)}>
                           <MenuItem value="Rs">Rs</MenuItem>
                           <MenuItem value="%">%</MenuItem>
                         </Field>
                       </Grid>
                       <Grid item xs={8}>
-                        <Field label=" " type="number" value={itemForm.discount || 0} onChange={(value) => updateItem("discount", value)} />
+                        <Field isDark={isDark} label=" " type="number" value={itemForm.discount || 0} onChange={(value) => updateItem("discount", value)} />
                       </Grid>
                     </Grid>
                   </Stack>
                 </SectionCard>
 
-                <SectionCard icon={<UploadFileOutlined />} title="Purchase info" color="#f97316">
+                <SectionCard isDark={isDark} icon={<UploadFileOutlined />} title="Purchase info" color="#f97316" isOpen={openSection === "purchase"} onToggle={() => toggleSection("purchase")}>
                   <Stack spacing={2}>
                     <Field
+                      isDark={isDark}
                       select
                       label="Preferred Vendor"
                       value={itemForm.purchaseInfo.vendor || ""}
@@ -856,14 +1455,17 @@ function InventoryERP() {
                         </MenuItem>
                       ))}
                     </Field>
-                    <Field label="Sales Description" placeholder="Used on sales invoices..." multiline minRows={3} value={itemForm.salesDescription || ""} onChange={(value) => updateItem("salesDescription", value)} />
-                    <Field label="Purchase Description" placeholder="Used on purchase orders..." multiline minRows={3} value={itemForm.purchaseDescription || ""} onChange={(value) => updateItem("purchaseDescription", value)} />
+                    <Field isDark={isDark} label="Sales Description" placeholder="Used on sales invoices..." multiline minRows={3} value={itemForm.salesDescription || ""} onChange={(value) => updateItem("salesDescription", value)} />
+                    <Field isDark={isDark} label="Purchase Description" placeholder="Used on purchase orders..." multiline minRows={3} value={itemForm.purchaseDescription || ""} onChange={(value) => updateItem("purchaseDescription", value)} />
                   </Stack>
                 </SectionCard>
               </Stack>
             </Grid>
           </Grid>
         </Box>
+        {categoryModalNode}
+        {subCategoryModalNode}
+        {toastSnackbarNode}
       </Box>
     );
   }
@@ -873,19 +1475,19 @@ function InventoryERP() {
       !subcategorySearch || name.toLowerCase().includes(subcategorySearch.toLowerCase()),
     );
     return (
-      <Box sx={{ p: { xs: 2, md: 3.5 }, bgcolor: "#fff", minHeight: "100vh" }}>
-        <Button startIcon={<ArrowBack />} onClick={() => setScreen("categories")} sx={{ mb: 3, color: MUTED }}>
+      <Box sx={{ p: { xs: 2, md: 3.5 }, bgcolor: isDark ? "#070b14" : "#fff", minHeight: "100vh", color: isDark ? "#f8fafc" : "inherit" }}>
+        <Button startIcon={<ArrowBack />} onClick={() => setScreen("categories")} sx={{ mb: 3, color: isDark ? "#94a3b8" : MUTED }}>
           Back to Categories
         </Button>
         <Stack direction={{ xs: "column", md: "row" }} alignItems={{ xs: "stretch", md: "center" }} justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
           <Stack direction="row" alignItems="center" spacing={1.6}>
             <PageIcon icon={<ListAlt />} />
             <Box>
-              <Typography variant="h3" fontWeight={900} color="#000">
+              <Typography variant="h3" fontWeight={900} color={isDark ? "#f8fafc" : "#000"}>
                 Subcategories
               </Typography>
-              <Typography color={MUTED}>
-                Category: <Box component="span" sx={{ color: TEXT, fontWeight: 900 }}>{selectedCategoryForSub?.category || "-"}</Box>
+              <Typography color={isDark ? "#94a3b8" : MUTED}>
+                Category: <Box component="span" sx={{ color: isDark ? "#f8fafc" : TEXT, fontWeight: 900 }}>{selectedCategoryForSub?.category || "-"}</Box>
               </Typography>
             </Box>
           </Stack>
@@ -896,13 +1498,13 @@ function InventoryERP() {
 
         <Grid container spacing={2} sx={{ mb: 3 }}>
           <Grid item xs={12} md={4}>
-            <StatCard icon={<ListAlt />} label="Total Subcategories" value={selectedCategoryForSub?.subcategories?.length || 0} />
+            <StatCard isDark={isDark} icon={<ListAlt />} label="Total Subcategories" value={selectedCategoryForSub?.subcategories?.length || 0} />
           </Grid>
           <Grid item xs={12} md={4}>
-            <StatCard icon={<Inventory2 />} label="Active Subcategories" value={selectedCategoryForSub?.subcategories?.length || 0} color={SUCCESS} />
+            <StatCard isDark={isDark} icon={<Inventory2 />} label="Active Subcategories" value={selectedCategoryForSub?.subcategories?.length || 0} color={SUCCESS} />
           </Grid>
           <Grid item xs={12} md={4}>
-            <StatCard icon={<Search />} label="Filtered Results" value={subcategories.length} color="#7c3aed" />
+            <StatCard isDark={isDark} icon={<Search />} label="Filtered Results" value={subcategories.length} color="#7c3aed" />
           </Grid>
         </Grid>
 
@@ -912,21 +1514,22 @@ function InventoryERP() {
           onChange={(event) => setSubcategorySearch(event.target.value)}
           fullWidth
           InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
-          sx={{ ...inputSx, mb: 3, "& .MuiOutlinedInput-root": { ...inputSx["& .MuiOutlinedInput-root"], minHeight: 56 } }}
+          sx={{ ...getInputSx(isDark), mb: 3, "& .MuiOutlinedInput-root": { ...getInputSx(isDark)["& .MuiOutlinedInput-root"], minHeight: 56 } }}
         />
 
         <TableCard
+          isDark={isDark}
           columns={["Name", "Description", "Created", "Actions"]}
           rows={subcategories.map((name) => [
             <Stack direction="row" alignItems="center" spacing={1}>
               <ListAlt color="primary" fontSize="small" />
-              <Typography color={BLUE} fontWeight={900}>{name}</Typography>
+              <Typography color={isDark ? "#60a5fa" : BLUE} fontWeight={900}>{name}</Typography>
             </Stack>,
-            <Typography color="#94a3b8" fontStyle="italic">No description</Typography>,
+            <Typography color={isDark ? "#64748b" : "#94a3b8"} fontStyle="italic">No description</Typography>,
             selectedCategoryForSub?.updatedAt ? new Date(selectedCategoryForSub.updatedAt).toLocaleDateString() : "-",
             <Stack direction="row" spacing={0.5} justifyContent="flex-end">
               <Tooltip title="Edit">
-                <IconButton size="small" onClick={() => editSubcategory(name)} sx={{ color: BLUE }}>
+                <IconButton size="small" onClick={() => editSubcategory(name)} sx={{ color: isDark ? "#60a5fa" : BLUE }}>
                   <EditOutlined fontSize="small" />
                 </IconButton>
               </Tooltip>
@@ -940,38 +1543,41 @@ function InventoryERP() {
           empty="No subcategories found."
         />
 
-        <Paper sx={{ ...softCard, p: 2, mt: 3 }}>
+        <Paper sx={{ ...getSoftCard(isDark), p: 2, mt: 3 }}>
           <Stack direction={{ xs: "column", sm: "row" }} alignItems="center" justifyContent="space-between" spacing={2}>
             <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography color={MUTED}>Per page:</Typography>
-              <TextField select size="small" value={10} sx={{ width: 86, ...inputSx }}>
+              <Typography color={isDark ? "#94a3b8" : MUTED}>Per page:</Typography>
+              <TextField select size="small" value={10} sx={{ width: 86, ...getInputSx(isDark) }}>
                 <MenuItem value={10}>10</MenuItem>
               </TextField>
             </Stack>
-            <Typography color={MUTED}>{subcategories.length ? `1-${subcategories.length} of ${subcategories.length}` : "0 of 0"}</Typography>
+            <Typography color={isDark ? "#94a3b8" : MUTED}>{subcategories.length ? `1-${subcategories.length} of ${subcategories.length}` : "0 of 0"}</Typography>
             <Stack direction="row" spacing={1}>
-              <Button disabled variant="outlined" sx={{ borderColor: "#e5e7eb" }}>Prev</Button>
+              <Button disabled variant="outlined" sx={{ borderColor: isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb" }}>Prev</Button>
               <Button variant="contained" sx={{ bgcolor: INDIGO }}>1</Button>
-              <Button disabled variant="outlined" sx={{ borderColor: "#e5e7eb" }}>Next</Button>
+              <Button disabled variant="outlined" sx={{ borderColor: isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb" }}>Next</Button>
             </Stack>
           </Stack>
         </Paper>
+        {categoryModalNode}
+        {subCategoryModalNode}
+        {toastSnackbarNode}
       </Box>
     );
   }
 
   return (
-    <Box sx={{ p: { xs: 1.5, md: 2.5 }, bgcolor: "#fff", minHeight: "100vh" }}>
+    <Box sx={{ p: { xs: 1.5, md: 2.5 }, bgcolor: isDark ? "#070b14" : "#fff", minHeight: "100vh", color: isDark ? "#f8fafc" : "inherit" }}>
       {mode === "categories" ? (
         <Stack spacing={2.5}>
           <Stack direction={{ xs: "column", md: "row" }} alignItems={{ xs: "stretch", md: "center" }} justifyContent="space-between" spacing={2}>
             <Stack direction="row" alignItems="center" spacing={1.6}>
               <PageIcon icon={<Inventory2 />} />
               <Box>
-                <Typography variant="h3" fontWeight={900} color="#000">
+                <Typography variant="h3" fontWeight={900} color={isDark ? "#f8fafc" : "#000"}>
                   Inventory Categories
                 </Typography>
-                <Typography color={MUTED}>Organize and manage your product categories</Typography>
+                <Typography color={isDark ? "#94a3b8" : MUTED}>Organize and manage your product categories</Typography>
               </Box>
             </Stack>
             <Button startIcon={<Add />} variant="contained" onClick={startCreateCategory} sx={{ bgcolor: INDIGO, borderRadius: 2, px: 3, py: 1.2, fontWeight: 900 }}>
@@ -981,13 +1587,13 @@ function InventoryERP() {
 
           <Grid container spacing={2}>
             <Grid item xs={12} md={4}>
-              <StatCard icon={<ListAlt />} label="Total Categories" value={categoryRows.length} />
+              <StatCard isDark={isDark} icon={<ListAlt />} label="Total Categories" value={categoryRows.length} />
             </Grid>
             <Grid item xs={12} md={4}>
-              <StatCard icon={<Inventory2 />} label="Active Categories" value={categoryRows.filter((row) => row.isActive !== false).length} color={SUCCESS} />
+              <StatCard isDark={isDark} icon={<Inventory2 />} label="Active Categories" value={categoryRows.filter((row) => row.isActive !== false).length} color={SUCCESS} />
             </Grid>
             <Grid item xs={12} md={4}>
-              <StatCard icon={<Search />} label="Filtered Results" value={categoryRows.length} color="#7c3aed" />
+              <StatCard isDark={isDark} icon={<Search />} label="Filtered Results" value={categoryRows.length} color="#7c3aed" />
             </Grid>
           </Grid>
 
@@ -997,23 +1603,24 @@ function InventoryERP() {
             onChange={(event) => setCategorySearch(event.target.value)}
             fullWidth
             InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
-            sx={{ ...inputSx, "& .MuiOutlinedInput-root": { ...inputSx["& .MuiOutlinedInput-root"], minHeight: 56 } }}
+            sx={{ ...getInputSx(isDark), "& .MuiOutlinedInput-root": { ...getInputSx(isDark)["& .MuiOutlinedInput-root"], minHeight: 56 } }}
           />
 
           <TableCard
+            isDark={isDark}
             columns={["Name", "Description", "Subcategories", "Status", "Actions"]}
             rows={categoryRows.map((entry) => [
               <Stack direction="row" alignItems="center" spacing={1}>
                 <Inventory2 color="primary" fontSize="small" />
-                <Typography color={BLUE} fontWeight={900}>{entry.category}</Typography>
+                <Typography color={isDark ? "#60a5fa" : BLUE} fontWeight={900}>{entry.category}</Typography>
               </Stack>,
-              <Typography color={entry.description ? TEXT : "#94a3b8"} fontStyle={entry.description ? "normal" : "italic"}>
+              <Typography color={entry.description ? (isDark ? "#e2e8f0" : TEXT) : (isDark ? "#64748b" : "#94a3b8")} fontStyle={entry.description ? "normal" : "italic"}>
                 {entry.description || "No description"}
               </Typography>,
-              <Chip size="small" label={entry.subcategoryCount} sx={{ bgcolor: alpha("#c026d3", 0.12), color: "#8b5cf6", fontWeight: 900 }} />,
-              <Chip size="small" label={entry.isActive === false ? "Inactive" : "Active"} sx={{ bgcolor: alpha(SUCCESS, 0.14), color: "#15803d", fontWeight: 800 }} />,
+              <Chip size="small" label={entry.subcategoryCount} sx={{ bgcolor: alpha("#c026d3", isDark ? 0.25 : 0.12), color: isDark ? "#c084fc" : "#8b5cf6", fontWeight: 900 }} />,
+              <Chip size="small" label={entry.isActive === false ? "Inactive" : "Active"} sx={{ bgcolor: alpha(SUCCESS, isDark ? 0.25 : 0.14), color: isDark ? "#4ade80" : "#15803d", fontWeight: 800 }} />,
               <Tooltip title="Actions">
-                <IconButton size="small" onClick={(event) => openCategoryMenu(event, entry)}>
+                <IconButton size="small" onClick={(event) => openCategoryMenu(event, entry)} sx={{ color: isDark ? "#cbd5e1" : "inherit" }}>
                   <MoreVert fontSize="small" />
                 </IconButton>
               </Tooltip>,
@@ -1027,14 +1634,14 @@ function InventoryERP() {
             <Stack direction="row" alignItems="center" spacing={1.6}>
               <PageIcon icon={<Inventory2 />} />
               <Box>
-                <Typography variant="h3" fontWeight={900} color="#000">
+                <Typography variant="h3" fontWeight={900} color={isDark ? "#f8fafc" : "#000"}>
                   Inventory Items
                 </Typography>
-                <Typography color={MUTED}>Manage your product inventory and track stock levels</Typography>
+                <Typography color={isDark ? "#94a3b8" : MUTED}>Manage your product inventory and track stock levels</Typography>
               </Box>
             </Stack>
             <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button startIcon={<Refresh />} variant="outlined" onClick={fetchAll} sx={{ borderColor: "#e5e7eb", color: "#000", fontWeight: 800 }}>Refresh</Button>
+              <Button startIcon={<Refresh />} variant="outlined" onClick={fetchAll} sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : "#000", fontWeight: 800 }}>Refresh</Button>
               <Button
                 startIcon={<Add />}
                 variant="contained"
@@ -1050,10 +1657,10 @@ function InventoryERP() {
           </Stack>
 
           <Grid container spacing={2}>
-            <Grid item xs={12} md={3}><StatCard icon={<Inventory2 />} label="Total Items" value={summary.totalItems || items.length} /></Grid>
-            <Grid item xs={12} md={3}><StatCard icon={<TrendingUp />} label="Total Value" value={formatCurrency(summary.inventoryValue)} color={SUCCESS} /></Grid>
-            <Grid item xs={12} md={3}><StatCard icon={<ErrorOutline />} label="Low Stock" value={summary.lowStock || 0} color={WARNING} /></Grid>
-            <Grid item xs={12} md={3}><StatCard icon={<ErrorOutline />} label="Out of Stock" value={summary.outOfStock || 0} color={DANGER} /></Grid>
+            <Grid item xs={12} md={3}><StatCard isDark={isDark} icon={<Inventory2 />} label="Total Items" value={summary.totalItems || items.length} /></Grid>
+            <Grid item xs={12} md={3}><StatCard isDark={isDark} icon={<TrendingUp />} label="Total Value" value={formatCurrency(summary.inventoryValue)} color={SUCCESS} /></Grid>
+            <Grid item xs={12} md={3}><StatCard isDark={isDark} icon={<ErrorOutline />} label="Low Stock" value={summary.lowStock || 0} color={WARNING} /></Grid>
+            <Grid item xs={12} md={3}><StatCard isDark={isDark} icon={<ErrorOutline />} label="Out of Stock" value={summary.outOfStock || 0} color={DANGER} /></Grid>
           </Grid>
 
           <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems="center">
@@ -1066,18 +1673,18 @@ function InventoryERP() {
               }}
               fullWidth
               InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
-              sx={inputSx}
+              sx={getInputSx(isDark)}
             />
             <Stack direction="row" spacing={1}>
-              <IconButton sx={{ border: "1px solid #e5e7eb", bgcolor: INDIGO, color: "#fff", borderRadius: 2 }}><ListAlt /></IconButton>
-              <IconButton sx={{ border: "1px solid #e5e7eb", borderRadius: 2 }}><GridView /></IconButton>
-              <Button startIcon={<FilterAltOutlined />} variant="outlined" sx={{ borderColor: "#e5e7eb", color: "#000", fontWeight: 900 }}>Filters</Button>
+              <IconButton sx={{ border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #e5e7eb", bgcolor: INDIGO, color: "#fff", borderRadius: 2 }}><ListAlt /></IconButton>
+              <IconButton sx={{ border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #e5e7eb", color: isDark ? "#cbd5e1" : "inherit", borderRadius: 2 }}><GridView /></IconButton>
+              <Button startIcon={<FilterAltOutlined />} variant="outlined" sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : "#000", fontWeight: 900 }}>Filters</Button>
             </Stack>
           </Stack>
 
           <Stack direction="row" spacing={1} flexWrap="wrap">
-            <Chip label="Low Stock" onClick={() => setItemFilter(itemFilter === "low" ? "" : "low")} color={itemFilter === "low" ? "warning" : "default"} variant={itemFilter === "low" ? "filled" : "outlined"} sx={{ fontWeight: 800, borderRadius: 1.5 }} />
-            <Chip label="Out of Stock" onClick={() => setItemFilter(itemFilter === "out" ? "" : "out")} color={itemFilter === "out" ? "error" : "default"} variant={itemFilter === "out" ? "filled" : "outlined"} sx={{ fontWeight: 800, borderRadius: 1.5 }} />
+            <Chip label="Low Stock" onClick={() => setItemFilter(itemFilter === "low" ? "" : "low")} color={itemFilter === "low" ? "warning" : "default"} variant={itemFilter === "low" ? "filled" : "outlined"} sx={{ fontWeight: 800, borderRadius: 1.5, color: itemFilter === "low" ? undefined : isDark ? "#cbd5e1" : undefined, borderColor: itemFilter === "low" ? undefined : isDark ? "rgba(255,255,255,0.15)" : undefined }} />
+            <Chip label="Out of Stock" onClick={() => setItemFilter(itemFilter === "out" ? "" : "out")} color={itemFilter === "out" ? "error" : "default"} variant={itemFilter === "out" ? "filled" : "outlined"} sx={{ fontWeight: 800, borderRadius: 1.5, color: itemFilter === "out" ? undefined : isDark ? "#cbd5e1" : undefined, borderColor: itemFilter === "out" ? undefined : isDark ? "rgba(255,255,255,0.15)" : undefined }} />
             {categories.slice(0, 4).map((entry) => (
               <Chip
                 key={entry.category}
@@ -1088,52 +1695,53 @@ function InventoryERP() {
                 }}
                 color={itemFilter === entry.category ? "primary" : "default"}
                 variant={itemFilter === entry.category ? "filled" : "outlined"}
-                sx={{ fontWeight: 800, borderRadius: 1.5 }}
+                sx={{ fontWeight: 800, borderRadius: 1.5, color: itemFilter === entry.category ? undefined : isDark ? "#cbd5e1" : undefined, borderColor: itemFilter === entry.category ? undefined : isDark ? "rgba(255,255,255,0.15)" : undefined }}
               />
             ))}
           </Stack>
 
           <TableCard
+            isDark={isDark}
             columns={["", "Item", "Category", "Price", "HSN/SAC", "Unit", "Stock", "Status", "Actions"]}
             rows={visibleItems.map((item) => {
               const stock = getAvailableStock(item);
               const imageUrl = toBackendAssetUrl(item.imageUrl);
               return [
-                <Checkbox size="small" />,
+                <Checkbox size="small" sx={{ color: isDark ? "#64748b" : undefined }} />,
                 <Stack direction="row" spacing={1.5} alignItems="center">
-                  <Box sx={{ width: 50, height: 42, borderRadius: 1.5, bgcolor: "#f8fafc", display: "grid", placeItems: "center", color: "#94a3b8" }}>
+                  <Box sx={{ width: 50, height: 42, borderRadius: 1.5, bgcolor: isDark ? "rgba(255,255,255,0.05)" : "#f8fafc", display: "grid", placeItems: "center", color: isDark ? "#64748b" : "#94a3b8" }}>
                     {imageUrl ? <img src={imageUrl} alt={item.itemName} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} /> : <ImageOutlined />}
                   </Box>
                   <Box>
-                    <Typography fontWeight={900}>{item.itemName}</Typography>
-                    <Typography variant="body2" color={MUTED}>{item.description || item.sku}</Typography>
+                    <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{item.itemName}</Typography>
+                    <Typography variant="body2" color={isDark ? "#94a3b8" : MUTED}>{item.description || item.sku}</Typography>
                   </Box>
                 </Stack>,
                 <Stack direction="row" spacing={0.7}>
-                  <Chip size="small" label={item.category || "-"} sx={{ bgcolor: alpha(BLUE, 0.12), color: BLUE }} />
-                  {item.subcategory && <Chip size="small" label={item.subcategory} sx={{ bgcolor: "#f1f5f9" }} />}
+                  <Chip size="small" label={item.category || "-"} sx={{ bgcolor: alpha(BLUE, isDark ? 0.25 : 0.12), color: isDark ? "#60a5fa" : BLUE }} />
+                  {item.subcategory && <Chip size="small" label={item.subcategory} sx={{ bgcolor: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9", color: isDark ? "#cbd5e1" : "inherit" }} />}
                 </Stack>,
                 <Box>
-                  <Typography fontWeight={900}>{formatCurrency(item.pricing?.sellingPrice)}</Typography>
-                  <Typography variant="caption" color={MUTED}>Cost: {formatCurrency(item.pricing?.purchaseCost)}</Typography>
+                  <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{formatCurrency(item.pricing?.sellingPrice)}</Typography>
+                  <Typography variant="caption" color={isDark ? "#94a3b8" : MUTED}>Cost: {formatCurrency(item.pricing?.purchaseCost)}</Typography>
                 </Box>,
-                item.hsnSacCode || "-",
-                item.unit || "pcs",
-                <Typography fontWeight={900}>{stock} {item.unit || "pcs"}</Typography>,
-                <Chip size="small" label={stock <= 0 ? "Out" : "Active"} sx={{ bgcolor: alpha(stock <= 0 ? DANGER : SUCCESS, 0.12), color: stock <= 0 ? DANGER : SUCCESS, fontWeight: 800 }} />,
+                <Typography variant="body2" sx={{ color: isDark ? "#e2e8f0" : "inherit" }}>{item.hsnSacCode || "-"}</Typography>,
+                <Typography variant="body2" sx={{ color: isDark ? "#e2e8f0" : "inherit" }}>{item.unit || "pcs"}</Typography>,
+                <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{stock} {item.unit || "pcs"}</Typography>,
+                <Chip size="small" label={stock <= 0 ? "Out" : "Active"} sx={{ bgcolor: alpha(stock <= 0 ? DANGER : SUCCESS, isDark ? 0.25 : 0.12), color: stock <= 0 ? DANGER : isDark ? "#4ade80" : SUCCESS, fontWeight: 800 }} />,
                 <Stack direction="row" spacing={0.5}>
-                  <Tooltip title="View"><IconButton size="small" sx={{ color: BLUE }}><VisibilityOutlined fontSize="small" /></IconButton></Tooltip>
-                  <Tooltip title="Edit"><IconButton size="small" onClick={() => startEditItem(item)} sx={{ color: BLUE }}><EditOutlined fontSize="small" /></IconButton></Tooltip>
+                  <Tooltip title="View"><IconButton size="small" sx={{ color: isDark ? "#60a5fa" : BLUE }}><VisibilityOutlined fontSize="small" /></IconButton></Tooltip>
+                  <Tooltip title="Edit"><IconButton size="small" onClick={() => startEditItem(item)} sx={{ color: isDark ? "#60a5fa" : BLUE }}><EditOutlined fontSize="small" /></IconButton></Tooltip>
                   <Tooltip title="Delete"><IconButton size="small" onClick={() => deleteItem(item)} sx={{ color: DANGER }}><DeleteOutline fontSize="small" /></IconButton></Tooltip>
                 </Stack>,
               ];
             })}
             empty={loading ? "Loading inventory items..." : "No inventory items found."}
           />
-          <Paper sx={{ ...softCard, p: 2 }}>
+          <Paper sx={{ ...getSoftCard(isDark), p: 2 }}>
             <Stack direction={{ xs: "column", sm: "row" }} alignItems="center" justifyContent="space-between" spacing={2}>
               <Stack direction="row" alignItems="center" spacing={1}>
-                <Typography color={MUTED}>Per page:</Typography>
+                <Typography color={isDark ? "#94a3b8" : MUTED}>Per page:</Typography>
                 <TextField
                   select
                   size="small"
@@ -1142,22 +1750,22 @@ function InventoryERP() {
                     setPageSize(Number(event.target.value));
                     setPage(1);
                   }}
-                  sx={{ width: 86, ...inputSx }}
+                  sx={{ width: 86, ...getInputSx(isDark) }}
                 >
                   {[10, 20, 50, 100].map((size) => (
                     <MenuItem key={size} value={size}>{size}</MenuItem>
                   ))}
                 </TextField>
               </Stack>
-              <Typography color={MUTED}>
+              <Typography color={isDark ? "#94a3b8" : MUTED}>
                 {pagination.total ? `${(pagination.page - 1) * pagination.limit + 1}-${Math.min(pagination.page * pagination.limit, pagination.total)} of ${pagination.total}` : "0 of 0"}
               </Typography>
               <Stack direction="row" spacing={1}>
-                <Button disabled={page <= 1} onClick={() => setPage((prev) => Math.max(prev - 1, 1))} variant="outlined" sx={{ borderColor: "#e5e7eb" }}>
+                <Button disabled={page <= 1} onClick={() => setPage((prev) => Math.max(prev - 1, 1))} variant="outlined" sx={{ borderColor: isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : undefined }}>
                   Prev
                 </Button>
                 <Button variant="contained" sx={{ bgcolor: INDIGO }}>{page}</Button>
-                <Button disabled={page >= pagination.pages} onClick={() => setPage((prev) => prev + 1)} variant="outlined" sx={{ borderColor: "#e5e7eb" }}>
+                <Button disabled={page >= pagination.pages} onClick={() => setPage((prev) => prev + 1)} variant="outlined" sx={{ borderColor: isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : undefined }}>
                   Next
                 </Button>
               </Stack>
@@ -1175,8 +1783,10 @@ function InventoryERP() {
             mt: 1,
             width: 220,
             borderRadius: 2,
-            boxShadow: "0 12px 30px rgba(15,23,42,0.18)",
-            border: "1px solid #e5e7eb",
+            bgcolor: isDark ? "#121929" : "#fff",
+            color: isDark ? "#f8fafc" : "inherit",
+            boxShadow: isDark ? "0 12px 30px rgba(0,0,0,0.6)" : "0 12px 30px rgba(15,23,42,0.18)",
+            border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e5e7eb",
           },
         }}
       >
@@ -1194,20 +1804,20 @@ function InventoryERP() {
         </MenuItem>
       </Menu>
 
-      <Snackbar open={toast.open} autoHideDuration={3500} onClose={() => setToast((prev) => ({ ...prev, open: false }))}>
-        <Alert severity={toast.severity} variant="filled" sx={{ color: "#fff" }}>{toast.message}</Alert>
-      </Snackbar>
+      {categoryModalNode}
+      {subCategoryModalNode}
+      {toastSnackbarNode}
     </Box>
   );
 }
 
-const TableCard = ({ columns, rows, empty }) => (
-  <TableContainer component={Paper} sx={{ ...softCard, overflow: "hidden" }}>
+const TableCard = ({ columns, rows, empty, isDark = false }) => (
+  <TableContainer component={Paper} sx={{ ...getSoftCard(isDark), overflow: "hidden" }}>
     <Table>
-      <TableHead sx={{ bgcolor: "#f8f8f9" }}>
+      <TableHead sx={{ bgcolor: isDark ? "#121929" : "#f8f8f9" }}>
         <TableRow>
           {columns.map((column) => (
-            <TableCell key={column} sx={{ py: 2, color: "#596275", fontWeight: 900, textTransform: "uppercase", fontSize: 12 }}>
+            <TableCell key={column} sx={{ py: 2, color: isDark ? "#cbd5e1" : "#596275", fontWeight: 900, textTransform: "uppercase", fontSize: 12, borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined }}>
               {column}
             </TableCell>
           ))}
@@ -1216,15 +1826,15 @@ const TableCard = ({ columns, rows, empty }) => (
       <TableBody>
         {rows.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={columns.length}>
-              <Typography align="center" color={MUTED} sx={{ py: 4 }}>{empty}</Typography>
+            <TableCell colSpan={columns.length} sx={{ borderBottom: "none" }}>
+              <Typography align="center" color={isDark ? "#94a3b8" : MUTED} sx={{ py: 4 }}>{empty}</Typography>
             </TableCell>
           </TableRow>
         ) : (
           rows.map((row, index) => (
-            <TableRow key={index} hover>
+            <TableRow key={index} hover sx={{ "&:hover": { bgcolor: isDark ? "rgba(255,255,255,0.03) !important" : undefined } }}>
               {row.map((cell, cellIndex) => (
-                <TableCell key={`${index}-${cellIndex}`} sx={{ py: 2.2 }}>
+                <TableCell key={`${index}-${cellIndex}`} sx={{ py: 2.2, borderBottom: isDark ? "1px solid rgba(255,255,255,0.05)" : undefined, color: isDark ? "#e2e8f0" : undefined }}>
                   {cell}
                 </TableCell>
               ))}

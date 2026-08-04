@@ -50,12 +50,14 @@ const MainLayout = ({ children }) => {
     return drawerOpen ? `calc(100% - ${sidebarWidth}px)` : `calc(100% - ${collapsedWidth}px)`;
   };
 
+  const isDark = theme.palette.mode === "dark";
+
   return (
     <Box
       sx={{
         display: "flex",
         minHeight: "100vh",
-        bgcolor: "#f8f9fa",
+        bgcolor: isDark ? "#050811" : "#f8f9fa",
         overflow: "hidden",
         position: "relative",
       }}
@@ -99,7 +101,7 @@ const MainLayout = ({ children }) => {
           overflowY: "auto",
           overflowX: "hidden",
           height: "100vh",
-          bgcolor: "#f8f9fa",
+          bgcolor: isDark ? "#050811" : "#f8f9fa",
           display: "flex",
           justifyContent: "flex-start",
         }}

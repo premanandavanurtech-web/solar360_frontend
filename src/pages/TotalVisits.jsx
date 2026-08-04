@@ -445,6 +445,8 @@ const SITE_SURVEY_FIELDS = [
 
 // ========== STATUS PILL ==========
 const StatusPill = ({ status }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const cfg = getStatusConfig(status);
   return (
     <Box sx={{
@@ -462,6 +464,8 @@ const StatusPill = ({ status }) => {
 };
 
 const VisitStatusBlock = ({ visit, alignItems = "flex-start" }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const info = visit?.visitStatusInfo || buildVisitStatusInfo(visit);
 
   return (
@@ -492,6 +496,8 @@ const MobileFilterDrawer = ({
   handleClearFilters, dateFilterError, searchQuery, setSearchQuery,
   sortConfig, setSortConfig, viewMode, setViewMode, activeFilterCount,
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const [expandedSection, setExpandedSection] = useState("search");
   const toggleSection = (s) => setExpandedSection(expandedSection === s ? null : s);
 
@@ -520,7 +526,7 @@ const MobileFilterDrawer = ({
             <Typography variant="h6" fontWeight={700} sx={{ background: GRAD_MAIN, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
               Filter Visits
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
               {activeFilterCount} active filter{activeFilterCount !== 1 && "s"}
             </Typography>
           </Box>
@@ -677,6 +683,8 @@ const MobileFilterDrawer = ({
 
 // ========== MOBILE VISIT CARD ==========
 const MobileVisitCard = ({ visit, onView, onOpenLead }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const [expanded, setExpanded] = useState(false);
   const visitStatusConfig = getStatusConfig(visit.visitStatus);
   const initials = getInitials(visit.firstName, visit.lastName);
@@ -702,7 +710,7 @@ const MobileVisitCard = ({ visit, onView, onOpenLead }) => {
               <Typography variant="subtitle1" fontWeight={700} sx={{ color: PRIMARY }}>
                 {visit.firstName} {visit.lastName}
               </Typography>
-              <Typography variant="caption" color="text.secondary">ID: {visit._id?.slice(-8) || "N/A"}</Typography>
+              <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>ID: {visit._id?.slice(-8) || "N/A"}</Typography>
             </Box>
           </Box>
           <IconButton size="small" onClick={() => setExpanded(!expanded)}
@@ -773,6 +781,7 @@ const MobileVisitCard = ({ visit, onView, onOpenLead }) => {
 // ========== VIEW MODAL ==========
 const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackbar }) => {
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [activeTab, setActiveTab] = useState(0);
   const userRoleConfig = useMemo(() => getRoleConfig(userRole), [userRole]);
@@ -784,8 +793,9 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
 
   const infoSectionSx = {
     p: 2.5, borderRadius: 3,
-    background: GRAD_CARD,
-    border: `1px solid ${alpha(ACCENT, 0.18)}`,
+    background: isDark ? "#0b0e1a" : GRAD_CARD,
+    border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${alpha(ACCENT, 0.18)}`,
+    color: isDark ? "#f8fafc" : "inherit",
     mb: 2,
   };
   const infoSectionTitleSx = {
@@ -795,7 +805,7 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
   };
   const infoRowSx = {
     display: "flex", justifyContent: "space-between", alignItems: "center",
-    py: 0.9, borderBottom: `0.5px solid ${alpha(ACCENT, 0.1)}`,
+    py: 0.9, borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : `0.5px solid ${alpha(ACCENT, 0.1)}`,
     "&:last-child": { borderBottom: "none", pb: 0 },
   };
 
@@ -808,15 +818,15 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
             <Typography sx={infoSectionTitleSx}><Person sx={{ fontSize: 16 }} /> Personal information</Typography>
             <Stack>
               <Box sx={infoRowSx}>
-                <Typography variant="body2" color="text.secondary">Full name</Typography>
+                <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Full name</Typography>
                 <Typography variant="body2" fontWeight={600}>{visit.firstName} {visit.lastName}</Typography>
               </Box>
               <Box sx={infoRowSx}>
-                <Typography variant="body2" color="text.secondary">Email</Typography>
+                <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Email</Typography>
                 <Typography variant="body2" sx={{ wordBreak: "break-all" }}>{visit.email || "Not set"}</Typography>
               </Box>
               <Box sx={infoRowSx}>
-                <Typography variant="body2" color="text.secondary">Phone</Typography>
+                <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Phone</Typography>
                 <Typography variant="body2">{visit.phone || "Not set"}</Typography>
               </Box>
             </Stack>
@@ -825,11 +835,11 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
             <Typography sx={infoSectionTitleSx}><CalendarToday sx={{ fontSize: 16 }} /> Visit information</Typography>
             <Stack>
               <Box sx={infoRowSx}>
-                <Typography variant="body2" color="text.secondary">Visit status</Typography>
+                <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Visit status</Typography>
                 <VisitStatusBlock visit={visit} alignItems="flex-end" />
               </Box>
               <Box sx={infoRowSx}>
-                <Typography variant="body2" color="text.secondary">Visit date</Typography>
+                <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Visit date</Typography>
                 <Typography variant="body2" fontWeight={500}>
                   {getVisitDisplayDate(visit)}
                   {" · "}
@@ -856,11 +866,11 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
               <Typography sx={infoSectionTitleSx}><LocationOn sx={{ fontSize: 16 }} /> GPS coordinates</Typography>
               <Stack>
                 <Box sx={infoRowSx}>
-                  <Typography variant="body2" color="text.secondary">Latitude</Typography>
+                  <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Latitude</Typography>
                   <Typography variant="body2" fontWeight={500}>{visitCoordinates.lat}</Typography>
                 </Box>
                 <Box sx={infoRowSx}>
-                  <Typography variant="body2" color="text.secondary">Longitude</Typography>
+                  <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Longitude</Typography>
                   <Typography variant="body2" fontWeight={500}>{visitCoordinates.lng}</Typography>
                 </Box>
               </Stack>
@@ -872,7 +882,7 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
               <Stack>
                 {visit.checkInTime && (
                   <Box sx={infoRowSx}>
-                    <Typography variant="body2" color="text.secondary">Check-in</Typography>
+                    <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Check-in</Typography>
                     <Typography variant="body2" fontWeight={500}>
                       {formatDate(visit.checkInTime, "dd MMM yyyy · hh:mm a")}
                     </Typography>
@@ -880,7 +890,7 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
                 )}
                 {visit.checkOutTime && (
                   <Box sx={infoRowSx}>
-                    <Typography variant="body2" color="text.secondary">Check-out</Typography>
+                    <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Check-out</Typography>
                     <Typography variant="body2" fontWeight={500}>
                       {formatDate(visit.checkOutTime, "dd MMM yyyy · hh:mm a")}
                     </Typography>
@@ -888,7 +898,7 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
                 )}
                 {visit.timeSpentMinutes ? (
                   <Box sx={infoRowSx}>
-                    <Typography variant="body2" color="text.secondary">Time spent</Typography>
+                    <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Time spent</Typography>
                     <Typography variant="body2" fontWeight={500}>{visit.timeSpentMinutes} min</Typography>
                   </Box>
                 ) : null}
@@ -931,19 +941,19 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
             <Typography sx={infoSectionTitleSx}><Info sx={{ fontSize: 16 }} /> Survey summary</Typography>
             <Stack>
               <Box sx={infoRowSx}>
-                <Typography variant="body2" color="text.secondary">Saved on</Typography>
+                <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Saved on</Typography>
                 <Typography variant="body2" fontWeight={500}>
                   {formatDate(siteSurvey.savedAt, "dd MMM yyyy · hh:mm a")}
                 </Typography>
               </Box>
               <Box sx={infoRowSx}>
-                <Typography variant="body2" color="text.secondary">Location</Typography>
+                <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Location</Typography>
                 <Typography variant="body2" fontWeight={500}>
                   {siteSurvey.locationName || visit.visitLocation || "—"}
                 </Typography>
               </Box>
               <Box sx={infoRowSx}>
-                <Typography variant="body2" color="text.secondary">Status</Typography>
+                <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Status</Typography>
                 <Typography variant="body2" fontWeight={500}>
                   {siteSurvey.status || "Completed"}
                 </Typography>
@@ -964,7 +974,7 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
                       border: `1px solid ${alpha(ACCENT, 0.08)}`,
                     }}
                   >
-                    <Typography variant="caption" color="text.secondary">{label}</Typography>
+                    <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>{label}</Typography>
                     <Typography variant="body2" fontWeight={600} sx={{ mt: 0.35 }}>
                       {formatSurveyValue(surveyGeneral[key])}
                     </Typography>
@@ -1024,17 +1034,17 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
           <Typography sx={infoSectionTitleSx}><AccessTime sx={{ fontSize: 16 }} /> Activity timeline</Typography>
           <Stack>
             <Box sx={infoRowSx}>
-              <Typography variant="body2" color="text.secondary">Created</Typography>
+              <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Created</Typography>
               <Stack alignItems="flex-end">
                 <Typography variant="body2" fontWeight={500}>{formatDate(visit.createdAt, "dd MMM yyyy")}</Typography>
-                <Typography variant="caption" color="text.secondary">{formatDate(visit.createdAt, "hh:mm a")}</Typography>
+                <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>{formatDate(visit.createdAt, "hh:mm a")}</Typography>
               </Stack>
             </Box>
             <Box sx={infoRowSx}>
-              <Typography variant="body2" color="text.secondary">Last updated</Typography>
+              <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Last updated</Typography>
               <Stack alignItems="flex-end">
                 <Typography variant="body2" fontWeight={500}>{formatDate(visit.updatedAt, "dd MMM yyyy")}</Typography>
-                <Typography variant="caption" color="text.secondary">{formatDate(visit.updatedAt, "hh:mm a")}</Typography>
+                <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>{formatDate(visit.updatedAt, "hh:mm a")}</Typography>
               </Stack>
             </Box>
           </Stack>
@@ -1045,9 +1055,9 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth fullScreen={isMobile}
-      PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px", maxHeight: isMobile ? "100%" : "90vh", margin: isMobile ? 0 : 3 } }}
+      PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px", maxHeight: isMobile ? "100%" : "90vh", margin: isMobile ? 0 : 3, bgcolor: isDark ? "#050811" : "#fff", color: isDark ? "#f8fafc" : "inherit", border: isDark ? "1px solid rgba(255,255,255,0.08)" : "none" } }}
       TransitionComponent={isMobile ? Slide : Fade} transitionDuration={300}>
-      <DialogTitle sx={{ background: GRAD_MAIN, color: "white", pb: 2, px: { xs: 2, sm: 3 } }}>
+      <DialogTitle sx={{ background: isDark ? "#0e1220" : GRAD_MAIN, color: "white", pb: 2, px: { xs: 2, sm: 3 }, borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : "none" }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between">
           <Box display="flex" alignItems="center" gap={2}>
             <Avatar sx={{
@@ -1073,10 +1083,10 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
       </DialogTitle>
 
       <DialogContent sx={{ p: 0 }}>
-        <Box sx={{ borderBottom: 1, borderColor: "divider", background: GRAD_CARD }}>
+        <Box sx={{ borderBottom: 1, borderColor: isDark ? "rgba(255,255,255,0.08)" : "divider", background: isDark ? "#0e1220" : GRAD_CARD }}>
           <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto"
             sx={{
-              "& .MuiTab-root": { minHeight: { xs: 48, sm: 54 }, fontSize: { xs: "0.75rem", sm: "0.85rem" }, fontWeight: 600, textTransform: "none" },
+              "& .MuiTab-root": { minHeight: { xs: 48, sm: 54 }, fontSize: { xs: "0.75rem", sm: "0.85rem" }, fontWeight: 600, textTransform: "none", color: isDark ? "#94a3b8" : "inherit", "&.Mui-selected": { color: isDark ? "#60a5fa" : "inherit" } },
               "& .MuiTabs-indicator": { background: GRAD_BLUE, height: 3, borderRadius: "3px 3px 0 0" },
             }}>
             {tabs.map((tab, i) => (
@@ -1089,7 +1099,7 @@ const ViewVisitModal = React.memo(({ open, onClose, visit, userRole, showSnackba
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ p: { xs: 2, sm: 3 }, pt: { xs: 1.5, sm: 2 }, borderTop: 1, borderColor: "divider", background: GRAD_CARD }}>
+      <DialogActions sx={{ p: { xs: 2, sm: 3 }, pt: { xs: 1.5, sm: 2 }, borderTop: 1, borderColor: isDark ? "rgba(255,255,255,0.08)" : "divider", background: isDark ? "#0e1220" : GRAD_CARD }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" width="100%">
           <Chip
             label={userRoleConfig.label} icon={userRoleConfig.icon} size="small"
@@ -1149,6 +1159,7 @@ const EmptyState = ({ onClearFilters, hasFilters }) => (
 // ========== MAIN COMPONENT ==========
 export default function TotalVisitsPage() {
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const navigate = useNavigate();
   const { fetchAPI, getUserRole } = useAuth();
   const userRole = getUserRole();
@@ -1503,10 +1514,10 @@ export default function TotalVisitsPage() {
 
   const SortableHeader = ({ label, sortKey }) => (
     <TableCell onClick={() => handleSort(sortKey)} sx={{
-      background: "linear-gradient(180deg,#f8faff 0%,#f0f6ff 100%)",
+      background: isDark ? "#0e1220" : "linear-gradient(180deg,#f8faff 0%,#f0f6ff 100%)",
       fontWeight: 700, py: 1.75, cursor: sortKey ? "pointer" : "default",
       fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em",
-      color: sortConfig.key === sortKey ? ACCENT : "text.secondary",
+      color: sortConfig.key === sortKey ? (isDark ? "#60a5fa" : ACCENT) : (isDark ? "#94a3b8" : "text.secondary"),
       userSelect: "none",
       "&:first-of-type": { pl: 3 }, "&:last-of-type": { pr: 3 },
       "&:hover": sortKey ? { color: ACCENT } : {},
@@ -1550,13 +1561,14 @@ export default function TotalVisitsPage() {
         </Alert>
       </Snackbar>
 
-      <Box ref={containerRef} sx={{ p: { xs: 1.5, sm: 2, md: 3 }, minHeight: "100vh", pb: { xs: 10, sm: 3 }, bgcolor: "#f0f4fa" }}>
+      <Box ref={containerRef} sx={{ p: { xs: 1.5, sm: 2, md: 3 }, pb: { xs: 10, sm: 3 }, bgcolor: isDark ? "#050811" : "#f0f4fa" }}>
 
         {/* ── HEADER ── */}
         <Paper elevation={0} sx={{
-          p: { xs: 2, sm: 2.5, md: 3 }, mb: 2.5, borderRadius: "20px",
-          background: GRAD_MAIN, color: "#fff",
-          boxShadow: "0 8px 32px rgba(15,31,61,.22)",
+          p: { xs: 2, sm: 2.5, md: 3 }, mb: 2.5, borderRadius: "16px",
+          background: isDark ? "#0b0e1a" : GRAD_MAIN, color: "#fff",
+          border: isDark ? "1px solid rgba(255,255,255,0.08)" : "none",
+          boxShadow: isDark ? "0 4px 20px rgba(0,0,0,0.4)" : "0 8px 32px rgba(15,31,61,.22)",
         }}>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }}>
             <Box>
@@ -1566,7 +1578,7 @@ export default function TotalVisitsPage() {
             <Box sx={{ display: "flex", gap: 1 }}>
               {isMobile && (
                 <Button variant="contained" startIcon={<FilterAlt />} onClick={() => setMobileFilterOpen(true)} size="small"
-                  sx={{ bgcolor: "rgba(255,255,255,0.18)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "10px", "&:hover": { bgcolor: "rgba(255,255,255,0.28)" } }}>
+                  sx={{ bgcolor: isDark ? "#ea580c" : "rgba(255,255,255,0.18)", color: "#fff", border: isDark ? "none" : "1px solid rgba(255,255,255,0.25)", borderRadius: "10px", "&:hover": { bgcolor: isDark ? "#c2410c" : "rgba(255,255,255,0.28)" } }}>
                   <Badge badgeContent={activeFilterCount} color="error">Filter</Badge>
                 </Button>
               )}
@@ -1584,10 +1596,10 @@ export default function TotalVisitsPage() {
             <Grid item xs={6} sm={6} md={3} key={card.key}>
               <Fade in timeout={400 + i * 100}>
                 <Paper elevation={0} sx={{
-                  borderRadius: "18px", overflow: "hidden",
-                  border: "1px solid rgba(15,31,61,.07)",
-                  boxShadow: "0 4px 20px rgba(15,31,61,.08)",
-                  bgcolor: "#fff", height: "100%",
+                  borderRadius: "16px", overflow: "hidden",
+                  border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(15,31,61,.07)",
+                  boxShadow: isDark ? "0 4px 20px rgba(0,0,0,0.3)" : "0 4px 20px rgba(15,31,61,.08)",
+                  bgcolor: isDark ? "#0b0e1a" : "#fff", height: "100%", color: isDark ? "#f8fafc" : "inherit",
                   transition: "transform .2s, box-shadow .2s",
                   "&:hover": { transform: "translateY(-3px)", boxShadow: "0 10px 30px rgba(15,31,61,.13)" },
                 }}>
@@ -1601,13 +1613,13 @@ export default function TotalVisitsPage() {
                     }}>
                       {React.cloneElement(card.icon, { sx: { fontSize: { xs: 18, sm: 20 } } })}
                     </Box>
-                    <Typography sx={{ fontSize: { xs: "1.8rem", sm: "2.2rem" }, fontWeight: 700, color: PRIMARY, lineHeight: 1, mb: 0.4 }}>
+                    <Typography sx={{ fontSize: { xs: "1.8rem", sm: "2.2rem" }, fontWeight: 700, color: isDark ? "#f8fafc" : PRIMARY, lineHeight: 1, mb: 0.4 }}>
                       {summary[card.key]}
                     </Typography>
-                    <Typography variant="subtitle2" fontWeight={600} sx={{ color: PRIMARY, fontSize: { xs: "0.85rem", sm: "0.95rem" }, mb: 0.4 }}>
+                    <Typography variant="subtitle2" fontWeight={600} sx={{ color: isDark ? "#f8fafc" : PRIMARY, fontSize: { xs: "0.85rem", sm: "0.95rem" }, mb: 0.4 }}>
                       {card.label}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: "text.secondary", fontSize: { xs: "0.72rem", sm: "0.82rem" }, lineHeight: 1.4 }}>
+                    <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary", fontSize: { xs: "0.72rem", sm: "0.82rem" }, lineHeight: 1.4 }}>
                       {card.subText}
                     </Typography>
                   </Box>
@@ -1619,10 +1631,10 @@ export default function TotalVisitsPage() {
 
         {/* ── VISIT PIPELINE ── */}
         <Paper elevation={0} sx={{
-          mb: 2.5, borderRadius: "18px", border: "1px solid rgba(15,31,61,.07)",
-          boxShadow: "0 4px 20px rgba(15,31,61,.06)", bgcolor: "#fff", overflow: "hidden",
+          mb: 2.5, borderRadius: "16px", border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(15,31,61,.07)",
+          boxShadow: isDark ? "0 4px 20px rgba(0,0,0,0.3)" : "0 4px 20px rgba(15,31,61,.06)", bgcolor: isDark ? "#0b0e1a" : "#fff", overflow: "hidden", color: isDark ? "#f8fafc" : "inherit",
         }}>
-          <Box sx={{ px: 2.5, pt: 2, pb: 1.5, background: GRAD_CARD, borderBottom: `1px solid ${alpha(ACCENT, 0.12)}` }}>
+          <Box sx={{ px: 2.5, pt: 2, pb: 1.5, background: isDark ? "#0e1220" : GRAD_CARD, borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${alpha(ACCENT, 0.12)}` }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Typography sx={{ fontSize: "11.5px", fontWeight: 700, color: ACCENT, textTransform: "uppercase", letterSpacing: ".08em" }}>
                 Visit Pipeline
@@ -1639,7 +1651,7 @@ export default function TotalVisitsPage() {
           </Box>
           <Box sx={{ p: 2, display: "grid", gridTemplateColumns: { xs: "1fr", md: "110px 1fr" }, gap: 2, alignItems: "center" }}>
             <Box sx={{
-              background: GRAD_DARK, borderRadius: "14px", color: "#fff",
+              background: isDark ? "#0e1220" : GRAD_DARK, borderRadius: "14px", color: "#fff", border: isDark ? "1.5px solid #2563eb" : "none",
               textAlign: "center", py: 2.5, px: 1.5,
               boxShadow: "0 4px 16px rgba(15,31,61,.2)",
             }}>
@@ -1650,15 +1662,15 @@ export default function TotalVisitsPage() {
               {visitPipeline.map((stage) => (
                 <Grid item xs={4} key={stage.key}>
                   <Box sx={{
-                    borderRadius: "12px", p: 1.75, border: `1px solid ${stage.border}`,
-                    background: stage.gradBg, minHeight: 76,
+                    borderRadius: "12px", p: 1.75, border: isDark ? `1.5px solid ${stage.dotColor}` : `1px solid ${stage.border}`,
+                    background: isDark ? "#0e1220" : stage.gradBg, minHeight: 76,
                     display: "flex", flexDirection: "column", justifyContent: "space-between",
                   }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Typography sx={{ fontSize: "12.5px", fontWeight: 600, color: alpha(PRIMARY, 0.8) }}>{stage.label}</Typography>
+                      <Typography sx={{ fontSize: "12.5px", fontWeight: 600, color: isDark ? "#f8fafc" : alpha(PRIMARY, 0.8) }}>{stage.label}</Typography>
                       <Box sx={{ width: 12, height: 12, borderRadius: "50%", border: `2px solid ${stage.dotColor}`, bgcolor: "#fff" }} />
                     </Stack>
-                    <Typography sx={{ fontSize: { xs: "1.6rem", sm: "1.9rem" }, fontWeight: 500, color: alpha(PRIMARY, 0.85), lineHeight: 1, mt: 1 }}>
+                    <Typography sx={{ fontSize: { xs: "1.6rem", sm: "1.9rem" }, fontWeight: 700, color: isDark ? "#f8fafc" : alpha(PRIMARY, 0.85), lineHeight: 1, mt: 1 }}>
                       {stage.value}
                     </Typography>
                   </Box>
@@ -1670,7 +1682,7 @@ export default function TotalVisitsPage() {
 
         {/* ── DESKTOP FILTERS ── */}
         {!isMobile && (
-          <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, borderRadius: "18px", border: "1px solid rgba(15,31,61,.07)", boxShadow: "0 4px 20px rgba(15,31,61,.06)", bgcolor: "#fff" }}>
+          <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, borderRadius: "16px", border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(15,31,61,.07)", boxShadow: isDark ? "0 4px 20px rgba(0,0,0,0.3)" : "0 4px 20px rgba(15,31,61,.06)", bgcolor: isDark ? "#0b0e1a" : "#fff", color: isDark ? "#f8fafc" : "inherit" }}>
             <Stack spacing={2}>
               <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
                 <TextField
@@ -1684,16 +1696,16 @@ export default function TotalVisitsPage() {
                       </InputAdornment>
                     ),
                   }}
-                  sx={{ maxWidth: 380, flex: 1, "& .MuiOutlinedInput-root": { borderRadius: "10px" } }}
+                  sx={{ maxWidth: 380, flex: 1, "& .MuiOutlinedInput-root": { borderRadius: "10px", bgcolor: isDark ? "#0e1220" : "#fff", color: isDark ? "#f8fafc" : "inherit", "& fieldset": { borderColor: isDark ? "rgba(255,255,255,0.12)" : "inherit" } } }}
                 />
 
                 <Stack direction="row" spacing={0.75}>
                   {PERIOD_OPTIONS.map((opt) => (
                     <Box key={opt.value} onClick={() => setPeriod(opt.value)} sx={{
                       px: 1.5, py: 0.75, borderRadius: "20px", cursor: "pointer", fontSize: "13px", fontWeight: 500,
-                      border: `1px solid ${period === opt.value ? "transparent" : alpha(PRIMARY, 0.2)}`,
-                      background: period === opt.value ? GRAD_BLUE : "transparent",
-                      color: period === opt.value ? "#fff" : "text.secondary",
+                      border: `1px solid ${period === opt.value ? "transparent" : (isDark ? "rgba(255,255,255,0.12)" : alpha(PRIMARY, 0.2))}`,
+                      background: period === opt.value ? (isDark ? "#2563eb" : GRAD_BLUE) : (isDark ? "#0e1220" : "transparent"),
+                      color: period === opt.value ? "#fff" : (isDark ? "#94a3b8" : "text.secondary"),
                       boxShadow: period === opt.value ? "0 2px 8px rgba(37,99,235,.25)" : "none",
                       transition: "all .15s",
                     }}>
@@ -1764,7 +1776,7 @@ export default function TotalVisitsPage() {
 
               {activeFilterCount > 0 && (
                 <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
-                  <Typography variant="caption" color="text.secondary">Active filters:</Typography>
+                  <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Active filters:</Typography>
                   {searchQuery && (
                     <Chip label={`Search: ${searchQuery}`} size="small" onDelete={() => setSearchQuery("")}
                       sx={{ background: "linear-gradient(135deg,#dbeafe,#eff6ff)", color: "#1d4ed8", border: `1px solid ${alpha(ACCENT, 0.2)}` }} />
@@ -1790,14 +1802,14 @@ export default function TotalVisitsPage() {
         )}
 
         {/* ── MAIN TABLE / CARD LIST ── */}
-        <Paper elevation={0} sx={{ borderRadius: "18px", overflow: "hidden", border: "1px solid rgba(15,31,61,.07)", boxShadow: "0 4px 20px rgba(15,31,61,.06)" }}>
+        <Paper elevation={0} sx={{ borderRadius: "16px", overflow: "hidden", border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(15,31,61,.07)", boxShadow: isDark ? "0 4px 20px rgba(0,0,0,0.3)" : "0 4px 20px rgba(15,31,61,.06)", bgcolor: isDark ? "#0b0e1a" : "#fff" }}>
           {/* Table Header */}
           <Box sx={{
-            px: 2.5, py: 2, background: GRAD_CARD,
-            borderBottom: `1px solid ${alpha(ACCENT, 0.12)}`,
+            px: 2.5, py: 2, background: isDark ? "#0e1220" : GRAD_CARD,
+            borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${alpha(ACCENT, 0.12)}`,
             display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1.5,
           }}>
-            <Typography variant="h6" fontWeight={700} sx={{ color: PRIMARY, fontSize: { xs: "0.95rem", sm: "1.1rem" } }}>
+            <Typography variant="h6" fontWeight={700} sx={{ color: isDark ? "#f8fafc" : PRIMARY, fontSize: { xs: "0.95rem", sm: "1.1rem" } }}>
               Visit Records
               <Box component="span" sx={{
                 ml: 1, px: 1.25, py: 0.3, borderRadius: "20px",
@@ -1809,7 +1821,7 @@ export default function TotalVisitsPage() {
             </Typography>
             {!isMobile && (
               <Stack direction="row" spacing={1.5} alignItems="center">
-                <Typography variant="body2" color="text.secondary">Rows per page:</Typography>
+                <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Rows per page:</Typography>
                 <Select size="small" value={rowsPerPage} onChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
                   sx={{ minWidth: 80, "& .MuiOutlinedInput-root": { borderRadius: "8px" } }}>
                   {ITEMS_PER_PAGE_OPTIONS.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
@@ -1820,25 +1832,25 @@ export default function TotalVisitsPage() {
 
           {/* TABLE VIEW */}
           {viewMode === "table" && !isMobile ? (
-            <TableContainer sx={{ maxHeight: "70vh", overflow: "auto", position: "relative", bgcolor: "#fff" }}>
+            <TableContainer sx={{ maxHeight: "70vh", overflow: "auto", position: "relative", bgcolor: isDark ? "#0b0e1a" : "#fff" }}>
               {loading && allVisits.length > 0 && <LinearProgress sx={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 2 }} />}
               <Table stickyHeader>
                 <TableHead>
                   <TableRow>
                     <SortableHeader label="Customer" sortKey="firstName" />
                     <SortableHeader label="Date & Time" sortKey="visitDate" />
-                    <TableCell sx={{ background: "linear-gradient(180deg,#f8faff,#f0f6ff)", fontWeight: 700, fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em", color: "text.secondary", py: 1.75 }}>Location</TableCell>
+                    <TableCell sx={{ background: isDark ? "#0e1220" : "linear-gradient(180deg,#f8faff,#f0f6ff)", fontWeight: 700, fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em", color: "text.secondary", py: 1.75 }}>Location</TableCell>
                     <SortableHeader label="Status" sortKey="visitStatus" />
-                    <TableCell sx={{ background: "linear-gradient(180deg,#f8faff,#f0f6ff)", fontWeight: 700, fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em", color: "text.secondary", py: 1.75 }}>Assigned To</TableCell>
-                    <TableCell sx={{ background: "linear-gradient(180deg,#f8faff,#f0f6ff)", fontWeight: 700, fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em", color: "text.secondary", py: 1.75, pr: 3 }}>Actions</TableCell>
+                    <TableCell sx={{ background: isDark ? "#0e1220" : "linear-gradient(180deg,#f8faff,#f0f6ff)", fontWeight: 700, fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em", color: "text.secondary", py: 1.75 }}>Assigned To</TableCell>
+                    <TableCell sx={{ background: isDark ? "#0e1220" : "linear-gradient(180deg,#f8faff,#f0f6ff)", fontWeight: 700, fontSize: "11.5px", textTransform: "uppercase", letterSpacing: ".06em", color: "text.secondary", py: 1.75, pr: 3 }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {paginatedVisits.length > 0 ? paginatedVisits.map((visit, idx) => (
                     <TableRow key={visit._id} hover sx={{
-                      borderBottom: "0.5px solid rgba(15,31,61,.06)",
+                      borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "0.5px solid rgba(15,31,61,.06)",
                       transition: "background .12s",
-                      "&:hover": { bgcolor: "#f8faff" },
+                      "&:hover": { bgcolor: isDark ? "rgba(255,255,255,0.04)" : "#f8faff" },
                       "&:last-child td": { borderBottom: "none" },
                     }}>
                       <TableCell sx={{ pl: 3 }}>
@@ -1850,15 +1862,15 @@ export default function TotalVisitsPage() {
                             {getInitials(visit.firstName, visit.lastName)}
                           </Avatar>
                           <Box>
-                            <Typography variant="body2" fontWeight={600} sx={{ color: PRIMARY }}>{visit.firstName} {visit.lastName}</Typography>
+                            <Typography variant="body2" fontWeight={600} sx={{ color: isDark ? "#f8fafc" : PRIMARY }}>{visit.firstName} {visit.lastName}</Typography>
                           </Box>
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" fontWeight={500} sx={{ color: PRIMARY }}>
+                        <Typography variant="body2" fontWeight={500} sx={{ color: isDark ? "#f8fafc" : PRIMARY }}>
                           {getVisitDisplayDate(visit)}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
                           {getVisitDisplayTime(visit)}
                         </Typography>
                       </TableCell>
@@ -1876,12 +1888,12 @@ export default function TotalVisitsPage() {
                                 ? `${visit.assignedUser.firstName || ""} ${visit.assignedUser.lastName || ""}`.trim()
                                 : `${visit.assignedManager?.firstName || ""} ${visit.assignedManager?.lastName || ""}`.trim()}
                             </Typography>
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
                               {visit.assignedUser ? visit.assignedUser.role || "Assigned User" : visit.assignedManager?.role || "Manager"}
                             </Typography>
                           </Box>
                         ) : visit.visitType === "Other" ? (
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
                             —
                           </Typography>
                         ) : (
@@ -1964,10 +1976,10 @@ export default function TotalVisitsPage() {
           {/* PAGINATION */}
           {filteredVisits.length > 0 && (
             <Box sx={{
-              px: 2.5, py: 2, background: GRAD_CARD, borderTop: `1px solid ${alpha(ACCENT, 0.12)}`,
+              px: 2.5, py: 2, background: isDark ? "#0e1220" : GRAD_CARD, borderTop: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${alpha(ACCENT, 0.12)}`, color: isDark ? "#f8fafc" : "inherit",
               display: "flex", flexDirection: { xs: "column", sm: "row" }, justifyContent: "space-between", alignItems: "center", gap: 2,
             }}>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
                 Showing {page * rowsPerPage + 1}–{Math.min((page + 1) * rowsPerPage, filteredVisits.length)} of {filteredVisits.length}
               </Typography>
               <Pagination
@@ -1986,8 +1998,8 @@ export default function TotalVisitsPage() {
 
         {/* FOOTER */}
         <Box sx={{ mt: 2.5, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1 }}>
-          <Typography variant="caption" color="text.secondary">Last updated: {format(new Date(), "dd MMM yyyy, hh:mm a")}</Typography>
-          <Typography variant="caption" color="text.secondary">{summary.totalVisits} total visits · {summary.conversionRate}% conversion rate</Typography>
+          <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Last updated: {format(new Date(), "dd MMM yyyy, hh:mm a")}</Typography>
+          <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>{summary.totalVisits} total visits · {summary.conversionRate}% conversion rate</Typography>
         </Box>
       </Box>
 

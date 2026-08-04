@@ -108,6 +108,7 @@ export default function CreateLeadPage() {
   const navigate = useNavigate();
   const { fetchAPI, user, getUserRole } = useAuth();
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   
   // Responsive breakpoints
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -360,18 +361,19 @@ export default function CreateLeadPage() {
   const textFieldStyle = {
     "& .MuiOutlinedInput-root": {
       borderRadius: 2,
-      bgcolor: "background.paper",
+      bgcolor: isDark ? "#0f172a" : "#fff",
+      color: isDark ? "#f8fafc" : "#0f172a",
       transition: "all 0.2s ease",
       "& fieldset": { 
         border: "1.5px solid",
-        borderColor: alpha("#000", 0.12),
+        borderColor: isDark ? "rgba(255,255,255,0.15)" : alpha("#000", 0.12),
       },
       "&:hover fieldset": { 
-        borderColor: PRIMARY,
+        borderColor: isDark ? "#60a5fa" : PRIMARY,
       },
       "&.Mui-focused fieldset": { 
-        border: `2px solid ${PRIMARY}`,
-        boxShadow: `0 0 0 3px ${alpha(PRIMARY, 0.08)}`,
+        border: `2px solid ${isDark ? "#60a5fa" : PRIMARY}`,
+        boxShadow: `0 0 0 3px ${alpha(isDark ? "#60a5fa" : PRIMARY, 0.15)}`,
       },
       "&.Mui-error fieldset": {
         borderColor: ERROR,
@@ -380,16 +382,23 @@ export default function CreateLeadPage() {
     "& .MuiInputBase-input": {
       fontSize: { xs: "0.9rem", sm: "0.95rem" },
       padding: { xs: "12px 14px", sm: "14px 16px" },
+      color: isDark ? "#f8fafc" : "#0f172a",
+      "&::placeholder": {
+        color: isDark ? "#64748b" : "#94a3b8",
+        opacity: 1,
+      },
     },
     "& .MuiInputLabel-root": {
       fontSize: { xs: "0.85rem", sm: "0.9rem" },
+      color: isDark ? "#94a3b8" : "text.secondary",
       "&.Mui-focused": {
-        color: PRIMARY,
+        color: isDark ? "#60a5fa" : PRIMARY,
       },
     },
     "& .MuiFormHelperText-root": {
       fontSize: { xs: "0.7rem", sm: "0.8rem" },
       marginLeft: 0,
+      color: isDark ? "#94a3b8" : "text.secondary",
     },
   };
 
@@ -493,7 +502,8 @@ export default function CreateLeadPage() {
         minHeight: "100vh",
         p: { xs: 1.5, sm: 2, md: 3 },
         pb: { xs: 8, sm: 3 },
-        bgcolor: "#f8fafc",
+        bgcolor: isDark ? "#070b14" : "#f8fafc",
+        color: isDark ? "#f8fafc" : "inherit",
       }}>
         <Container maxWidth="lg" disableGutters>
           {/* Header with Gradient Background */}
@@ -503,8 +513,11 @@ export default function CreateLeadPage() {
               p: { xs: 2, sm: 3 },
               mb: 3,
               borderRadius: 3,
-              background: `linear-gradient(135deg, ${PRIMARY} 0%, ${SECONDARY} 100%)`,
+              background: isDark
+                ? "linear-gradient(135deg, #0b101c 0%, #1e293b 100%)"
+                : `linear-gradient(135deg, ${PRIMARY} 0%, ${SECONDARY} 100%)`,
               color: "#fff",
+              border: isDark ? "1px solid rgba(255,255,255,0.08)" : "none",
             }}
           >
             <Stack
@@ -568,10 +581,11 @@ export default function CreateLeadPage() {
             sx={{ 
               borderRadius: 3,
               p: { xs: 2.5, sm: 4, md: 5 },
-              bgcolor: "#fff",
+              bgcolor: isDark ? "#0b101c" : "#fff",
+              color: isDark ? "#f8fafc" : "#0f172a",
               border: "1px solid",
-              borderColor: "divider",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
+              borderColor: isDark ? "rgba(255,255,255,0.08)" : "divider",
+              boxShadow: isDark ? "none" : "0 4px 20px rgba(0,0,0,0.05)",
               mb: 4,
             }}
           >
@@ -580,14 +594,14 @@ export default function CreateLeadPage() {
                 {/* Personal Information Section */}
                 <Box sx={{ mb: 4 }}>
                   <Stack direction="row" alignItems="center" spacing={2} mb={3}>
-                    <Avatar sx={{ bgcolor: alpha(PRIMARY, 0.1), color: PRIMARY }}>
+                    <Avatar sx={{ bgcolor: isDark ? "rgba(96, 165, 250, 0.15)" : alpha(PRIMARY, 0.1), color: isDark ? "#60a5fa" : PRIMARY }}>
                       <Person />
                     </Avatar>
                     <Box>
-                      <Typography variant="h6" fontWeight="bold" color="text.primary">
+                      <Typography variant="h6" fontWeight="bold" sx={{ color: isDark ? "#f8fafc" : "text.primary" }}>
                         Personal Information
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
                         Basic details about the lead
                       </Typography>
                     </Box>
@@ -687,19 +701,19 @@ export default function CreateLeadPage() {
                   </Grid>
                 </Box>
 
-                <Divider sx={{ my: 4 }} />
+                <Divider sx={{ my: 4, borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }} />
 
                 {/* Address Information Section */}
                 <Box sx={{ mb: 4 }}>
                   <Stack direction="row" alignItems="center" spacing={2} mb={3}>
-                    <Avatar sx={{ bgcolor: alpha(PRIMARY, 0.1), color: PRIMARY }}>
+                    <Avatar sx={{ bgcolor: isDark ? "rgba(96, 165, 250, 0.15)" : alpha(PRIMARY, 0.1), color: isDark ? "#60a5fa" : PRIMARY }}>
                       <Place />
                     </Avatar>
                     <Box>
-                      <Typography variant="h6" fontWeight="bold" color="text.primary">
+                      <Typography variant="h6" fontWeight="bold" sx={{ color: isDark ? "#f8fafc" : "text.primary" }}>
                         Address Information
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
                         Optional - Fill if you have address details
                       </Typography>
                     </Box>
@@ -863,7 +877,7 @@ export default function CreateLeadPage() {
                   mt: 4, 
                   pt: 4, 
                   borderTop: 1, 
-                  borderColor: "divider",
+                  borderColor: isDark ? "rgba(255,255,255,0.08)" : "divider",
                   display: "flex", 
                   justifyContent: "space-between",
                   flexDirection: { xs: "column", sm: "row" },
@@ -876,8 +890,8 @@ export default function CreateLeadPage() {
                     fullWidth={isMobile}
                     sx={{
                       ...actionButtonStyle,
-                      borderColor: "divider",
-                      color: "text.secondary",
+                      borderColor: isDark ? "rgba(255,255,255,0.15)" : "divider",
+                      color: isDark ? "#cbd5e1" : "text.secondary",
                       "&:hover": {
                         borderColor: ERROR,
                         color: ERROR,
@@ -900,11 +914,11 @@ export default function CreateLeadPage() {
                       fullWidth={isMobile}
                       sx={{
                         ...actionButtonStyle,
-                        borderColor: PRIMARY,
-                        color: PRIMARY,
+                        borderColor: isDark ? "#60a5fa" : PRIMARY,
+                        color: isDark ? "#60a5fa" : PRIMARY,
                         "&:hover": {
-                          borderColor: PRIMARY,
-                          bgcolor: alpha(PRIMARY, 0.04),
+                          borderColor: isDark ? "#60a5fa" : PRIMARY,
+                          bgcolor: isDark ? "rgba(96,165,250,0.08)" : alpha(PRIMARY, 0.04),
                         },
                       }}
                     >
@@ -927,8 +941,8 @@ export default function CreateLeadPage() {
                       }
                       sx={{
                         ...actionButtonStyle,
-                        bgcolor: PRIMARY,
-                        "&:hover": { bgcolor: SECONDARY },
+                        bgcolor: isDark ? "#3b82f6" : PRIMARY,
+                        "&:hover": { bgcolor: isDark ? "#2563eb" : SECONDARY },
                       }}
                     >
                       {loading ? "Creating..." : submitted ? "Lead Created!" : "Create Lead"}
@@ -943,27 +957,27 @@ export default function CreateLeadPage() {
           <Card sx={{ 
             borderRadius: 3,
             p: { xs: 2, sm: 3 },
-            bgcolor: alpha(PRIMARY, 0.03),
+            bgcolor: isDark ? "rgba(255,255,255,0.02)" : alpha(PRIMARY, 0.03),
             border: "1px solid",
-            borderColor: alpha(PRIMARY, 0.1),
+            borderColor: isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY, 0.1),
+            color: isDark ? "#f8fafc" : "inherit",
           }}>
             <Stack direction="row" spacing={2} alignItems="flex-start">
-              <Info sx={{ color: PRIMARY, mt: 0.5, fontSize: { xs: 18, sm: 20 } }} />
+              <Avatar sx={{ bgcolor: isDark ? "rgba(96,165,250,0.15)" : alpha(PRIMARY, 0.1), color: isDark ? "#60a5fa" : PRIMARY, width: 40, height: 40 }}>
+                <Info />
+              </Avatar>
               <Box>
-                <Typography variant="subtitle1" fontWeight="bold" color="text.primary" gutterBottom>
+                <Typography variant="subtitle1" fontWeight="bold" sx={{ color: isDark ? "#f8fafc" : "text.primary" }} mb={0.5}>
                   Important Information
                 </Typography>
-                <Stack spacing={1}>
-                  <Typography variant="body2" color="text.secondary">
+                <Stack spacing={0.5}>
+                  <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
                     • <strong>Required Fields:</strong> Only First Name and Phone Number are mandatory.
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    • <strong>All Other Fields:</strong> All other fields are optional and can be filled later.
+                  <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
+                    • <strong>All Other Fields:</strong> Optional details can be filled now or updated later.
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    • <strong>Phone Number:</strong> Enter any valid phone number format.
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
                     • <strong>Assignment:</strong> TEAM users are auto-assigned; admin-created leads stay unassigned until assigned manually.
                   </Typography>
                 </Stack>

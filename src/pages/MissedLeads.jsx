@@ -330,6 +330,8 @@ const MobileFilterDrawer = ({
   setViewMode,
   activeFilterCount,
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const [expandedSection, setExpandedSection] = useState("search");
 
   const toggleSection = (section) => {
@@ -349,6 +351,8 @@ const MobileFilterDrawer = ({
           borderTopRightRadius: 24,
           maxHeight: "90vh",
           overflow: "hidden",
+          bgcolor: isDark ? "#0b0e1a" : "#fff",
+          color: isDark ? "#f8fafc" : "inherit",
         },
       }}
     >
@@ -358,7 +362,7 @@ const MobileFilterDrawer = ({
           sx={{
             width: 40,
             height: 4,
-            bgcolor: "grey.300",
+            bgcolor: isDark ? "rgba(255,255,255,0.2)" : "grey.300",
             borderRadius: 2,
             mx: "auto",
             my: 1.5,
@@ -373,21 +377,21 @@ const MobileFilterDrawer = ({
             alignItems: "center",
             px: 3,
             pb: 2,
-            borderBottom: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+            borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
           }}
         >
           <Box>
-            <Typography variant="h6" fontWeight="700" color={PRIMARY_COLOR}>
+            <Typography variant="h6" fontWeight="700" color={isDark ? "#60a5fa" : PRIMARY_COLOR}>
               Filter Missed Leads
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>
               {activeFilterCount} active filter{activeFilterCount !== 1 && "s"}
             </Typography>
           </Box>
           <IconButton
             onClick={onClose}
             size="small"
-            sx={{ bgcolor: alpha(PRIMARY_COLOR, 0.1) }}
+            sx={{ bgcolor: isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1), color: isDark ? "#f8fafc" : "inherit" }}
           >
             <Close />
           </IconButton>
@@ -400,15 +404,16 @@ const MobileFilterDrawer = ({
             <Paper
               elevation={0}
               sx={{
-                border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
                 borderRadius: 2,
                 overflow: "hidden",
+                bgcolor: isDark ? "#0e1220" : "#fff",
               }}
             >
               <Box
                 sx={{
                   p: 2,
-                  bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                  bgcolor: isDark ? "rgba(255,255,255,0.03)" : alpha(PRIMARY_COLOR, 0.02),
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -460,15 +465,16 @@ const MobileFilterDrawer = ({
             <Paper
               elevation={0}
               sx={{
-                border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
                 borderRadius: 2,
                 overflow: "hidden",
+                bgcolor: isDark ? "#0e1220" : "#fff",
               }}
             >
               <Box
                 sx={{
                   p: 2,
-                  bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                  bgcolor: isDark ? "rgba(255,255,255,0.03)" : alpha(PRIMARY_COLOR, 0.02),
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -526,15 +532,16 @@ const MobileFilterDrawer = ({
             <Paper
               elevation={0}
               sx={{
-                border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
                 borderRadius: 2,
                 overflow: "hidden",
+                bgcolor: isDark ? "#0e1220" : "#fff",
               }}
             >
               <Box
                 sx={{
                   p: 2,
-                  bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                  bgcolor: isDark ? "rgba(255,255,255,0.03)" : alpha(PRIMARY_COLOR, 0.02),
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -628,15 +635,16 @@ const MobileFilterDrawer = ({
             <Paper
               elevation={0}
               sx={{
-                border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
                 borderRadius: 2,
                 overflow: "hidden",
+                bgcolor: isDark ? "#0e1220" : "#fff",
               }}
             >
               <Box
                 sx={{
                   p: 2,
-                  bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                  bgcolor: isDark ? "rgba(255,255,255,0.03)" : alpha(PRIMARY_COLOR, 0.02),
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -703,15 +711,16 @@ const MobileFilterDrawer = ({
             <Paper
               elevation={0}
               sx={{
-                border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
                 borderRadius: 2,
                 overflow: "hidden",
+                bgcolor: isDark ? "#0e1220" : "#fff",
               }}
             >
               <Box
                 sx={{
                   p: 2,
-                  bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                  bgcolor: isDark ? "rgba(255,255,255,0.03)" : alpha(PRIMARY_COLOR, 0.02),
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -786,15 +795,16 @@ const MobileFilterDrawer = ({
             <Paper
               elevation={0}
               sx={{
-                border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
                 borderRadius: 2,
                 overflow: "hidden",
+                bgcolor: isDark ? "#0e1220" : "#fff",
               }}
             >
               <Box
                 sx={{
                   p: 2,
-                  bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                  bgcolor: isDark ? "rgba(255,255,255,0.03)" : alpha(PRIMARY_COLOR, 0.02),
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -897,6 +907,8 @@ const MobileFilterDrawer = ({
 
 // ========== MOBILE LEAD CARD ==========
 const MobileLeadCard = ({ lead, onView, onReopen }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const [expanded, setExpanded] = useState(false);
   const priorityConfig = getPriorityConfig(lead.daysInactive || 0);
   const stageConfig = getStageConfig(lead.status);
@@ -907,7 +919,9 @@ const MobileLeadCard = ({ lead, onView, onReopen }) => {
       sx={{
         mb: 1.5,
         borderRadius: 3,
-        border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+        border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+        bgcolor: isDark ? "#0e1220" : "#fff",
+        color: isDark ? "#f8fafc" : "inherit",
         overflow: "hidden",
       }}
     >
@@ -937,7 +951,7 @@ const MobileLeadCard = ({ lead, onView, onReopen }) => {
               <Typography
                 variant="subtitle1"
                 fontWeight="700"
-                color={PRIMARY_COLOR}
+                color={isDark ? "#f8fafc" : PRIMARY_COLOR}
               >
                 {`${lead.firstName || ""} ${lead.lastName || ""}`.trim() ||
                   "Unnamed Lead"}
@@ -1228,24 +1242,28 @@ const LoadingSkeleton = () => {
 };
 
 // ========== EMPTY STATE ==========
-const EmptyState = ({ onClearFilters, hasFilters }) => (
-  <Box sx={{ textAlign: "center", py: 8, px: 2 }}>
-    <Box
-      sx={{
-        width: 120,
-        height: 120,
-        borderRadius: "50%",
-        bgcolor: alpha(PRIMARY_COLOR, 0.1),
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        mx: "auto",
-        mb: 3,
-      }}
-    >
-      <TrendingDown sx={{ fontSize: 48, color: PRIMARY_COLOR }} />
-    </Box>
-    <Typography variant="h6" fontWeight={600} gutterBottom>
+const EmptyState = ({ onClearFilters, hasFilters }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
+  return (
+    <Box sx={{ textAlign: "center", py: 8, px: 2 }}>
+      <Box
+        sx={{
+          width: 120,
+          height: 120,
+          borderRadius: "50%",
+          bgcolor: isDark ? alpha("#60a5fa", 0.15) : alpha(PRIMARY_COLOR, 0.1),
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          mx: "auto",
+          mb: 3,
+        }}
+      >
+        <TrendingDown sx={{ fontSize: 48, color: isDark ? "#60a5fa" : PRIMARY_COLOR }} />
+      </Box>
+      <Typography variant="h6" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"} gutterBottom>
       No missed leads found
     </Typography>
     <Typography
@@ -1268,25 +1286,33 @@ const EmptyState = ({ onClearFilters, hasFilters }) => (
       </Button>
     )}
   </Box>
-);
+  );
+};
 
 // ========== SUMMARY CARD ==========
-const SummaryCard = ({ card, index }) => (
-  <Fade in={true} timeout={500 + index * 100}>
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 1.5, sm: 2, md: 2.5 },
-        borderRadius: 3,
-        position: "relative",
-        overflow: "hidden",
-        border: `1px solid ${alpha(card.color, 0.1)}`,
-        boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
-        transition: "transform 0.2s",
-        "&:hover": {
-          transform: "translateY(-2px)",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
-        },
+const SummaryCard = ({ card, index }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const displayColor = card.color;
+
+  return (
+    <Fade in={true} timeout={500 + index * 100}>
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 1.5, sm: 2, md: 2.5 },
+          borderRadius: 3,
+          position: "relative",
+          overflow: "hidden",
+          bgcolor: isDark ? "#0b0e1a" : "#fff",
+          color: isDark ? "#f8fafc" : "inherit",
+          border: isDark ? `1px solid ${alpha(card.color, 0.25)}` : `1px solid ${alpha(card.color, 0.15)}`,
+          boxShadow: isDark ? `0 4px 20px ${alpha(card.color, 0.15)}` : "0 4px 12px rgba(0,0,0,0.05)",
+          transition: "transform 0.2s, box-shadow 0.2s",
+          "&:hover": {
+            transform: "translateY(-2px)",
+            boxShadow: isDark ? `0 8px 28px ${alpha(card.color, 0.25)}` : "0 8px 24px rgba(0,0,0,0.1)",
+          },
         "&::before": {
           content: '""',
           position: "absolute",
@@ -1312,11 +1338,11 @@ const SummaryCard = ({ card, index }) => (
               width: { xs: 32, sm: 40, md: 48 },
               height: { xs: 32, sm: 40, md: 48 },
               borderRadius: { xs: 1.5, sm: 2 },
-              background: CARD_ICON_BG[index % CARD_ICON_BG.length],
+              background: isDark ? alpha(displayColor, 0.2) : CARD_ICON_BG[index % CARD_ICON_BG.length],
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: card.color,
+              color: displayColor,
             }}
           >
             {React.cloneElement(card.icon, {
@@ -1327,7 +1353,7 @@ const SummaryCard = ({ card, index }) => (
             variant="h4"
             fontWeight={700}
             sx={{
-              color: card.color,
+              color: displayColor,
               fontSize: { xs: "1.25rem", sm: "1.5rem", md: "2rem" },
             }}
           >
@@ -1338,13 +1364,14 @@ const SummaryCard = ({ card, index }) => (
           <Typography
             variant="subtitle2"
             fontWeight={600}
+            color={isDark ? "#f8fafc" : "text.primary"}
             sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" } }}
           >
             {card.label}
           </Typography>
           <Typography
             variant="caption"
-            color="text.secondary"
+            color={isDark ? "#94a3b8" : "text.secondary"}
             sx={{ fontSize: { xs: "0.6rem", sm: "0.7rem" } }}
           >
             {card.subText}
@@ -1353,11 +1380,13 @@ const SummaryCard = ({ card, index }) => (
       </Stack>
     </Paper>
   </Fade>
-);
+  );
+};
 
 // ========== MAIN COMPONENT ==========
 export default function MissedLeadsPage() {
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const navigate = useNavigate();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isTablet = useMediaQuery(theme.breakpoints.down("md"));
@@ -1868,28 +1897,28 @@ export default function MissedLeadsPage() {
         label: "Total Missed",
         value: summaryStats.total,
         icon: <TrendingDown />,
-        color: "#0f1f3d",
+        color: "#3b82f6",
         subText: "Leads lost",
       },
       {
         label: "High Priority",
         value: summaryStats.highPriority,
         icon: <PriorityHigh />,
-        color: "#0f1f3d",
+        color: "#f59e0b",
         subText: "30+ days inactive",
       },
       {
         label: "Avg Inactive Days",
         value: summaryStats.avgInactiveDays,
         icon: <AccessTime />,
-        color: "#0f1f3d",
+        color: "#10b981",
         subText: "Days without contact",
       },
       {
         label: "Can Reopen",
         value: summaryStats.reopenable,
         icon: <Restore />,
-        color: "#0f1f3d",
+        color: "#a855f7",
         subText: "Ready for recovery",
       },
     ],
@@ -1915,6 +1944,8 @@ export default function MissedLeadsPage() {
             borderRadius: isMobile ? 0 : 3,
             overflow: "hidden",
             maxHeight: "90vh",
+            bgcolor: isDark ? "#0b0e1a" : "#fff",
+            color: isDark ? "#f8fafc" : "inherit",
           },
         }}
         TransitionComponent={isMobile ? Slide : Fade}
@@ -1922,7 +1953,7 @@ export default function MissedLeadsPage() {
       >
         <DialogTitle
           sx={{
-            bgcolor: PRIMARY_COLOR,
+            bgcolor: isDark ? "#090c17" : PRIMARY_COLOR,
             color: "white",
             pb: 2,
             px: { xs: 2, sm: 3 },
@@ -1968,7 +1999,7 @@ export default function MissedLeadsPage() {
               sx={{ p: { xs: 2, sm: 3 }, maxHeight: "60vh", overflow: "auto" }}
             >
               {/* Basic Information */}
-              <Accordion defaultExpanded sx={{ mb: 2 }}>
+              <Accordion defaultExpanded sx={{ mb: 2, bgcolor: isDark ? "#0e1220" : "#fff", color: isDark ? "#f8fafc" : "inherit", border: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined }}>
                 <AccordionSummary expandIcon={<ExpandMore />}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                     <Person sx={{ color: PRIMARY_COLOR }} />
@@ -2074,7 +2105,7 @@ export default function MissedLeadsPage() {
               </Accordion>
 
               {/* Current Status */}
-              <Accordion sx={{ mb: 2 }}>
+              <Accordion sx={{ mb: 2, bgcolor: isDark ? "#0e1220" : "#fff", color: isDark ? "#f8fafc" : "inherit", border: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined }}>
                 <AccordionSummary expandIcon={<ExpandMore />}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                     <Timeline sx={{ color: PRIMARY_COLOR }} />
@@ -2086,7 +2117,7 @@ export default function MissedLeadsPage() {
                 <AccordionDetails>
                   <Grid container spacing={3}>
                     <Grid item xs={12} md={6}>
-                      <Card variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                      <Card variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: isDark ? "#0b0e1a" : "#fff", color: isDark ? "#f8fafc" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.12)" : undefined }}>
                         <Typography variant="subtitle2" gutterBottom>
                           Current Status
                         </Typography>
@@ -2117,7 +2148,7 @@ export default function MissedLeadsPage() {
                       </Card>
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Card variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                      <Card variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: isDark ? "#0b0e1a" : "#fff", color: isDark ? "#f8fafc" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.12)" : undefined }}>
                         <Typography variant="subtitle2" gutterBottom>
                           System Information
                         </Typography>
@@ -2173,7 +2204,7 @@ export default function MissedLeadsPage() {
               {(selectedLead?.aadhaar?.url ||
                 selectedLead?.panCard?.url ||
                 selectedLead?.passbook?.url) && (
-                <Accordion sx={{ mb: 2 }}>
+                <Accordion sx={{ mb: 2, bgcolor: isDark ? "#0e1220" : "#fff", color: isDark ? "#f8fafc" : "inherit", border: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined }}>
                   <AccordionSummary expandIcon={<ExpandMore />}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                       <FolderOpen sx={{ color: "#d32f2f" }} />
@@ -2299,7 +2330,7 @@ export default function MissedLeadsPage() {
 
               {/* Notes */}
               {selectedLead?.notes && (
-                <Accordion sx={{ mb: 2 }}>
+                <Accordion sx={{ mb: 2, bgcolor: isDark ? "#0e1220" : "#fff", color: isDark ? "#f8fafc" : "inherit", border: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined }}>
                   <AccordionSummary expandIcon={<ExpandMore />}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                       <Note sx={{ color: "#757575" }} />
@@ -2309,7 +2340,7 @@ export default function MissedLeadsPage() {
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails>
-                    <Paper sx={{ p: 3, bgcolor: "grey.50", borderRadius: 2 }}>
+                    <Paper sx={{ p: 3, bgcolor: isDark ? "#050811" : "grey.50", color: isDark ? "#f8fafc" : "inherit", borderRadius: 2 }}>
                       <Typography
                         variant="body1"
                         style={{ whiteSpace: "pre-wrap" }}
@@ -2327,9 +2358,9 @@ export default function MissedLeadsPage() {
         <DialogActions
           sx={{
             p: { xs: 2, sm: 3 },
-            bgcolor: "grey.50",
+            bgcolor: isDark ? "#0b0e1a" : "grey.50",
             borderTop: 1,
-            borderColor: "divider",
+            borderColor: isDark ? "rgba(255,255,255,0.08)" : "divider",
           }}
         >
           <Button
@@ -2442,9 +2473,9 @@ export default function MissedLeadsPage() {
         ref={containerRef}
         sx={{
           p: { xs: 1.5, sm: 2, md: 3 },
-          minHeight: "100vh",
+          bgcolor: "transparent",
           pb: { xs: 8, sm: 3 },
-          bgcolor: "#f8fafc",
+          bgcolor: isDark ? "#050811" : "#f8fafc",
         }}
       >
         {/* Header with Gradient Background */}
@@ -2454,7 +2485,7 @@ export default function MissedLeadsPage() {
             p: { xs: 2, sm: 3 },
             mb: 3,
             borderRadius: 3,
-            background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, ${SECONDARY_COLOR} 100%)`,
+            background: isDark ? "linear-gradient(135deg, #090c17 0%, #11172a 100%)" : `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, ${SECONDARY_COLOR} 100%)`,
             color: "#fff",
           }}
         >
@@ -2490,9 +2521,12 @@ export default function MissedLeadsPage() {
                 onClick={() => setCreateDialogOpen(true)}
                 size={isMobile ? "small" : "medium"}
                 sx={{
-                  bgcolor: "rgba(255,255,255,0.2)",
+                  bgcolor: "#2563eb",
                   color: "#fff",
-                  "&:hover": { bgcolor: "rgba(255,255,255,0.3)" },
+                  fontWeight: 600,
+                  borderRadius: 2,
+                  px: 2,
+                  "&:hover": { bgcolor: "#1d4ed8" },
                 }}
               >
                 Create New Mislead
@@ -2536,9 +2570,11 @@ export default function MissedLeadsPage() {
                 disabled={loading}
                 size={isMobile ? "small" : "medium"}
                 sx={{
-                  bgcolor: "rgba(255,255,255,0.2)",
+                  bgcolor: isDark ? "#0f172a" : "rgba(255,255,255,0.2)",
                   color: "#fff",
-                  "&:hover": { bgcolor: "rgba(255,255,255,0.3)" },
+                  border: isDark ? "1px solid #1e293b" : "none",
+                  borderRadius: 2,
+                  "&:hover": { bgcolor: isDark ? "#1e293b" : "rgba(255,255,255,0.3)" },
                 }}
               >
                 Refresh
@@ -2585,7 +2621,7 @@ export default function MissedLeadsPage() {
 
         {/* Desktop Search and Filters */}
         {!isMobile && (
-          <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: 3 }}>
+          <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: 3, bgcolor: isDark ? "#0b0e1a" : "#fff", color: isDark ? "#f8fafc" : "inherit", border: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined }}>
             <Stack spacing={2.5}>
               <Stack
                 direction={{ xs: "column", md: "row" }}
@@ -2618,6 +2654,9 @@ export default function MissedLeadsPage() {
                   sx={{
                     maxWidth: 400,
                     "& .MuiOutlinedInput-root": {
+                      bgcolor: isDark ? "#0e1220" : "#fff",
+                      color: isDark ? "#f8fafc" : "inherit",
+                      "& fieldset": { borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : undefined },
                       "&.Mui-focused fieldset": {
                         borderColor: "#3b82f6",
                         boxShadow: "0 0 0 3px rgba(37,99,235,.12)",
@@ -2641,11 +2680,11 @@ export default function MissedLeadsPage() {
                         background:
                           period === option.value ? GRADIENT_BLUE : "transparent",
                         color:
-                          period === option.value ? "#fff" : PRIMARY_COLOR,
+                          period === option.value ? "#fff" : (isDark ? "#60a5fa" : PRIMARY_COLOR),
                         border: `1px solid ${
                           period === option.value
                             ? "transparent"
-                            : alpha(PRIMARY_COLOR, 0.2)
+                            : (isDark ? "rgba(255,255,255,0.12)" : alpha(PRIMARY_COLOR, 0.2))
                         }`,
                         boxShadow:
                           period === option.value
@@ -2715,7 +2754,7 @@ export default function MissedLeadsPage() {
                     p: 3,
                     borderRadius: 2,
                     borderColor: alpha(PRIMARY_COLOR, 0.2),
-                    background: GRADIENT_CARD,
+                    background: isDark ? "#0e1220" : GRADIENT_CARD, borderColor: isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.2),
                   }}
                 >
                   <Grid container spacing={3}>
@@ -2952,7 +2991,7 @@ export default function MissedLeadsPage() {
         )}
 
         {/* Missed Leads List */}
-        <Paper elevation={0} sx={{ borderRadius: 3, overflow: "hidden" }}>
+        <Paper elevation={0} sx={{ borderRadius: 3, overflow: "hidden", bgcolor: isDark ? "#0b0e1a" : "#fff", border: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined }}>
           <Box
             sx={{
               p: { xs: 2, sm: 3 },
@@ -2963,12 +3002,14 @@ export default function MissedLeadsPage() {
               alignItems: "center",
               flexWrap: "wrap",
               gap: 2,
-              bgcolor: "#fff",
+              bgcolor: isDark ? "#0b0e1a" : "#fff",
+              borderColor: isDark ? "rgba(255,255,255,0.08)" : "divider",
             }}
           >
             <Typography
               variant="h6"
               fontWeight={600}
+              color={isDark ? "#f8fafc" : "text.primary"}
               sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}
             >
               Missed Leads
@@ -3028,7 +3069,7 @@ export default function MissedLeadsPage() {
                     <TableCell
                       sx={{
                         bgcolor: "transparent",
-                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
+                        background: isDark ? "#0e1220" : "linear-gradient(180deg, #f8faff, #eff6ff)", color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined,
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3060,7 +3101,7 @@ export default function MissedLeadsPage() {
                     <TableCell
                       sx={{
                         bgcolor: "transparent",
-                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
+                        background: isDark ? "#0e1220" : "linear-gradient(180deg, #f8faff, #eff6ff)", color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined,
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3092,7 +3133,7 @@ export default function MissedLeadsPage() {
                     <TableCell
                       sx={{
                         bgcolor: "transparent",
-                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
+                        background: isDark ? "#0e1220" : "linear-gradient(180deg, #f8faff, #eff6ff)", color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined,
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3124,7 +3165,7 @@ export default function MissedLeadsPage() {
                     <TableCell
                       sx={{
                         bgcolor: "transparent",
-                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
+                        background: isDark ? "#0e1220" : "linear-gradient(180deg, #f8faff, #eff6ff)", color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined,
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3156,7 +3197,7 @@ export default function MissedLeadsPage() {
                     <TableCell
                       sx={{
                         bgcolor: "transparent",
-                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
+                        background: isDark ? "#0e1220" : "linear-gradient(180deg, #f8faff, #eff6ff)", color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined,
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3166,7 +3207,7 @@ export default function MissedLeadsPage() {
                     <TableCell
                       sx={{
                         bgcolor: "transparent",
-                        background: "linear-gradient(180deg, #f8faff, #eff6ff)",
+                        background: isDark ? "#0e1220" : "linear-gradient(180deg, #f8faff, #eff6ff)", color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined,
                         fontWeight: 600,
                         py: 2,
                       }}
@@ -3190,11 +3231,11 @@ export default function MissedLeadsPage() {
                           hover
                           sx={{
                             "&:hover": {
-                              bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                              bgcolor: isDark ? "rgba(255,255,255,0.03)" : alpha(PRIMARY_COLOR, 0.02),
                             },
                           }}
                         >
-                          <TableCell>
+                          <TableCell sx={{ color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : undefined }}>
                             <Stack
                               direction="row"
                               alignItems="center"
@@ -3225,12 +3266,12 @@ export default function MissedLeadsPage() {
                               </Box>
                             </Stack>
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : undefined }}>
                             <Typography variant="body2">
                               {formatDate(lead.createdAt, "dd MMM yyyy")}
                             </Typography>
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : undefined }}>
                             <Box>
                               <Typography variant="body2">
                                 {formatDate(
@@ -3246,7 +3287,7 @@ export default function MissedLeadsPage() {
                               </Typography>
                             </Box>
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : undefined }}>
                             <Tooltip title={priorityConfig.description} arrow>
                               <Chip
                                 label={priorityConfig.label}
@@ -3261,7 +3302,7 @@ export default function MissedLeadsPage() {
                               />
                             </Tooltip>
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : undefined }}>
                             <Chip
                               label={stageConfig.label}
                               icon={stageConfig.icon}
@@ -3274,7 +3315,7 @@ export default function MissedLeadsPage() {
                               }}
                             />
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ color: isDark ? "#f8fafc" : "inherit", borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : undefined }}>
                             <Stack direction="row" spacing={1}>
                               <Tooltip title="View Details" arrow>
                                 <IconButton
@@ -3373,7 +3414,9 @@ export default function MissedLeadsPage() {
                 justifyContent: "space-between",
                 alignItems: "center",
                 gap: 2,
-                bgcolor: "#fff",
+                bgcolor: isDark ? "#0b0e1a" : "#fff",
+                borderColor: isDark ? "rgba(255,255,255,0.08)" : "divider",
+                color: isDark ? "#f8fafc" : "inherit",
               }}
             >
               <Typography variant="body2">
@@ -3457,7 +3500,7 @@ export default function MissedLeadsPage() {
         </Zoom>
       )}
 
-      <Dialog open={createDialogOpen} onClose={closeCreateDialog} fullWidth maxWidth="sm">
+      <Dialog open={createDialogOpen} onClose={closeCreateDialog} fullWidth maxWidth="sm" PaperProps={{ sx: { bgcolor: isDark ? "#0b0e1a" : "#fff", color: isDark ? "#f8fafc" : "inherit" } }}>
         <DialogTitle>Create New Mislead</DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={2} sx={{ pt: 0.5 }}>

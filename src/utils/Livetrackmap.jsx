@@ -1,18 +1,4 @@
-// utils/LiveTrackingMap.jsx
-//
-// FIXES applied
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. useSocket() now destructures socketRef (stable React ref) in addition to
-//    socket and connected. socketRef is passed to startTracking() so the tracker
-//    always reads the live socket, even after a reconnect.
-//
-// 2. startTracking(callback, socketRef, userId) — was passing `socket` (raw,
-//    potentially stale). Now passes socketRef so safeEmit() in Locationtracker
-//    reads socketRef.current on every emit.
-//
-// 3. The deprecated Google DrawingManager was removed so maps continue to load
-//    with Maps JavaScript API 3.65+.
-
+// utils/Livetrackmap.jsx
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   startTracking,
@@ -22,15 +8,19 @@ import {
 } from "./Locationtracker";
 import { useSocket } from "./Usesocket.js";
 import { toast } from "../components/useToast.jsx";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { API_ORIGIN } from "./apiConfig";
 
 const API  = API_ORIGIN;
-const GKEY = "AIzaSyCqM7uF9c0ZMQjdssHqSMJJ3mBcmz5RNS0";
+const GKEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyAqn70bioCdQL50Jj9nXsUIq0yGumoV9E8";
 
 const MIN_MOVE_METRES = 12;
+const MIN_STATIONARY_MOVE_METRES = 25; // 25 meters (0.025 km) minimum threshold to start counting travel distance
 const SNAP_TO_ROADS_MAX_POINTS = 100;
 const SNAP_TO_ROADS_MAX_GAP_METRES = 500;
 const MAX_COUNTED_SEGMENT_METRES = 1000;
+const MAX_LIVE_SEGMENT_METRES = 1000;
 const MAX_COUNTED_SPEED_KMH = 100;
 const ROUTE_MODE_RAW = "raw";
 const ROUTE_MODE_ROAD = "road";
@@ -173,6 +163,7 @@ function appendSequentialPoint(points, point, minDuplicateMetres = 2) {
   const lat = Number(point?.lat);
   const lng = Number(point?.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return points;
+  if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) return points;
 
   const normalized = {
     ...point,
@@ -228,14 +219,34 @@ function calcKm(points) {
 }
 
 function calcFilteredKm(points) {
-  if (!points || points.length < 2) return 0;
-  let total = 0;
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const curr = points[i];
-    const distM = distMetres(prev.lat, prev.lng, curr.lat, curr.lng);
-    const prevTime = new Date(prev.recordedAt || prev.time || 0).getTime();
-    const currTime = new Date(curr.recordedAt || curr.time || 0).getTime();
+  if (!points || !Array.isArray(points) || points.length < 2) return 0;
+  let totalKm = 0;
+  let anchor = null;
+
+  for (let i = 0; i < points.length; i++) {
+    const pt = points[i];
+    const lat = Number(pt.lat);
+    const lng = Number(pt.lng);
+    const accuracy = Number(pt.accuracy ?? 0);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) continue; // Filter out zero (0, 0) coordinates
+    if (accuracy && accuracy > 100) continue; // Filter out low-accuracy (> 100m)
+
+    if (!anchor) {
+      anchor = { lat, lng, time: pt.time || pt.recordedAt };
+      continue;
+    }
+
+    const distM = distMetres(anchor.lat, anchor.lng, lat, lng);
+
+    // If movement from stationary anchor is less than 25 meters, consider user stationary (indoor jitter returns strictly 0.00 km)
+    if (distM < MIN_STATIONARY_MOVE_METRES) {
+      continue;
+    }
+
+    // Teleportation / speed filter guard
+    const prevTime = new Date(anchor.time || 0).getTime();
+    const currTime = new Date(pt.time || pt.recordedAt || 0).getTime();
     const elapsedHours =
       Number.isFinite(prevTime) && Number.isFinite(currTime) && currTime > prevTime
         ? (currTime - prevTime) / 3600000
@@ -243,19 +254,22 @@ function calcFilteredKm(points) {
     const maxBySpeed = elapsedHours
       ? Math.max(150, elapsedHours * MAX_COUNTED_SPEED_KMH * 1000)
       : MAX_COUNTED_SEGMENT_METRES;
-    const requiredMove = getEffectiveMoveThreshold(curr.accuracy, prev.accuracy);
-    const gpsNoiseRadius = getGpsNoiseRadiusMetres(curr.accuracy, prev.accuracy);
+
     if (distM > Math.min(MAX_COUNTED_SEGMENT_METRES, maxBySpeed)) continue;
-    if (distM >= requiredMove && distM >= gpsNoiseRadius) total += distM / 1000;
+
+    // Accumulate distance from anchor and advance anchor to current point
+    totalKm += distM / 1000;
+    anchor = { lat, lng, time: pt.time || pt.recordedAt };
   }
-  return Math.round(total * 1000) / 1000;
+
+  return Math.round(totalKm * 1000) / 1000;
 }
 
 function hasConfirmedMovement(points) {
   if (!Array.isArray(points) || points.length < 2) return false;
 
-   let significantSegments = 0;
-   let travelledMetres = 0;
+  let significantSegments = 0;
+  let travelledMetres = 0;
 
   for (let i = 1; i < points.length; i++) {
     const prev = points[i - 1];
@@ -289,7 +303,6 @@ function resolvePunchInMarkerPosition(punchInLocation, trailPoints = []) {
     trailStart.lng
   );
 
-  // If the saved punch-in point is clearly off, prefer the first confirmed trail point.
   if (mismatchMetres >= 60) {
     return {
       ...punchInLocation,
@@ -299,6 +312,57 @@ function resolvePunchInMarkerPosition(punchInLocation, trailPoints = []) {
   }
 
   return punchInLocation;
+}
+
+const RADAR_DISC_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">
+  <defs>
+    <radialGradient id="radarPulse" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2563eb" stop-opacity="0.95" />
+      <stop offset="65%" stop-color="#3b82f6" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#60a5fa" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <circle cx="22" cy="22" r="20" fill="url(#radarPulse)" />
+  <circle cx="22" cy="22" r="14" fill="none" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="3 2" opacity="0.9" />
+  <circle cx="22" cy="22" r="8" fill="#ffffff" />
+  <circle cx="22" cy="22" r="5.5" fill="#2563eb" />
+  <circle cx="22" cy="22" r="2" fill="#ffffff" />
+</svg>`;
+
+function getRadarDiscIcon(G) {
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(RADAR_DISC_SVG)}`,
+    size: new G.Size(44, 44),
+    anchor: new G.Point(22, 22),
+    scaledSize: new G.Size(44, 44),
+  };
+}
+
+function animateMarkerSmooth(marker, targetLat, targetLng, durationMs = 600) {
+  if (!marker || !targetLat || !targetLng) return;
+  const currentPos = marker.getPosition();
+  if (!currentPos) {
+    marker.setPosition({ lat: targetLat, lng: targetLng });
+    return;
+  }
+  const startLat = currentPos.lat();
+  const startLng = currentPos.lng();
+  if (Math.abs(startLat - targetLat) < 0.000001 && Math.abs(startLng - targetLng) < 0.000001) return;
+
+  const startTime = performance.now();
+  function step(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / durationMs, 1);
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const lat = startLat + (targetLat - startLat) * ease;
+    const lng = startLng + (targetLng - startLng) * ease;
+    marker.setPosition({ lat, lng });
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    }
+  }
+  requestAnimationFrame(step);
 }
 
 let gmapsPromise = null;
@@ -324,13 +388,13 @@ export default function LiveTrackingMap({
   locateTrigger   = 0,
   onPointsChange,
   onDistanceChange,
+  onCurrentLocationChange,
   isOwner         = true,
   punchInLocation = null,
   punchOutLocation = null,
   selectedDate    = null, 
   visits          = [],
   preferVisitTrail = false,
-  
 }) {
   const mapDivRef  = useRef(null);
   const gMapRef    = useRef(null);
@@ -346,7 +410,8 @@ export default function LiveTrackingMap({
   const punchOutLocationRef = useRef(punchOutLocation);
   const snappedTrailCacheRef = useRef({ key: "", path: [] });
   const drawRequestSeqRef = useRef(0);
-const visitMkRef = useRef([]);
+  const lastEmittedLocationRef = useRef(null);
+  const visitMkRef = useRef([]);
   const userAdjustedViewportRef = useRef(false);
   const suppressViewportEventsRef = useRef(false);
   const [mapLoaded,  setMapLoaded]  = useState(false);
@@ -361,11 +426,11 @@ const visitMkRef = useRef([]);
     segmentCount: 0,
     loading: false,
   });
+  const [isMapFullscreen, setIsMapFullscreen] = useState(false);
 
   const prevPunchedIn  = useRef(false);
   const prevPunchedOut = useRef(false);
 
-  // ✅ FIX: destructure socketRef — a stable ref that always points to the live socket
   const { socket, socketRef, connected } = useSocket();
 
   const [geofences,      setGeofences]      = useState([]);
@@ -453,11 +518,63 @@ const visitMkRef = useRef([]);
     punchOutLocationRef.current = punchOutLocation;
   }, [punchOutLocation]);
 
+  const [mapAuthError, setMapAuthError] = useState(false);
+  const leafletMapRef = useRef(null);
+
+  useEffect(() => {
+    window.gm_authFailure = () => {
+      setMapAuthError(true);
+      toast.warn("Google Maps API key billing error. Switched to OpenStreetMap.", { id: "gmap-billing-err", duration: 8000 });
+    };
+  }, []);
+
+  useEffect(() => {
+    if (mapAuthError && mapDivRef.current && !leafletMapRef.current) {
+      if (gMapRef.current) {
+        gMapRef.current = null;
+      }
+      try {
+        mapDivRef.current.innerHTML = "";
+        const lMap = L.map(mapDivRef.current).setView([20.29044, 85.86197], 15);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: "© OpenStreetMap contributors",
+        }).addTo(lMap);
+        leafletMapRef.current = lMap;
+        setMapLoaded(true);
+      } catch { /* non-fatal */ }
+    }
+  }, [mapAuthError]);
+
+  useEffect(() => {
+    return () => {
+      if (leafletMapRef.current) {
+        try {
+          leafletMapRef.current.remove();
+        } catch { /* non-fatal */ }
+        leafletMapRef.current = null;
+      }
+    };
+  }, []);
+
   // ── Init Google Map ─────────────────────────────────────────────────────────
   useEffect(() => {
     loadGoogleMaps()
       .then(() => {
         if (!mapDivRef.current || gMapRef.current) return;
+
+        // Clean up Leaflet map if it was initialized as temporary fallback
+        if (leafletMapRef.current) {
+          try {
+            leafletMapRef.current.remove();
+          } catch { /* non-fatal */ }
+          leafletMapRef.current = null;
+        }
+
+        if (mapDivRef.current) {
+          mapDivRef.current.innerHTML = "";
+        }
+
         gMapRef.current = new window.google.maps.Map(mapDivRef.current, {
           center:            { lat: 20.2961, lng: 85.8245 },
           zoom:              13,
@@ -466,6 +583,7 @@ const visitMkRef = useRef([]);
           streetViewControl: false,
           mapTypeControl:    true,
           fullscreenControl: false,
+          gestureHandling:   "cooperative",
           styles: [{
             featureType: "poi",
             elementType: "labels",
@@ -481,7 +599,21 @@ const visitMkRef = useRef([]);
         });
         setMapLoaded(true);
       })
-      .catch((err) => toast.error(err.message, { title: "Map Failed to Load" }));
+      .catch((err) => {
+        toast.error(err.message, { title: "Map Failed to Load" });
+        if (mapDivRef.current && !leafletMapRef.current && !gMapRef.current) {
+          try {
+            mapDivRef.current.innerHTML = "";
+            const lMap = L.map(mapDivRef.current).setView([20.29044, 85.86197], 15);
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+              maxZoom: 19,
+              attribution: "© OpenStreetMap contributors",
+            }).addTo(lMap);
+            leafletMapRef.current = lMap;
+            setMapLoaded(true);
+          } catch { /* non-fatal */ }
+        }
+      });
   }, []);
 
   // ── Place punch-in marker ───────────────────────────────────────────────────
@@ -489,119 +621,62 @@ const visitMkRef = useRef([]);
     syncStartMarker();
   }, [mapLoaded, punchInLocation, syncStartMarker]);
 
- // ── Draw visit markers ──────────────────────────────────────────────────────
-useEffect(() => {
-  if (!mapLoaded || !window.google?.maps) return;
-  const G   = window.google.maps;
-  const map = gMapRef.current;
+  // ── Draw visit markers ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!mapLoaded || !window.google?.maps) return;
+    const G   = window.google.maps;
+    const map = gMapRef.current;
 
-  // Clear old visit markers
-  visitMkRef.current.forEach((m) => m.setMap(null));
-  visitMkRef.current = [];
+    visitMkRef.current.forEach((m) => m.setMap(null));
+    visitMkRef.current = [];
 
-  visits.forEach((v, i) => {
-    if ((v.locationName || "").trim().toLowerCase() === "start location") return;
+    (visits || []).forEach((v, idx) => {
+      const lat = v.coordinates?.lat ?? v.location?.lat ?? v.location?.latitude ?? v.lat ?? v.latitude;
+      const lng = v.coordinates?.lng ?? v.coordinates?.longitude ?? v.location?.lng ?? v.location?.longitude ?? v.lng ?? v.longitude;
+      if (!lat || !lng) return;
 
-    const lat = Number(
-      v.coordinates?.lat ??
-      v.location?.lat ??
-      v.location?.latitude ??
-      v.lat ??
-      v.latitude
-    );
-    const lng = Number(
-      v.coordinates?.lng ??
-      v.coordinates?.longitude ??
-      v.location?.lng ??
-      v.location?.longitude ??
-      v.lng ??
-      v.longitude
-    );
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      const isCompleted = v.status === "completed" || v.completedAt;
+      const mk = new G.Marker({
+        position: { lat: Number(lat), lng: Number(lng) },
+        map,
+        title:    `${v.partyName || "Visit"} (${v.status || "pending"})`,
+        zIndex:   15,
+        icon: {
+          path:         G.SymbolPath.CIRCLE,
+          scale:        8,
+          fillColor:    isCompleted ? "#16a34a" : "#f59e0b",
+          fillOpacity:  1,
+          strokeColor:  "#ffffff",
+          strokeWeight: 2,
+        },
+        label: {
+          text:        String(idx + 1),
+          color:       "#ffffff",
+          fontSize:    "10px",
+          fontWeight:  "bold",
+        },
+      });
 
-    const isInProgress = v.status === "InProgress";
-    const fillColor    = isInProgress ? "#22c55e" : "#0f1f3d";
-    const label        = v.locationName || `Stop ${i + 1}`;
-
-    // Custom SVG store pin
-    const svgPin = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="36" height="44" viewBox="0 0 36 44">
-        <defs>
-          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.25)"/>
-          </filter>
-        </defs>
-        <!-- Pin body -->
-        <path d="M18 0C10.268 0 4 6.268 4 14c0 9.941 14 28 14 28S32 23.941 32 14C32 6.268 25.732 0 18 0z"
-              fill="${fillColor}" filter="url(#shadow)"/>
-        <!-- White circle inside -->
-        <circle cx="18" cy="14" r="8" fill="white"/>
-        <!-- Store icon (simplified) -->
-        <rect x="12" y="11" width="12" height="8" rx="1" fill="${fillColor}"/>
-        <rect x="14" y="14" width="3" height="5" fill="white"/>
-        <rect x="19" y="14" width="3" height="5" fill="white"/>
-        <path d="M11 11 L18 8 L25 11" stroke="${fillColor}" stroke-width="1.5" fill="none"/>
-      </svg>`;
-
-    const marker = new G.Marker({
-      position: { lat, lng },
-      map,
-      title:  label,
-      zIndex: 30,
-      icon: {
-        url:    `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgPin)}`,
-        size:         new G.Size(36, 44),
-        anchor:       new G.Point(18, 44),
-        scaledSize:   new G.Size(36, 44),
-      },
-      animation: G.Animation.DROP,
-    });
-
-    // Info window on click
-    const infoWindow = new G.InfoWindow({
-      content: `
-        <div style="font-family:'Inter',sans-serif;padding:8px 10px;min-width:160px">
-          <div style="font-weight:700;font-size:13px;color:#0f172a;margin-bottom:4px">
-            ${label}
+      const iw = new G.InfoWindow({
+        content: `
+          <div style="font-family:sans-serif;padding:4px;max-width:200px">
+            <strong style="font-size:13px">${v.partyName || "Visit #" + (idx + 1)}</strong><br/>
+            <span style="font-size:11px;color:#64748b">${v.address || ""}</span><br/>
+            <span style="font-size:11px;font-weight:700;color:${isCompleted ? "#16a34a" : "#f59e0b"}">
+              ${isCompleted ? "Completed" : "Pending"}
+            </span>
           </div>
-          ${v.address
-            ? `<div style="font-size:11px;color:#64748b;margin-bottom:4px">
-                📍 ${typeof v.address === "string" ? v.address : v.address?.full || v.address?.short || ""}
-               </div>`
-            : ""}
-          ${v.checkInTime
-            ? `<div style="font-size:11px;color:#94a3b8">
-                🕐 ${new Date(v.checkInTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-               </div>`
-            : ""}
-          <div style="margin-top:5px;display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;
-                background:${isInProgress ? "rgba(34,197,94,0.1)" : "rgba(69,105,234,0.1)"};
-                color:${fillColor}">
-            ${isInProgress ? "In Progress" : v.status || "Visited"}
-          </div>
-        </div>`,
+        `,
+      });
+      mk.addListener("click", () => iw.open(map, mk));
+      visitMkRef.current.push(mk);
     });
-
-    marker.addListener("click", () => {
-      infoWindow.open(map, marker);
-    });
-
-    visitMkRef.current.push(marker);
-  });
-}, [mapLoaded, visits]);
+  }, [mapLoaded, visits]);
 
   const syncEndMarker = useCallback((points = allPtsRef.current) => {
     if (!mapLoaded || !gMapRef.current || !window.google?.maps) return;
 
-    const G = window.google.maps;
-    const explicitEnd =
-      punchOutLocationRef.current?.lat && punchOutLocationRef.current?.lng
-        ? { lat: punchOutLocationRef.current.lat, lng: punchOutLocationRef.current.lng }
-        : null;
-    const trailEnd = points?.length ? points[points.length - 1] : null;
-    const markerPos = explicitEnd || (!isLive ? trailEnd : null);
-
-    if (!markerPos) {
+    if (!hasPunchedOut || !punchOutLocationRef.current?.lat || !punchOutLocationRef.current?.lng) {
       if (endMkRef.current) {
         endMkRef.current.setMap(null);
         endMkRef.current = null;
@@ -609,140 +684,31 @@ useEffect(() => {
       return;
     }
 
-    if (endMkRef.current) {
-      endMkRef.current.setPosition({ lat: markerPos.lat, lng: markerPos.lng });
-    } else {
+    const G = window.google.maps;
+    const pos = {
+      lat: Number(punchOutLocationRef.current.lat),
+      lng: Number(punchOutLocationRef.current.lng),
+    };
+
+    if (!endMkRef.current) {
       endMkRef.current = new G.Marker({
-        position: { lat: markerPos.lat, lng: markerPos.lng },
+        position: pos,
         map: gMapRef.current,
-        title: explicitEnd ? "Punch-out Location" : "Tracking Stopped",
-        zIndex: 18,
+        title: "Punch-out Location",
+        zIndex: 11,
         icon: {
           path: G.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: "#111827",
+          scale: 9,
+          fillColor: "#ef4444",
           fillOpacity: 1,
           strokeColor: "#ffffff",
           strokeWeight: 3,
         },
       });
+    } else {
+      endMkRef.current.setPosition(pos);
     }
-  }, [mapLoaded, isLive]);
-  
-
-  // ── Drawing Manager ─────────────────────────────────────────────────────────
-  // Google removed DrawingManager in Maps JavaScript API 3.65, so geofence
-  // creation cannot use the legacy drawing library on this map anymore.
-
-  // ── drawTrail ───────────────────────────────────────────────────────────────
-  function buildSnapBatchKey(points) {
-    return points
-      .map((p) => `${Number(p.lat).toFixed(6)},${Number(p.lng).toFixed(6)}`)
-      .join("|");
-  }
-
-  async function fetchSnappedBatch(batch) {
-    if (!Array.isArray(batch) || batch.length < 2) {
-      return batch.map((point) => ({ lat: point.lat, lng: point.lng }));
-    }
-
-    const path = batch
-      .map((point) => `${Number(point.lat).toFixed(6)},${Number(point.lng).toFixed(6)}`)
-      .join("|");
-
-    const url =
-      `https://roads.googleapis.com/v1/snapToRoads?interpolate=true&path=${encodeURIComponent(path)}&key=${GKEY}`;
-
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`Snap to Roads failed with status ${res.status}`);
-    }
-
-    const data = await res.json();
-    const snapped = Array.isArray(data?.snappedPoints)
-      ? data.snappedPoints
-          .map((point) => ({
-            lat: Number(point?.location?.latitude),
-            lng: Number(point?.location?.longitude),
-          }))
-          .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
-      : [];
-
-    return snapped.length
-      ? snapped
-      : batch.map((point) => ({ lat: point.lat, lng: point.lng }));
-  }
-
-  function appendPath(target, path) {
-    for (const point of path) {
-      if (!point || !Number.isFinite(Number(point.lat)) || !Number.isFinite(Number(point.lng))) continue;
-      const normalized = { lat: Number(point.lat), lng: Number(point.lng) };
-      const last = target[target.length - 1];
-      if (
-        last &&
-        Math.abs(last.lat - normalized.lat) < 0.000001 &&
-        Math.abs(last.lng - normalized.lng) < 0.000001
-      ) {
-        continue;
-      }
-      target.push(normalized);
-    }
-  }
-
-  async function getRoadPath(points) {
-    if (!Array.isArray(points) || points.length < 2) {
-      return points.map((point) => ({ lat: point.lat, lng: point.lng }));
-    }
-
-    const cacheKey = buildSnapBatchKey(points);
-    if (snappedTrailCacheRef.current.key === cacheKey) {
-      return snappedTrailCacheRef.current.path;
-    }
-
-    const snappedPath = [];
-    let currentBatch = [points[0]];
-
-    const flushCurrentBatch = async () => {
-      if (currentBatch.length < 2) return;
-      const snappedBatch = await fetchSnappedBatch(currentBatch);
-      appendPath(snappedPath, snappedBatch);
-    };
-
-    for (let i = 1; i < points.length; i++) {
-      const prev = points[i - 1];
-      const curr = points[i];
-      const gapMetres = distMetres(prev.lat, prev.lng, curr.lat, curr.lng);
-
-      if (
-        gapMetres > SNAP_TO_ROADS_MAX_GAP_METRES ||
-        currentBatch.length >= SNAP_TO_ROADS_MAX_POINTS
-      ) {
-        await flushCurrentBatch();
-
-        if (gapMetres > SNAP_TO_ROADS_MAX_GAP_METRES) {
-          appendPath(snappedPath, [
-            { lat: prev.lat, lng: prev.lng },
-            { lat: curr.lat, lng: curr.lng },
-          ]);
-          currentBatch = [curr];
-        } else {
-          currentBatch = [prev, curr];
-        }
-        continue;
-      }
-
-      currentBatch.push(curr);
-    }
-
-    await flushCurrentBatch();
-
-    const finalPath = snappedPath.length
-      ? snappedPath
-      : points.map((point) => ({ lat: point.lat, lng: point.lng }));
-
-    snappedTrailCacheRef.current = { key: cacheKey, path: finalPath };
-    return finalPath;
-  }
+  }, [hasPunchedOut, mapLoaded]);
 
   function clearGpsDots() {
     dotsRef.current.forEach((d) => d.setMap(null));
@@ -762,7 +728,7 @@ useEffect(() => {
       return {
         casingColor: "#ffffff",
         casingWeight: 8,
-        mainColor: "#ef4444",
+        mainColor: "#2563eb",
         mainWeight: 4,
         mainOpacity: 0.9,
       };
@@ -771,7 +737,7 @@ useEffect(() => {
     return {
       casingColor: "#ffffff",
       casingWeight: 10,
-      mainColor: "#ef4444",
+      mainColor: "#2563eb",
       mainWeight: 6,
       mainOpacity: 1,
     };
@@ -785,83 +751,57 @@ useEffect(() => {
     dotsRef.current.forEach((d) => d.setMap(null));
     dotsRef.current = [];
 
-    const dotPoints = (Array.isArray(rawPoints) ? rawPoints : [])
-      .map((point) => ({
-        lat: Number(point?.lat),
-        lng: Number(point?.lng),
-        accuracy: Number(point?.accuracy ?? 0),
-        recordedAt: point?.recordedAt || point?.time || null,
-      }))
-      .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+    if (routeMode !== ROUTE_MODE_RAW) {
+      setGpsDotCount(0);
+      return;
+    }
 
-    setGpsDotCount(dotPoints.length);
-    if (!dotPoints.length || routeMode !== ROUTE_MODE_RAW) return;
+    const candidatePoints = Array.isArray(rawPoints) && rawPoints.length > 0
+      ? rawPoints
+      : allPtsRef.current;
 
-    const step = Math.max(1, Math.ceil(dotPoints.length / MAX_VISIBLE_GPS_DOTS));
-    dotPoints.forEach((point, index) => {
-      if (index % step !== 0) return;
-      const marker = new G.Marker({
-        position: { lat: point.lat, lng: point.lng },
+    const visiblePoints = candidatePoints.slice(-MAX_VISIBLE_GPS_DOTS);
+
+    dotsRef.current = visiblePoints.map((p, idx) => {
+      const isLatest = idx === visiblePoints.length - 1;
+      const dotColor = getGpsDotColor(p.accuracy);
+
+      return new G.Marker({
+        position: { lat: p.lat, lng: p.lng },
         map,
-        title: [
-          `GPS point ${index + 1}`,
-          point.accuracy ? `accuracy +/-${Math.round(point.accuracy)} m` : null,
-          point.recordedAt ? new Date(point.recordedAt).toLocaleTimeString() : null,
-        ].filter(Boolean).join(" | "),
-        zIndex: 12,
+        zIndex: isLatest ? 18 : 6,
         icon: {
           path: G.SymbolPath.CIRCLE,
-          scale: routeMode === ROUTE_MODE_RAW ? 4 : 3,
-          fillColor: getGpsDotColor(point.accuracy),
-          fillOpacity: 0.95,
+          scale: isLatest ? 5 : 3.5,
+          fillColor: dotColor,
+          fillOpacity: isLatest ? 0.95 : 0.7,
           strokeColor: "#ffffff",
-          strokeOpacity: 1,
-          strokeWeight: 1.5,
+          strokeWeight: isLatest ? 1.5 : 1,
         },
       });
-      dotsRef.current.push(marker);
     });
+
+    setGpsDotCount(candidatePoints.length);
   }
 
-  async function drawTrail(points, options = {}) {
-    const { autoFit = false, autoPanLive = false, rawPoints = points } = options;
+  function drawTrail(points, options = {}) {
+    const { autoFit = false, autoPanLive = false, rawPoints = [] } = options;
     if (!gMapRef.current || !window.google?.maps) return;
     const G   = window.google.maps;
     const map = gMapRef.current;
-    if (!Array.isArray(points) || points.length === 0) {
-      polyRef.current.casing?.setMap(null);
-      polyRef.current.main?.setMap(null);
-      polyRef.current = { casing: null, main: null };
-      clearGpsDots();
-      syncEndMarker([]);
-      syncStartMarker([]);
-      updateDistanceStats(0, 0);
-      return;
-    }
-    const shouldDrawLine = points.length >= 2 && routeMode !== ROUTE_MODE_RAW;
-    const requestSeq = ++drawRequestSeqRef.current;
+
+    allPtsRef.current = points;
+    if (typeof onPointsChange === "function") onPointsChange(points);
+
     const lineStyle = getLineStyle(routeMode);
-
-    let path = points.map((p) => ({ lat: p.lat, lng: p.lng }));
-    if (shouldDrawLine && routeMode === ROUTE_MODE_ROAD) {
-      try {
-        path = await getRoadPath(points);
-      } catch (error) {
-        console.warn("[SnapToRoads] Falling back to raw path:", error?.message || error);
-      }
-    }
-
-    if (requestSeq !== drawRequestSeqRef.current) return;
+    const path = points.map((p) => ({ lat: p.lat, lng: p.lng }));
+    const shouldDrawLine = path.length >= 2;
 
     if (shouldDrawLine) {
-      if (polyRef.current.casing && polyRef.current.main) {
-        polyRef.current.casing.setPath(path);
-        polyRef.current.main.setPath(path);
-      } else {
+      if (!polyRef.current.casing) {
         polyRef.current = {
           casing: new G.Polyline({
             path,
-            geodesic: true,
             strokeColor: lineStyle.casingColor,
             strokeOpacity: 1,
             strokeWeight: lineStyle.casingWeight,
@@ -870,7 +810,6 @@ useEffect(() => {
           }),
           main: new G.Polyline({
             path,
-            geodesic: true,
             strokeColor: lineStyle.mainColor,
             strokeOpacity: lineStyle.mainOpacity,
             strokeWeight: lineStyle.mainWeight,
@@ -878,16 +817,19 @@ useEffect(() => {
             zIndex: 1001,
           }),
         };
+      } else {
+        polyRef.current.casing.setPath(path);
+        polyRef.current.main.setPath(path);
+        polyRef.current.casing.setOptions({
+          strokeColor: lineStyle.casingColor,
+          strokeWeight: lineStyle.casingWeight,
+        });
+        polyRef.current.main.setOptions({
+          strokeColor: lineStyle.mainColor,
+          strokeOpacity: lineStyle.mainOpacity,
+          strokeWeight: lineStyle.mainWeight,
+        });
       }
-      polyRef.current.casing?.setOptions({
-        strokeColor: lineStyle.casingColor,
-        strokeWeight: lineStyle.casingWeight,
-      });
-      polyRef.current.main?.setOptions({
-        strokeColor: lineStyle.mainColor,
-        strokeOpacity: lineStyle.mainOpacity,
-        strokeWeight: lineStyle.mainWeight,
-      });
     } else {
       polyRef.current.casing?.setMap(null);
       polyRef.current.main?.setMap(null);
@@ -898,23 +840,31 @@ useEffect(() => {
 
     const last = points[points.length - 1];
     if (last) {
+      const prevLoc = lastEmittedLocationRef.current;
+      if (
+        typeof onCurrentLocationChange === "function" &&
+        (!prevLoc || prevLoc.lat !== last.lat || prevLoc.lng !== last.lng)
+      ) {
+        lastEmittedLocationRef.current = last;
+        onCurrentLocationChange(last);
+      }
       if (isLive) {
         if (liveMkRef.current) {
-          liveMkRef.current.setPosition({ lat: last.lat, lng: last.lng });
+          animateMarkerSmooth(liveMkRef.current, last.lat, last.lng, 600);
         } else {
           liveMkRef.current = new G.Marker({
             position: { lat: last.lat, lng: last.lng },
             map,
-            title:  "Current Position",
-            zIndex: 20,
-            icon: {
-              path:         G.SymbolPath.CIRCLE,
-              scale:        10,
-              fillColor:    "#ef4444",
-              fillOpacity:  1,
-              strokeColor:  "rgba(239,68,68,0.4)",
-              strokeWeight: 12,
-            },
+            title:  "User Live Position",
+            zIndex: 25,
+            icon:   getRadarDiscIcon(G),
+          });
+          liveMkRef.current.addListener("click", () => {
+            withProgrammaticViewport(() => {
+              map.panTo({ lat: last.lat, lng: last.lng });
+              map.setZoom(18);
+            });
+            toast.success("Zoomed to Live Location", { id: "locate-toast" });
           });
         }
       } else if (liveMkRef.current) {
@@ -939,10 +889,8 @@ useEffect(() => {
       });
     }
 
-    const filteredKm = calcFilteredKm(points);
-    const km = filteredKm > 0 ? filteredKm : calcKm(points);
+    const km = calcFilteredKm(points);
     updateDistanceStats(km, points.length);
-    console.log(`[drawTrail] ${points.length} points — ${km.toFixed(3)} km`);
   }
 
   function cleanPoints(raw, options = {}) {
@@ -1017,22 +965,25 @@ useEffect(() => {
       }
 
       const data = await res.json();
-      const result = data?.data || data?.result || data || {};
-      const roadKm = Number(result.totalKm);
+      const payload = data?.data || data?.result || data;
+      const parsedKm = Number(payload?.totalKm);
+      const parsedSegments = Number(payload?.segmentCount);
+
       setRoadTravel({
-        totalKm: Number.isFinite(roadKm) ? roadKm : null,
-        segmentCount: Number(result.segmentCount || result.segments?.length || 0),
+        totalKm: Number.isFinite(parsedKm) ? Math.round(parsedKm * 1000) / 1000 : null,
+        segmentCount: Number.isFinite(parsedSegments) ? parsedSegments : 0,
         loading: false,
       });
+
     } catch {
       setRoadTravel({ totalKm: null, segmentCount: 0, loading: false });
     }
   }, [userId, selectedDate]);
 
-  const fetchTotalKm = useCallback(async () => {
+  const fetchBackendDistanceStats = useCallback(async () => {
     if (!userId) return;
     try {
-       const dateParam = getLocalDateString(selectedDate);
+      const dateParam = getLocalDateString(selectedDate);
       const res = await fetch(
         `${API}/api/v1/location/distance?salesmanId=${userId}&date=${dateParam}`,
         { headers: { Authorization: `Bearer ${getToken()}` } }
@@ -1040,18 +991,17 @@ useEffect(() => {
 
       if (!res.ok) {
         if (allPtsRef.current.length >= 2) {
-          updateDistanceStats(calcFilteredKm(allPtsRef.current) || calcKm(allPtsRef.current), allPtsRef.current.length);
+          updateDistanceStats(calcFilteredKm(allPtsRef.current), allPtsRef.current.length);
         }
         return;
       }
       const data = await res.json();
-      const dbKm = data?.data?.totalKm ?? data?.result?.totalKm ?? data?.totalKm ?? 0;
-      const dbPoints = data?.data?.totalPoints ?? data?.result?.totalPoints ?? data?.totalPoints ?? 0;
-      if (Number(dbKm) > 0 || Number(dbPoints) > 0) {
-        updateDistanceStats(Math.round(Number(dbKm) * 1000) / 1000, Number(dbPoints) || allPtsRef.current.length);
-      } else if (allPtsRef.current.length >= 2) {
-        updateDistanceStats(calcFilteredKm(allPtsRef.current) || calcKm(allPtsRef.current), allPtsRef.current.length);
-      }
+      const dbKm = Number(data?.data?.totalKm ?? data?.result?.totalKm ?? data?.totalKm ?? 0);
+      const dbPoints = Number(data?.data?.totalPoints ?? data?.result?.totalPoints ?? data?.totalPoints ?? 0);
+      
+      const finalKm = dbKm > 0 ? Math.round(dbKm * 1000) / 1000 : calcFilteredKm(allPtsRef.current);
+      const finalPoints = dbPoints > 0 ? dbPoints : allPtsRef.current.length;
+      updateDistanceStats(finalKm, finalPoints);
     } catch { /* non-fatal */ }
   }, [userId, selectedDate, updateDistanceStats]);
 
@@ -1059,8 +1009,7 @@ useEffect(() => {
     const { autoFit = false } = options;
     if (!userId || !mapLoaded) return;
     if (preferVisitTrail) return;
-     try {
-      // ✅ Use selectedDate if provided, otherwise fall back to today
+    try {
       let since, until;
       if (selectedDate && selectedDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
         const [yyyy, mm, dd] = selectedDate.split("-").map(Number);
@@ -1074,11 +1023,8 @@ useEffect(() => {
 
       const url = `${API}/api/v1/location/today?salesmanId=${userId}&startTime=${since.toISOString()}&endTime=${until.toISOString()}`;
 
-      console.log(`[AdminMap] 📡 Fetching trail for userId:${userId}`);
-
       const res     = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
       const data    = await res.json();
-      console.log("[AdminMap] Full response:", JSON.stringify(data).slice(0, 300));
 
       const raw = extractLocationPoints(data);
       const rawAfterPunchIn = filterPointsFromPunchInTime(
@@ -1094,10 +1040,6 @@ useEffect(() => {
       const visitFallbackTrail = extractVisitTrailPoints(
         visitsRef.current,
         punchInLocationRef.current
-      );
-
-      console.log(
-        `[AdminMap] DB points: raw=${raw.length} afterPunchIn=${rawAfterPunchIn.length} cleaned=${cleaned.length} sparse=${sparseCleaned.length} visitFallback=${visitFallbackTrail.length}`
       );
 
       const shouldUseVisitFallback =
@@ -1119,149 +1061,105 @@ useEffect(() => {
             appendSequentialPoint(merged, lp);
           }
         }
-        const finalTrail = cleanPoints(merged, {
-          allowSparse: shouldUseVisitFallback,
-          preserveDetail: preserveDetail && !shouldUseVisitFallback,
-        });
-        allPtsRef.current = finalTrail;
-        drawTrail(finalTrail, { autoFit, autoPanLive: false, rawPoints: rawAfterPunchIn });
-        console.log(`[AdminMap] ✅ Trail: ${finalTrail.length} points — ${calcKm(finalTrail).toFixed(3)} km`);
+        drawTrail(merged, { autoFit, autoPanLive: isLive, rawPoints: rawAfterPunchIn });
+        fetchBackendDistanceStats();
       } else {
-        if (allPtsRef.current.length > 0) {
-          drawTrail(allPtsRef.current, { autoFit, autoPanLive: false, rawPoints: rawAfterPunchIn });
+        if (isLive && allPtsRef.current.length > 0) {
+          drawTrail(allPtsRef.current, { autoFit: false, autoPanLive: true, rawPoints: rawPtsRef.current });
+        } else {
+          drawTrail([], { autoFit: false, rawPoints: [] });
+          updateDistanceStats(0, 0);
         }
-        console.warn(`[AdminMap] ⚠️ No DB points — raw:${raw.length} afterPunchIn:${rawAfterPunchIn.length}`);
       }
-
-      await fetchTotalKm();
-      await fetchRoadTravelDistance();
-    } catch (e) {
-      console.error("[AdminMap] ❌ Trail fetch failed:", e.message);
+    } catch (err) {
+      toast.error(err.message, { title: "Error Fetching Trail" });
     }
-  }, [userId, mapLoaded, fetchTotalKm, fetchRoadTravelDistance, selectedDate, isLive, isTodaySelected, preferVisitTrail, routeMode]);
+  }, [userId, mapLoaded, isLive, isTodaySelected, preferVisitTrail, routeMode, selectedDate, updateDistanceStats, fetchBackendDistanceStats]);
 
-  useEffect(() => {
-    // ✅ Clear old trail and re-fetch whenever selectedDate changes
-    polyRef.current.casing?.setMap(null);
-    polyRef.current.main?.setMap(null);
-    polyRef.current = { casing: null, main: null };
-    dotsRef.current.forEach(d => d.setMap(null));
-    dotsRef.current = [];
-    if (liveMkRef.current) { liveMkRef.current.setMap(null); liveMkRef.current = null; }
-    if (endMkRef.current) { endMkRef.current.setMap(null); endMkRef.current = null; }
-    allPtsRef.current = [];
-    rawPtsRef.current = [];
-    snappedTrailCacheRef.current = { key: "", path: [] };
-    drawRequestSeqRef.current += 1;
-    userAdjustedViewportRef.current = false;
-    setGpsDotCount(0);
-    updateDistanceStats(0, 0);
-    if (!preferVisitTrail) {
-      loadTrailFromDB({ autoFit: true });
-    }
-  }, [loadTrailFromDB, updateDistanceStats, preferVisitTrail]);
-
-  useEffect(() => {
-    if (!mapLoaded || isLive) return;
-
-    const visitFallbackTrail = extractVisitTrailPoints(visits, punchInLocation);
-    if (allPtsRef.current.length >= 2 || visitFallbackTrail.length < 2) {
-      syncEndMarker(allPtsRef.current);
-      return;
-    }
-
-      const finalTrail = cleanPoints(
-        ensureTrailStartsAtPunchIn(visitFallbackTrail, punchInLocation),
-        { allowSparse: true }
-      );
-    if (finalTrail.length >= 2) {
-      allPtsRef.current = finalTrail;
-      drawTrail(finalTrail, { autoFit: true, autoPanLive: false });
-      updateDistanceStats(calcKm(finalTrail), finalTrail.length);
-    } else {
-      syncEndMarker(finalTrail);
-    }
-  }, [mapLoaded, isLive, visits, punchInLocation, syncEndMarker, updateDistanceStats]);
-
-  useEffect(() => {
-    if (!mapLoaded || !preferVisitTrail) return;
-
-    const visitTrail = extractVisitTrailPoints(visits, punchInLocation);
-    const finalTrail = cleanPoints(
-      ensureTrailStartsAtPunchIn(visitTrail, punchInLocation),
-      { allowSparse: true }
-    );
-
-    if (finalTrail.length >= 2) {
-      allPtsRef.current = finalTrail;
-      drawTrail(finalTrail, { autoFit: true, autoPanLive: false });
-      updateDistanceStats(calcKm(finalTrail), finalTrail.length);
-      return;
-    }
-
-    if (finalTrail.length === 1) {
-      allPtsRef.current = finalTrail;
-      syncStartMarker(finalTrail);
-      syncEndMarker(finalTrail);
-      updateDistanceStats(0, finalTrail.length);
-      return;
-    }
-
-    allPtsRef.current = [];
-    syncStartMarker([]);
-    syncEndMarker([]);
-    updateDistanceStats(0, 0);
-  }, [mapLoaded, preferVisitTrail, visits, punchInLocation, syncEndMarker, syncStartMarker, updateDistanceStats]);
-
-  useEffect(() => {
-    syncEndMarker(allPtsRef.current);
-  }, [punchOutLocation, syncEndMarker]);
-
-  useEffect(() => {
-    if (preferVisitTrail) return;
-    if (!userId || !mapLoaded || !isLive || !isTodaySelected) return;
-    const id = setInterval(() => loadTrailFromDB({ autoFit: false }), 10_000);
-    return () => clearInterval(id);
-  }, [userId, mapLoaded, loadTrailFromDB, isLive, isTodaySelected, preferVisitTrail]);
-
-  useEffect(() => {
-    if (!mapLoaded || allPtsRef.current.length === 0) return;
-    drawTrail(allPtsRef.current, {
-      autoFit: false,
-      autoPanLive: false,
-      rawPoints: rawPtsRef.current.length ? rawPtsRef.current : allPtsRef.current,
-    });
-  }, [mapLoaded, routeMode]);
-
-  // ── Start / stop tracking on punch ─────────────────────────────────────────
   useEffect(() => {
     if (!mapLoaded) return;
+
+    if (preferVisitTrail) {
+      const visitTrail = ensureTrailStartsAtPunchIn(
+        extractVisitTrailPoints(visits, punchInLocation),
+        punchInLocation
+      );
+      rawPtsRef.current = visitTrail;
+      drawTrail(visitTrail, { autoFit: true, rawPoints: visitTrail });
+      return;
+    }
+
+    loadTrailFromDB({ autoFit: true });
+  }, [mapLoaded, userId, selectedDate, visits, preferVisitTrail, routeMode, loadTrailFromDB, punchInLocation]);
+
+  useEffect(() => {
+    if (routeMode === ROUTE_MODE_ROAD) {
+      fetchRoadTravelDistance();
+    }
+  }, [routeMode, fetchRoadTravelDistance]);
+
+  useEffect(() => {
+    if (!isOwner) return;
 
     const wasIn  = prevPunchedIn.current;
     const wasOut = prevPunchedOut.current;
     prevPunchedIn.current  = isPunchedIn;
     prevPunchedOut.current = hasPunchedOut;
 
-    if (isPunchedIn && !hasPunchedOut && !wasIn && isOwner) {
-      // ✅ FIX: pass socketRef (stable ref) instead of socket (raw, potentially stale)
-      startTracking(
-        (allPts) => {
-          if (!allPts.length) return;
-          const newPts = allPts.map((p) => ({ lat: p.lat, lng: p.lng, accuracy: p.accuracy }));
-          rawPtsRef.current = newPts;
-          const merged = [...allPtsRef.current];
-          for (const np of newPts) {
-            appendSequentialPoint(merged, np);
-            }
-            const finalTrail = cleanPoints(merged, { preserveDetail: routeMode === ROUTE_MODE_RAW });
-            allPtsRef.current = finalTrail;
-            drawTrail(finalTrail, { autoFit: false, autoPanLive: false, rawPoints: rawPtsRef.current });
-            const last = allPts[allPts.length - 1];
-            if (last) setAccuracy(last.accuracy);
-            if (typeof onPointsChange === "function") onPointsChange(allPts);
+    if (isPunchedIn && !hasPunchedOut && !wasIn) {
+      allPtsRef.current = [];
+      rawPtsRef.current = [];
+      clearGpsDots();
+      userAdjustedViewportRef.current = false;
+      drawTrail([], { autoFit: false, rawPoints: [] });
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const pt = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            time: new Date().toISOString(),
+          };
+          allPtsRef.current = [pt];
+          rawPtsRef.current = [pt];
+          syncStartMarker([pt]);
+          drawTrail([pt], { autoFit: false, autoPanLive: true, rawPoints: [pt] });
         },
-        socketRef,  // ✅ FIX: stable ref, not raw socket
-        userId,
+        () => {},
+        { enableHighAccuracy: true, timeout: 10_000 }
+      );
+
+      startTracking(
+        (pt) => {
+          const currentPts = [...allPtsRef.current];
+          const rawPts = [...rawPtsRef.current];
+          appendSequentialPoint(rawPts, pt, 1);
+          rawPtsRef.current = rawPts;
+          setAccuracy(pt.accuracy);
+
+          const minMoveRequired = routeMode === ROUTE_MODE_RAW
+            ? 3
+            : getEffectiveMoveThreshold(
+                pt.accuracy,
+                currentPts[currentPts.length - 1]?.accuracy
+              );
+
+          const lastPt = currentPts[currentPts.length - 1];
+          const moved = lastPt ? distMetres(lastPt.lat, lastPt.lng, pt.lat, pt.lng) : 0;
+          if (!lastPt || (moved >= minMoveRequired && moved <= MAX_LIVE_SEGMENT_METRES)) {
+            const updated = appendSequentialPoint(currentPts, pt);
+            allPtsRef.current = updated;
+            drawTrail(updated, { autoFit: false, autoPanLive: true, rawPoints: rawPts });
+          } else {
+            drawGpsDots(rawPts);
+            if (liveMkRef.current && window.google?.maps) {
+              animateMarkerSmooth(liveMkRef.current, pt.lat, pt.lng, 600);
+            }
+          }
+        },
+        socketRef,
+        userId
       );
     }
 
@@ -1271,7 +1169,6 @@ useEffect(() => {
     }
   }, [isPunchedIn, hasPunchedOut, socketRef, mapLoaded, loadTrailFromDB, userId, routeMode]);
 
-  // ── Live dot every 30 s ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOwner || !isPunchedIn || hasPunchedOut || !mapLoaded || !gMapRef.current) return;
     if (!window.google?.maps) return;
@@ -1288,21 +1185,14 @@ useEffect(() => {
           if (acc > 150) return;
 
           if (liveMkRef.current) {
-            liveMkRef.current.setPosition({ lat, lng });
+            animateMarkerSmooth(liveMkRef.current, lat, lng, 600);
           } else if (gMapRef.current) {
             liveMkRef.current = new G.Marker({
               position: { lat, lng },
               map:      gMapRef.current,
-              title:    "Current Location",
-              zIndex:   20,
-              icon: {
-                path:         G.SymbolPath.CIRCLE,
-                scale:        10,
-                fillColor:    "#ef4444",
-                fillOpacity:  1,
-                strokeColor:  "rgba(239,68,68,0.4)",
-                strokeWeight: 12,
-              },
+              title:    "Live Location",
+              zIndex:   25,
+              icon:     getRadarDiscIcon(G),
             });
           }
 
@@ -1317,14 +1207,12 @@ useEffect(() => {
             const minMoveRequired = routeMode === ROUTE_MODE_RAW
               ? 3
               : getEffectiveMoveThreshold(acc, lastTrailPt.accuracy);
-            if (moved >= minMoveRequired) {
+            if (moved >= minMoveRequired && moved <= MAX_LIVE_SEGMENT_METRES) {
               const merged = [...allPtsRef.current, livePoint];
               const finalTrail = cleanPoints(merged, { preserveDetail: routeMode === ROUTE_MODE_RAW });
               allPtsRef.current = finalTrail;
               drawTrail(finalTrail, { autoFit: false, autoPanLive: false, rawPoints: rawPtsRef.current });
-              console.log(`[LiveDot] ✅ ${moved.toFixed(0)} m real movement — trail updated`);
             } else {
-              console.log(`[LiveDot] ⏭ ${moved.toFixed(0)} m jitter — dot moved, trail unchanged`);
               if (isLive && gMapRef.current && !userAdjustedViewportRef.current) {
                 withProgrammaticViewport(() => {
                   gMapRef.current.panTo({ lat, lng });
@@ -1339,7 +1227,7 @@ useEffect(() => {
             }
           }
         },
-        (err) => console.warn("[LiveDot] GPS failed:", err.message),
+        () => {},
         { enableHighAccuracy: true, timeout: 20_000, maximumAge: 5_000 }
       );
     };
@@ -1349,12 +1237,10 @@ useEffect(() => {
     return () => clearInterval(id);
   }, [isOwner, isPunchedIn, hasPunchedOut, mapLoaded, routeMode]);
 
-  // ── Cleanup on unmount ──────────────────────────────────────────────────────
   useEffect(() => {
     return () => { if (isCurrentlyTracking()) stopTracking(); };
   }, []);
 
-  // ── Socket events ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
 
@@ -1381,14 +1267,14 @@ useEffect(() => {
         const minMoveRequired = routeMode === ROUTE_MODE_RAW
           ? 3
           : getEffectiveMoveThreshold(data.accuracy, last.accuracy);
-        if (dist < minMoveRequired) {
-          console.log(`[Socket] ⏭ ${dist.toFixed(0)} m jitter — skipped`);
-          if (liveMkRef.current) {
-            liveMkRef.current.setPosition({ lat: data.lat, lng: data.lng });
+        if (dist < minMoveRequired || dist > MAX_LIVE_SEGMENT_METRES) {
+          if (liveMkRef.current && dist <= MAX_LIVE_SEGMENT_METRES) {
+            animateMarkerSmooth(liveMkRef.current, data.lat, data.lng, 600);
           }
           return;
         }
       }
+
       const merged = [...allPtsRef.current, livePoint];
       const finalTrail = cleanPoints(merged, { preserveDetail: routeMode === ROUTE_MODE_RAW });
       allPtsRef.current = finalTrail;
@@ -1411,44 +1297,72 @@ useEffect(() => {
   useEffect(() => {
     if (!socket || !userId || isOwner) return;
     socket.emit("location:watch_user", { userId });
-    console.log(`[AdminMap] 👁 Watching userId: ${userId}`);
   }, [socket, userId, isOwner]);
 
-  // ── Locate Me ───────────────────────────────────────────────────────────────
+  // ── Pan and Zoom to User Location when Live Location button is clicked ──────
   useEffect(() => {
-    if (!locateTrigger || !gMapRef.current) return;
-    if (!navigator.geolocation) {
-      toast.error("Geolocation is not supported by your browser.", { title: "GPS Unavailable" });
-      return;
+    if (!locateTrigger || !gMapRef.current || !mapLoaded) return;
+    const map = gMapRef.current;
+
+    userAdjustedViewportRef.current = false;
+
+    let targetLat = null;
+    let targetLng = null;
+
+    if (liveMkRef.current?.getPosition()) {
+      const pos = liveMkRef.current.getPosition();
+      targetLat = pos.lat();
+      targetLng = pos.lng();
+    } else if (allPtsRef.current.length > 0) {
+      const last = allPtsRef.current[allPtsRef.current.length - 1];
+      targetLat = last.lat;
+      targetLng = last.lng;
+    } else if (rawPtsRef.current.length > 0) {
+      const last = rawPtsRef.current[rawPtsRef.current.length - 1];
+      targetLat = last.lat;
+      targetLng = last.lng;
+    } else if (punchInLocationRef.current?.lat && punchInLocationRef.current?.lng) {
+      targetLat = Number(punchInLocationRef.current.lat);
+      targetLng = Number(punchInLocationRef.current.lng);
+    } else if (visitsRef.current && visitsRef.current.length > 0) {
+      const v = visitsRef.current[0];
+      targetLat = Number(v.coordinates?.lat || v.lat);
+      targetLng = Number(v.coordinates?.lng || v.lng);
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        gMapRef.current.panTo({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        gMapRef.current.setZoom(17);
-      },
-      (err) => {
-        const msgs = {
-          1: "Location permission denied.",
-          2: "Current position unavailable.",
-          3: "Location request timed out.",
-        };
-        toast.error(msgs[err.code] || err.message, { title: "Locate Me Failed" });
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 }
-    );
-  }, [locateTrigger]);
+
+    if (targetLat && targetLng && Number.isFinite(targetLat) && Number.isFinite(targetLng)) {
+      withProgrammaticViewport(() => {
+        map.panTo({ lat: targetLat, lng: targetLng });
+        map.setZoom(18);
+      });
+      toast.success("Centered on user location", { id: "locate-toast" });
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          withProgrammaticViewport(() => {
+            map.panTo({ lat, lng });
+            map.setZoom(18);
+          });
+          toast.success("Centered on device location", { id: "locate-toast" });
+        },
+        () => toast.error("Could not determine current location.")
+      );
+    }
+  }, [locateTrigger, mapLoaded, withProgrammaticViewport]);
 
   const accuracyColor =
-    accuracy == null ? "#94a3b8"
-    : accuracy <= 20  ? "#16a34a"
-    : accuracy <= 50  ? "#d97706"
-    :                   "#dc2626";
+      accuracy == null ? "#94a3b8"
+    : accuracy <= 20   ? "#16a34a"
+    : accuracy <= 50   ? "#d97706"
+    :                    "#dc2626";
 
   const accuracyLabel =
-    accuracy == null ? "No GPS"
-    : accuracy <= 20  ? "Excellent"
-    : accuracy <= 50  ? "Fair"
-    :                   "Poor";
+      accuracy == null ? ""
+    : accuracy <= 20   ? "High Precision"
+    : accuracy <= 50   ? "Fair"
+    :                    "Poor";
 
   const fmtTime = (iso) =>
     iso
@@ -1456,7 +1370,16 @@ useEffect(() => {
       : null;
 
   return (
-    <div style={{ position: "relative", width: "100%", height, borderRadius: "inherit" }}>
+    <div style={{
+      position: isMapFullscreen ? "fixed" : "relative",
+      top: isMapFullscreen ? 0 : "auto",
+      left: isMapFullscreen ? 0 : "auto",
+      width: isMapFullscreen ? "100vw" : "100%",
+      height: isMapFullscreen ? "100vh" : height,
+      zIndex: isMapFullscreen ? 99999 : "auto",
+      borderRadius: isMapFullscreen ? 0 : "inherit",
+      background: "#ffffff",
+    }}>
       <div ref={mapDivRef} style={{ width: "100%", height: "100%", borderRadius: "inherit" }} />
 
       {!mapLoaded && (
@@ -1475,6 +1398,43 @@ useEffect(() => {
         </div>
       )}
 
+      {mapAuthError && (
+        <div style={{
+          position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", background: "#0f172a",
+          color: "#ffffff", borderRadius: "inherit", zIndex: 2000, padding: "24px", textAlign: "center",
+        }}>
+          <div style={{ background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.4)", borderRadius: "16px", padding: "20px", maxWidth: "520px" }}>
+            <div style={{ fontSize: "17px", fontWeight: 800, color: "#f87171", marginBottom: "8px" }}>
+              ⚠️ Google Maps Billing Not Enabled
+            </div>
+            <div style={{ fontSize: "13px", color: "#cbd5e1", lineHeight: 1.5, marginBottom: "12px" }}>
+              Google Maps API returned <code>BillingNotEnabledMapError</code> for key <code>{GKEY.slice(0, 10)}...</code>.
+            </div>
+            <div style={{ fontSize: "12px", color: "#94a3b8", textAlign: "left", background: "rgba(0,0,0,0.3)", padding: "12px", borderRadius: "8px", marginBottom: "16px" }}>
+              <b>How to fix:</b>
+              <ol style={{ margin: "6px 0 0 0", paddingLeft: "18px" }}>
+                <li>Go to <b>Google Cloud Console</b> & enable Billing for your project</li>
+                <li>Or update <code>GKEY</code> in <code>src/utils/Livetrackmap.jsx</code> with an active key</li>
+              </ol>
+            </div>
+            <a
+              href="https://console.cloud.google.com/billing"
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: "inline-block", background: "#2563eb", color: "#ffffff",
+                fontWeight: 700, fontSize: "13px", padding: "8px 20px", borderRadius: "10px",
+                textDecoration: "none", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.4)"
+              }}
+            >
+              Open Google Cloud Billing Console
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Status Pill */}
       <div style={{
         position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
         zIndex: 1000, background: "rgba(255,255,255,0.97)", borderRadius: 999,
@@ -1528,11 +1488,12 @@ useEffect(() => {
         </div>
       )}
 
+      {/* Route Mode & Fullscreen Controls */}
       <div style={{
         position: "absolute", top: accuracy != null ? 44 : 10, right: 10, zIndex: 1000,
         background: "rgba(255,255,255,0.97)", borderRadius: 8,
         padding: 3, boxShadow: "0 1px 6px rgba(0,0,0,0.1)",
-        border: "1px solid #e2e8f0", display: "flex", gap: 3,
+        border: "1px solid #e2e8f0", display: "flex", gap: 3, alignItems: "center",
       }}>
         {[
           { value: ROUTE_MODE_ROAD, label: "Road Route" },
@@ -1552,7 +1513,7 @@ useEffect(() => {
                 fontWeight: 800,
                 cursor: "pointer",
                 color: active ? "#ffffff" : "#475569",
-                background: active ? "#ef4444" : "transparent",
+                background: active ? "#2563eb" : "transparent",
                 whiteSpace: "nowrap",
               }}
             >
@@ -1560,6 +1521,33 @@ useEffect(() => {
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={() => {
+            setIsMapFullscreen((prev) => !prev);
+            setTimeout(() => {
+              if (gMapRef.current && window.google?.maps) {
+                window.google.maps.event.trigger(gMapRef.current, "resize");
+              }
+            }, 100);
+          }}
+          title={isMapFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+          style={{
+            border: 0,
+            borderRadius: 6,
+            padding: "5px 8px",
+            fontSize: 12,
+            fontWeight: 800,
+            cursor: "pointer",
+            color: "#0f172a",
+            background: "#f1f5f9",
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          {isMapFullscreen ? "🗗 Exit" : "⛶ Fullscreen"}
+        </button>
       </div>
 
       {sockAck && (
@@ -1604,7 +1592,7 @@ useEffect(() => {
               <span style={{
                 width: 18,
                 height: 0,
-                borderTop: "4px solid #ef4444",
+                borderTop: "4px solid #2563eb",
                 borderRadius: 999,
               }} />
               Route

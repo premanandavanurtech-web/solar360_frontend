@@ -156,6 +156,8 @@ import {
 } from "date-fns";
 import { useNavigate } from "react-router-dom";
 
+const isAdminRole = (role) => ["ADMIN", "Admin_panel"].includes(role);
+
 // New Color Theme - Clean and Modern
 const COLORS = {
   primary: {
@@ -242,21 +244,24 @@ const FUEL_TYPES = {
 // Status Configuration
 const STATUS_CONFIG = {
   Approved: {
-    color: COLORS.success.main,
-    bg: COLORS.success.bg,
-    icon: <CheckCircle sx={{ fontSize: 18 }} />,
+    color: "#34d399",
+    bg: "rgba(16, 185, 129, 0.15)",
+    border: "rgba(16, 185, 129, 0.3)",
+    icon: <CheckCircle sx={{ fontSize: 16 }} />,
     label: "Approved",
   },
   Pending: {
-    color: COLORS.warning.main,
-    bg: COLORS.warning.bg,
-    icon: <PendingActions sx={{ fontSize: 18 }} />,
+    color: "#fbbf24",
+    bg: "rgba(245, 158, 11, 0.15)",
+    border: "rgba(245, 158, 11, 0.3)",
+    icon: <PendingActions sx={{ fontSize: 16 }} />,
     label: "Pending",
   },
   Rejected: {
-    color: COLORS.error.main,
-    bg: COLORS.error.bg,
-    icon: <Cancel sx={{ fontSize: 18 }} />,
+    color: "#f87171",
+    bg: "rgba(239, 68, 68, 0.15)",
+    border: "rgba(239, 68, 68, 0.3)",
+    icon: <Cancel sx={{ fontSize: 16 }} />,
     label: "Rejected",
   },
 };
@@ -264,45 +269,52 @@ const STATUS_CONFIG = {
 // Category Configuration
 const CATEGORY_CONFIG = {
   Food: {
-    color: "#059669",
-    icon: <Restaurant sx={{ fontSize: 18 }} />,
-    bg: "#ecfdf5",
+    color: "#34d399",
+    icon: <Restaurant sx={{ fontSize: 16 }} />,
+    bg: "rgba(16, 185, 129, 0.15)",
+    border: "rgba(16, 185, 129, 0.3)",
     label: "Food",
   },
   Accommodation: {
-    color: "#7c3aed",
-    icon: <Hotel sx={{ fontSize: 18 }} />,
-    bg: "#f5f3ff",
+    color: "#c084fc",
+    icon: <Hotel sx={{ fontSize: 16 }} />,
+    bg: "rgba(168, 85, 247, 0.15)",
+    border: "rgba(168, 85, 247, 0.3)",
     label: "Accommodation",
   },
   Fuel: {
-    color: "#ea580c",
-    icon: <LocalGasStation sx={{ fontSize: 18 }} />,
-    bg: "#fff7ed",
+    color: "#fb923c",
+    icon: <LocalGasStation sx={{ fontSize: 16 }} />,
+    bg: "rgba(249, 115, 22, 0.15)",
+    border: "rgba(249, 115, 22, 0.3)",
     label: "Fuel",
   },
   Software: {
-    color: "#0891b2",
-    icon: <Wifi sx={{ fontSize: 18 }} />,
-    bg: "#ecfeff",
+    color: "#38bdf8",
+    icon: <Wifi sx={{ fontSize: 16 }} />,
+    bg: "rgba(56, 189, 248, 0.15)",
+    border: "rgba(56, 189, 248, 0.3)",
     label: "Software",
   },
   Hardware: {
-    color: "#4f46e5",
-    icon: <Build sx={{ fontSize: 18 }} />,
-    bg: "#eef2ff",
+    color: "#818cf8",
+    icon: <Build sx={{ fontSize: 16 }} />,
+    bg: "rgba(129, 140, 248, 0.15)",
+    border: "rgba(129, 140, 248, 0.3)",
     label: "Hardware",
   },
   Office: {
-    color: "#b45309",
-    icon: <Inventory sx={{ fontSize: 18 }} />,
-    bg: "#fffbeb",
+    color: "#fbbf24",
+    icon: <Inventory sx={{ fontSize: 16 }} />,
+    bg: "rgba(245, 158, 11, 0.15)",
+    border: "rgba(245, 158, 11, 0.3)",
     label: "Office",
   },
   Miscellaneous: {
-    color: COLORS.neutral[500],
-    icon: <ListAlt sx={{ fontSize: 18 }} />,
-    bg: COLORS.neutral[100],
+    color: "#94a3b8",
+    icon: <ListAlt sx={{ fontSize: 16 }} />,
+    bg: "rgba(148, 163, 184, 0.15)",
+    border: "rgba(148, 163, 184, 0.3)",
     label: "Miscellaneous",
   },
 };
@@ -848,6 +860,7 @@ const StatCard = ({
   index,
 }) => {
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   return (
@@ -857,13 +870,14 @@ const StatCard = ({
         sx={{
           p: { xs: 1.5, sm: 2, md: 2.5 },
           borderRadius: 3,
-          border: `1px solid ${alpha(color, 0.1)}`,
-          boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+          bgcolor: isDark ? "#0e1424" : "#ffffff",
+          border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${alpha(color, 0.15)}`,
+          boxShadow: isDark ? "0 4px 20px rgba(0,0,0,0.4)" : "0 4px 12px rgba(0,0,0,0.05)",
           transition: "transform 0.2s",
           height: "100%",
           "&:hover": {
             transform: "translateY(-2px)",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
+            boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.6)" : "0 8px 24px rgba(0,0,0,0.1)",
           },
         }}
       >
@@ -913,7 +927,7 @@ const StatCard = ({
             <Typography
               variant="subtitle2"
               fontWeight={600}
-              sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" } }}
+              sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, color: isDark ? "#f8fafc" : "#0f172a" }}
             >
               {title}
             </Typography>
@@ -949,6 +963,8 @@ const StatCard = ({
 
 // Mobile Expense Card (Updated with expandable details)
 const MobileExpenseCard = ({ expense, onMenuOpen, onView, index }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const [expanded, setExpanded] = useState(false);
   const status = expense.status || "Pending";
   const category = expense.category || "Miscellaneous";
@@ -983,7 +999,8 @@ const MobileExpenseCard = ({ expense, onMenuOpen, onView, index }) => {
         sx={{
           mb: 1.5,
           borderRadius: 3,
-          border: `1px solid ${alpha(categoryConfig.color, 0.2)}`,
+          bgcolor: isDark ? "#0e1424" : "#ffffff",
+          border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${alpha(categoryConfig.color, 0.2)}`,
           overflow: "hidden",
         }}
       >
@@ -1013,7 +1030,7 @@ const MobileExpenseCard = ({ expense, onMenuOpen, onView, index }) => {
                 <Typography
                   variant="subtitle1"
                   fontWeight="700"
-                  sx={{ color: COLORS.neutral[800] }}
+                  sx={{ color: isDark ? "#ffffff" : "#0f172a" }}
                 >
                   {expense.title}
                 </Typography>
@@ -1333,160 +1350,158 @@ const MobileExpenseCard = ({ expense, onMenuOpen, onView, index }) => {
 
 // Desktop Table Row
 const DesktopTableRow = ({ expense, onMenuOpen }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const status = expense.status || "Pending";
   const category = expense.category || "Miscellaneous";
   const statusConfig = STATUS_CONFIG[status] || STATUS_CONFIG.Pending;
   const categoryConfig =
     CATEGORY_CONFIG[category] || CATEGORY_CONFIG.Miscellaneous;
 
-  // Check if fuel expense
   const isFuel = expense.category === "Fuel";
 
   return (
     <TableRow
-      hover
       sx={{
-        "&:last-child td": { borderBottom: 0 },
+        borderBottom: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid #e2e8f0",
+        bgcolor: isDark ? "#0e1424" : "#ffffff",
         "&:hover": {
-          bgcolor: alpha(COLORS.primary.main, 0.02),
+          bgcolor: isDark ? "#131b30" : "#f8fafc",
         },
       }}
     >
-      <TableCell>
+      <TableCell sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0", py: 1.75 }}>
         <Box display="flex" alignItems="center" gap={2}>
           <Avatar
             sx={{
-              background: GRADIENT_MAIN,
-              color: "#fff",
+              bgcolor: categoryConfig.bg || "rgba(59, 130, 246, 0.15)",
+              color: categoryConfig.color || "#60a5fa",
+              border: `1px solid ${categoryConfig.border || "rgba(59, 130, 246, 0.3)"}`,
               width: 40,
               height: 40,
-              borderRadius: 2,
+              borderRadius: "10px",
             }}
           >
             {categoryConfig.icon}
           </Avatar>
           <Box>
-            <Typography fontWeight="600" sx={{ color: COLORS.neutral[800] }}>
+            <Typography fontWeight="800" sx={{ color: isDark ? "#ffffff" : "#0f172a", fontSize: "0.875rem" }}>
               {expense.title}
             </Typography>
             {expense.description && (
-              <Typography variant="caption" color={COLORS.neutral[500]}>
+              <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontSize: "0.72rem", display: "block" }}>
                 {expense.description.slice(0, 40)}...
               </Typography>
             )}
             {isFuel && expense.vehicleType && (
               <Typography
                 variant="caption"
-                color={COLORS.neutral[500]}
-                sx={{ display: "block" }}
+                sx={{ color: isDark ? "#94a3b8" : "#64748b", fontSize: "0.72rem", display: "block" }}
               >
-                {expense.vehicleType} • {expense.fuelType} •{" "}
-                {expense.kilometersTraveled} km
+                {expense.vehicleType} • {expense.fuelType} • {expense.kilometersTraveled} km
               </Typography>
             )}
           </Box>
         </Box>
       </TableCell>
-      <TableCell>
+
+      <TableCell sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0", py: 1.75 }}>
         <Typography
-          fontWeight="600"
+          fontWeight="800"
           sx={{
-            color: COLORS.primary.main,
+            color: isDark ? "#ffffff" : "#0f172a",
+            fontSize: "0.95rem",
             display: "flex",
             alignItems: "center",
             gap: 0.5,
           }}
         >
-          <CurrencyRupee sx={{ fontSize: 16 }} />
+          <CurrencyRupee sx={{ fontSize: 16, color: isDark ? "#60a5fa" : "#3b82f6" }} />
           {expense.amount?.toLocaleString()}
         </Typography>
         {isFuel && expense.fuelRatePerKm && (
-          <Typography variant="caption" color={COLORS.neutral[500]}>
+          <Typography variant="caption" sx={{ color: isDark ? "#60a5fa" : "#3b82f6", fontSize: "0.72rem", fontWeight: 600 }}>
             ₹{expense.fuelRatePerKm}/km
           </Typography>
         )}
       </TableCell>
-      <TableCell>
+
+      <TableCell sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0", py: 1.75 }}>
         <Chip
           size="small"
           label={categoryConfig.label}
           sx={{
-            background: `linear-gradient(135deg, ${alpha(
-              categoryConfig.color,
-              0.18,
-            )}, ${alpha(categoryConfig.color, 0.08)})`,
-            color: categoryConfig.color,
-            fontWeight: 500,
-            fontSize: "0.75rem",
-            borderRadius: 2,
-            border: `1px solid ${alpha(categoryConfig.color, 0.2)}`,
+            bgcolor: categoryConfig.bg || "rgba(59, 130, 246, 0.15)",
+            color: categoryConfig.color || "#60a5fa",
+            fontWeight: 700,
+            fontSize: "0.72rem",
+            borderRadius: "999px",
+            border: `1px solid ${categoryConfig.border || "rgba(59, 130, 246, 0.3)"}`,
           }}
         />
       </TableCell>
-      <TableCell>
-        <Typography variant="body2" color={COLORS.neutral[700]}>
+
+      <TableCell sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0", py: 1.75 }}>
+        <Typography variant="body2" sx={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: "0.82rem" }}>
           {format(parseISO(expense.createdAt), "MMM dd, yyyy")}
         </Typography>
       </TableCell>
-      <TableCell>
+
+      <TableCell sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0", py: 1.75 }}>
         <Chip
           size="small"
           label={statusConfig.label}
           icon={statusConfig.icon}
           sx={{
-            background: `linear-gradient(135deg, ${statusConfig.bg}, #ffffff)`,
+            bgcolor: statusConfig.bg,
             color: statusConfig.color,
-            fontWeight: 500,
-            fontSize: "0.75rem",
-            borderRadius: 2,
-            border: `1px solid ${alpha(statusConfig.color, 0.2)}`,
+            fontWeight: 800,
+            fontSize: "0.72rem",
+            borderRadius: "999px",
+            border: `1px solid ${statusConfig.border}`,
             "& .MuiChip-icon": {
               fontSize: 14,
               color: statusConfig.color,
-              marginLeft: "6px",
             },
           }}
         />
       </TableCell>
-      <TableCell>
-        <Box display="flex" alignItems="center" gap={1}>
-          <Avatar
-            sx={{
-              width: 28,
-              height: 28,
-              fontSize: "0.75rem",
-              background: GRADIENT_MAIN,
-              color: "#fff",
-              borderRadius: 1.5,
-            }}
-          >
-            {expense.createdBy?.name?.charAt(0) ||
-              expense.createdBy?.email?.charAt(0) ||
-              "U"}
-          </Avatar>
-          <Typography variant="body2" color={COLORS.neutral[700]}>
-            {expense.createdBy?.name ||
-              expense.createdBy?.email?.split("@")[0] ||
-              "Unknown"}
-          </Typography>
-        </Box>
+
+      <TableCell sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0", py: 1.75 }}>
+        <Chip
+          size="small"
+          avatar={
+            <Avatar sx={{ bgcolor: "#1e3a8a", color: "#60a5fa", fontWeight: 800, width: 22, height: 22, fontSize: "0.68rem" }}>
+              {(expense.createdBy?.name?.charAt(0) || expense.createdBy?.email?.charAt(0) || "U").toUpperCase()}
+            </Avatar>
+          }
+          label={expense.createdBy?.name || expense.createdBy?.email?.split("@")[0] || "Unknown"}
+          sx={{
+            bgcolor: isDark ? "rgba(59, 130, 246, 0.15)" : "#f1f5f9",
+            color: isDark ? "#60a5fa" : "#334155",
+            fontWeight: 700,
+            fontSize: "0.75rem",
+            borderRadius: "8px",
+            border: isDark ? "1px solid rgba(59, 130, 246, 0.3)" : "1px solid #cbd5e1",
+          }}
+        />
       </TableCell>
-      <TableCell align="right">
+
+      <TableCell align="right" sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0", py: 1.75 }}>
         <IconButton
           size="small"
           onClick={(e) => onMenuOpen(e, expense)}
           sx={{
-            background: "linear-gradient(135deg,#eff6ff,#dbeafe)",
-            color: "#1e40af",
-            border: `1px solid ${alpha("#2563eb", 0.2)}`,
-            borderRadius: 2,
-            "&:hover": {
-              background: "linear-gradient(135deg,#eff6ff,#dbeafe)",
-              opacity: 0.92,
-            },
+            bgcolor: isDark ? "rgba(255, 255, 255, 0.06)" : "#f1f5f9",
+            color: isDark ? "#ffffff" : "#334155",
+            borderRadius: "8px",
+            width: 32,
+            height: 32,
+            border: isDark ? "1px solid rgba(255, 255, 255, 0.1)" : "1px solid #cbd5e1",
+            "&:hover": { bgcolor: isDark ? "rgba(255, 255, 255, 0.12)" : "#e2e8f0" },
           }}
         >
-          <MoreVert sx={{ fontSize: 20 }} />
+          <MoreVert sx={{ fontSize: 18 }} />
         </IconButton>
       </TableCell>
     </TableRow>
@@ -2665,8 +2680,9 @@ const EmptyState = ({ onClearFilters, hasFilters, canCreate, onCreate }) => (
 
 // Main Component
 export default function ExpensesPage() {
-  const { user, fetchAPI, isAuthenticated, safeFetchAPI } = useAuth();
+  const { user, fetchAPI, isAuthenticated, safeFetchAPI, getUserRole } = useAuth();
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
   const navigate = useNavigate();
@@ -2738,12 +2754,13 @@ export default function ExpensesPage() {
   });
 
   // Permissions
-  const userRole = user?.role || "";
-  const canCreate = ["TEAM", "Incharge", "ZSM", "Admin_panel"].includes(userRole);
-  const canEdit = ["TEAM", "Incharge", "ZSM", "Admin_panel"].includes(userRole);
-  const canDelete = userRole === "Admin_panel";
-  const canUpdateStatus = ["Incharge", "ZSM", "Admin_panel"].includes(userRole);
-  const canViewSummary = ["Incharge", "ZSM", "Admin_panel"].includes(userRole);
+  const userRole = getUserRole?.() || user?.role || "";
+  const isAdmin = isAdminRole(userRole);
+  const canCreate = isAdmin || ["TEAM", "Incharge", "ZSM"].includes(userRole);
+  const canEdit = isAdmin || ["TEAM", "Incharge", "ZSM"].includes(userRole);
+  const canDelete = isAdmin;
+  const canUpdateStatus = isAdmin || ["Incharge", "ZSM"].includes(userRole);
+  const canViewSummary = isAdmin || ["Incharge", "ZSM"].includes(userRole);
 
   // Active filter count
   const activeFilterCount = useMemo(() => {
@@ -3025,7 +3042,7 @@ export default function ExpensesPage() {
     const isOwnExpense = expense.createdBy?._id === user?._id;
     const isPending = expense.status === "Pending";
 
-    if (userRole !== "Admin_panel" && !isOwnExpense) {
+    if (!isAdmin && !isOwnExpense) {
       showSnackbar("You can only edit your own expenses", "error");
       return;
     }
@@ -3205,7 +3222,8 @@ export default function ExpensesPage() {
         p: { xs: 1.5, sm: 2, md: 3 },
         minHeight: "100vh",
         pb: { xs: 8, sm: 3 },
-        bgcolor: "#f8fafc",
+        bgcolor: isDark ? "#050811" : "#f6f8fc",
+        color: isDark ? "#ffffff" : "#0f172a",
       }}
     >
       {/* Mobile Filter Drawer */}
@@ -3225,8 +3243,10 @@ export default function ExpensesPage() {
           p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
-          background: `linear-gradient(135deg, ${COLORS.primary.main} 0%, ${COLORS.primary.dark} 100%)`,
-          color: "#fff",
+          bgcolor: isDark ? "#0e1424" : "#ffffff",
+          border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+          color: isDark ? "#fff" : "#0f172a",
+          boxShadow: isDark ? "0 10px 30px rgba(0,0,0,0.4)" : "0 10px 30px rgba(15, 23, 42, 0.06)",
         }}
       >
         <Stack
@@ -3240,13 +3260,14 @@ export default function ExpensesPage() {
               variant={isMobile ? "h6" : "h5"}
               fontWeight={700}
               gutterBottom
+              sx={{ color: isDark ? "#ffffff" : "#0f172a" }}
             >
               Expense Management
             </Typography>
             <Typography
               variant="body2"
               sx={{
-                opacity: 0.9,
+                color: isDark ? "#94a3b8" : "#64748b",
                 fontSize: { xs: "0.75rem", sm: "0.875rem" },
               }}
             >
@@ -3317,9 +3338,10 @@ export default function ExpensesPage() {
               disabled={loading.expenses}
               size={isMobile ? "small" : "medium"}
               sx={{
-                bgcolor: "rgba(255,255,255,0.2)",
-                color: "#fff",
-                "&:hover": { bgcolor: "rgba(255,255,255,0.3)" },
+                bgcolor: isDark ? "rgba(255,255,255,0.1)" : "rgba(59, 130, 246, 0.08)",
+                color: isDark ? "#fff" : "#3b82f6",
+                borderColor: isDark ? "transparent" : "rgba(59, 130, 246, 0.3)",
+                "&:hover": { bgcolor: isDark ? "rgba(255,255,255,0.2)" : "rgba(59, 130, 246, 0.15)" },
               }}
             >
               Refresh
@@ -3393,7 +3415,7 @@ export default function ExpensesPage() {
         </Grid>
 
         {/* Tabs */}
-        <Paper sx={{ borderRadius: 3, mb: 2, overflow: "hidden" }}>
+        <Paper elevation={0} sx={{ borderRadius: "14px", mb: 2.5, overflow: "hidden", bgcolor: isDark ? "#0e1424" : "#ffffff", border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0" }}>
           <Tabs
             value={activeTab}
             onChange={(e, newValue) => {
@@ -3408,15 +3430,15 @@ export default function ExpensesPage() {
             allowScrollButtonsMobile
             sx={{
               minHeight: 56,
-              "& .MuiTabs-indicator": { bgcolor: COLORS.primary.main },
+              "& .MuiTabs-indicator": { bgcolor: "#3b82f6" },
               "& .MuiTab-root": {
                 textTransform: "none",
                 fontWeight: 600,
                 minHeight: 56,
                 fontSize: isMobile ? "0.875rem" : "1rem",
-                color: COLORS.neutral[600],
+                color: isDark ? "#94a3b8" : "#64748b",
                 "&.Mui-selected": {
-                  color: COLORS.primary.main,
+                  color: isDark ? "#60a5fa" : "#3b82f6",
                 },
               },
             }}
@@ -3470,7 +3492,7 @@ export default function ExpensesPage() {
 
         {/* Desktop Search and Filters */}
         {!isMobile && (
-          <Paper sx={{ p: 2, borderRadius: 3, mb: 2 }}>
+          <Paper elevation={0} sx={{ p: 2, borderRadius: "14px", mb: 2.5, bgcolor: isDark ? "#0e1424" : "#ffffff", border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0" }}>
             <Box display="flex" gap={1}>
               <TextField
                 fullWidth
@@ -3678,27 +3700,20 @@ export default function ExpensesPage() {
                 ))}
               </Box>
             ) : (
-              <Paper sx={{ borderRadius: 3, overflow: "hidden" }}>
+              <Paper elevation={0} sx={{ borderRadius: "16px", bgcolor: isDark ? "#0e1424" : "#ffffff", border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0", overflow: "hidden" }}>
               <TableContainer>
                 <Table>
                   <TableHead
                     sx={{
-                      bgcolor: "transparent",
-                      background: "linear-gradient(180deg, #f8faff, #eff6ff)",
+                      bgcolor: isDark ? "#090d18" : "#f8fafc",
                     }}
                   >
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 600 }}>Expense</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Amount</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Category</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>
-                          Created By
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>
-                          Actions
-                        </TableCell>
+                        {["Expense", "Amount", "Category", "Date", "Status", "Created By", "Actions"].map((h) => (
+                          <TableCell key={h} align={h === "Actions" ? "right" : "left"} sx={{ fontWeight: 700, color: isDark ? "#94a3b8" : "#64748b", borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0" }}>
+                            {h}
+                          </TableCell>
+                        ))}
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -3866,7 +3881,7 @@ export default function ExpensesPage() {
         {selectedExpenseForMenu?.status === "Pending" &&
           canEdit &&
           (selectedExpenseForMenu.createdBy?._id === user?._id ||
-            userRole === "Admin_panel") && (
+            isAdmin) && (
             <MenuItem onClick={() => handleMenuAction("edit")} sx={{ py: 1.5 }}>
               <ListItemIcon>
                 <Edit sx={{ fontSize: 18 }} />

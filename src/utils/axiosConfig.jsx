@@ -50,7 +50,7 @@ axiosInstance.interceptors.response.use(
           return Promise.reject(error);
         }
         
-        const response = await axios.post('/auth/refresh', {
+        const response = await axiosInstance.post('/auth/refresh', {
           refreshToken
         });
         

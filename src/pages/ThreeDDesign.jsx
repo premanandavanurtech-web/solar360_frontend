@@ -23,6 +23,7 @@ import {
   Typography,
   alpha,
   Snackbar,
+  useTheme,
 } from "@mui/material";
 import {
   Add,
@@ -55,20 +56,15 @@ import {
   ZoomIn,
   ZoomOut,
 } from "@mui/icons-material";
-import {
-  GoogleMap,
-  InfoWindow,
-  Marker,
-  Polygon,
-  useJsApiLoader,
-} from "@react-google-maps/api";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import * as THREE from "../vendor/three.module.js";
 
 const GOOGLE_MAPS_KEY =
   process.env.REACT_APP_GOOGLE_MAPS_API_KEY ||
-  "AIzaSyCqM7uF9c0ZMQjdssHqSMJJ3mBcmz5RNS0";
+  "AIzaSyAqn70bioCdQL50Jj9nXsUIq0yGumoV9E8";
 const PUBLIC_APP_URL = (process.env.REACT_APP_PUBLIC_APP_URL || "").replace(/\/+$/, "");
 
 const MAP_LIBRARIES = ["places"];
@@ -79,6 +75,7 @@ const WARNING = "#f59e0b";
 const STATIC_MAP_ZOOM = 19;
 const STATIC_MAP_SIZE = 640;
 const DESIGN_STORAGE_KEY = "solar360-3d-design";
+const DESIGN_LEAD_STORAGE_KEY = "solar360-3d-design-lead";
 const MIN_ROOF_POINTS = 3;
 const MAX_ROOF_POINTS = 24;
 const MIN_ROOF_POINT_SPACING_METERS = 0.25;
@@ -900,17 +897,16 @@ const normalizeOverpassBuildings = (elements = []) => {
 const getSatelliteTextureUrl = (points = []) => {
   const center = getCentroid(points);
   if (!center) return "";
-
-  const params = new URLSearchParams({
-    center: `${center.lat},${center.lng}`,
-    zoom: String(STATIC_MAP_ZOOM),
-    size: `${STATIC_MAP_SIZE}x${STATIC_MAP_SIZE}`,
-    scale: "2",
-    maptype: "satellite",
-    key: GOOGLE_MAPS_KEY,
-  });
-
-  return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
+  const zoom = 18;
+  const lat = center.lat;
+  const lng = center.lng;
+  const n = Math.pow(2, zoom);
+  const xtile = Math.floor(((lng + 180) / 360) * n);
+  const latRad = (lat * Math.PI) / 180;
+  const ytile = Math.floor(
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
+  );
+  return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ytile}/${xtile}`;
 };
 
 const formatNumber = (value, decimals = 1) =>
@@ -3848,6 +3844,8 @@ const ThreeHousePreview = ({
   );
 };
 
+
+
 const EnvironmentModeButtons = ({ environmentMode, onChange }) => (
   <Stack
     gap={0.8}
@@ -3914,46 +3912,55 @@ const getDesignCapacityKw = (layout) => {
   return Number((solarLayout.count * 0.55).toFixed(1));
 };
 
-const ThreeDDesignStatCard = ({ icon, label, value, color }) => (
-  <Card
-    elevation={0}
-    sx={{
-      borderRadius: "14px",
-      border: "1px solid #e5e7eb",
-      boxShadow: "0 1px 4px rgba(15, 23, 42, 0.08)",
-      height: "100%",
-    }}
-  >
-    <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
-      <Stack direction="row" spacing={2} alignItems="center">
-        <Box
-          sx={{
-            width: 48,
-            height: 48,
-            borderRadius: "12px",
-            bgcolor: alpha(color, 0.12),
-            color,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {icon}
-        </Box>
-        <Box>
-          <Typography variant="caption" color="text.secondary">
-            {label}
-          </Typography>
-          <Typography variant="h6" fontWeight={800} color="#0f1f3d">
-            {value}
-          </Typography>
-        </Box>
-      </Stack>
-    </CardContent>
-  </Card>
-);
+const ThreeDDesignStatCard = ({ icon, label, value, color }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
+  return (
+    <Card
+      elevation={0}
+      sx={{
+        borderRadius: "14px",
+        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e5e7eb",
+        boxShadow: isDark ? "0 4px 20px rgba(0, 0, 0, 0.3)" : "0 1px 4px rgba(15, 23, 42, 0.08)",
+        bgcolor: isDark ? "#0b0e1a" : "#fff",
+        color: isDark ? "#f8fafc" : "inherit",
+        height: "100%",
+      }}
+    >
+      <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Box
+            sx={{
+              width: 48,
+              height: 48,
+              borderRadius: "12px",
+              bgcolor: alpha(color, 0.12),
+              color,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {icon}
+          </Box>
+          <Box>
+            <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
+              {label}
+            </Typography>
+            <Typography variant="h6" fontWeight={800} color={isDark ? "#f8fafc" : "#0f1f3d"}>
+              {value}
+            </Typography>
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+};
 
 const ThreeDDesignCard = ({ lead, onOpen, onDelete }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const design = lead.threeDDesign || {};
   const solarLayout = sanitizeSolarLayout(design.solarLayout);
   const capacity = getDesignCapacityKw(solarLayout);
@@ -3965,8 +3972,10 @@ const ThreeDDesignCard = ({ lead, onOpen, onDelete }) => {
       sx={{
         p: 2.5,
         borderRadius: "14px",
-        border: "1px solid #e5e7eb",
-        boxShadow: "0 1px 4px rgba(15, 23, 42, 0.08)",
+        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e5e7eb",
+        boxShadow: isDark ? "0 4px 20px rgba(0, 0, 0, 0.3)" : "0 1px 4px rgba(15, 23, 42, 0.08)",
+        bgcolor: isDark ? "#0b0e1a" : "#fff",
+        color: isDark ? "#f8fafc" : "inherit",
         height: "100%",
       }}
     >
@@ -4048,6 +4057,8 @@ const ThreeDDesignCard = ({ lead, onOpen, onDelete }) => {
 };
 
 export const ThreeDDesignDashboard = () => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const navigate = useNavigate();
   const { fetchAPI } = useAuth();
   const [leads, setLeads] = useState([]);
@@ -4079,7 +4090,7 @@ export const ThreeDDesignDashboard = () => {
     () =>
       leads.filter(
         (lead) =>
-          lead.threeDDesign?.status === "draft" &&
+          (lead.threeDDesign?.status === "saved" || lead.threeDDesign?.status === "draft") &&
           sanitizeRoofPoints(lead.threeDDesign?.points).length >= MIN_ROOF_POINTS
       ),
     [leads]
@@ -4104,7 +4115,7 @@ export const ThreeDDesignDashboard = () => {
     );
     return {
       total: designs.length,
-      drafts: designs.length,
+      saved: designs.length,
       proposed: 0,
       approved: 0,
       capacity: capacity.toFixed(1),
@@ -4118,7 +4129,8 @@ export const ThreeDDesignDashboard = () => {
         leadId: lead._id,
       };
       sessionStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(design));
-      navigate("/3d-design/preview", { state: { design, lead } });
+      sessionStorage.setItem(DESIGN_LEAD_STORAGE_KEY, JSON.stringify({ _id: lead._id, lead }));
+      navigate("/3d-design/preview", { state: { design, lead, returnTo: `/all-leads/${lead._id}` } });
     },
     [navigate]
   );
@@ -4148,10 +4160,10 @@ export const ThreeDDesignDashboard = () => {
   );
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: "#f8fafc", minHeight: "100vh" }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: isDark ? "#050811" : "#f8fafc" }}>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={2} sx={{ mb: 2.5 }}>
         <Box>
-          <Typography variant="h5" fontWeight={900} color="#0f1f3d">
+          <Typography variant="h5" fontWeight={900} color={isDark ? "#f8fafc" : "#0f1f3d"}>
             3D Solar Designer
           </Typography>
           <Typography variant="caption" color="text.secondary">
@@ -4172,7 +4184,7 @@ export const ThreeDDesignDashboard = () => {
           <ThreeDDesignStatCard icon={<Edit />} label="Total Designs" value={summary.total} color="#7c83ff" />
         </Box>
         <Box>
-          <ThreeDDesignStatCard icon={<Edit />} label="Drafts" value={summary.drafts} color="#f59e0b" />
+          <ThreeDDesignStatCard icon={<Edit />} label="Saved" value={summary.saved} color="#f59e0b" />
         </Box>
         <Box>
           <ThreeDDesignStatCard icon={<ViewInAr />} label="Proposed" value={summary.proposed} color="#38bdf8" />
@@ -4191,8 +4203,10 @@ export const ThreeDDesignDashboard = () => {
           p: 2,
           mb: 2,
           borderRadius: "14px",
-          border: "1px solid #e5e7eb",
-          boxShadow: "0 1px 4px rgba(15, 23, 42, 0.08)",
+          border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e5e7eb",
+          boxShadow: isDark ? "0 4px 20px rgba(0, 0, 0, 0.3)" : "0 1px 4px rgba(15, 23, 42, 0.08)",
+          bgcolor: isDark ? "#0b0e1a" : "#fff",
+          color: isDark ? "#f8fafc" : "inherit",
         }}
       >
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between">
@@ -4208,13 +4222,13 @@ export const ThreeDDesignDashboard = () => {
                 </InputAdornment>
               ),
             }}
-            sx={{ width: { xs: "100%", sm: 420 } }}
+            sx={{ width: { xs: "100%", sm: 420 }, "& .MuiOutlinedInput-root": { bgcolor: isDark ? "#0e1220" : "#fff", color: isDark ? "#f8fafc" : "inherit", borderRadius: "8px", "& fieldset": { borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "inherit" } } }}
           />
           <Button
             variant="contained"
             startIcon={<Add />}
             onClick={() => navigate("/3d-design/new")}
-            sx={{ bgcolor: "#2d3448", fontWeight: 800, "&:hover": { bgcolor: "#1f2638" } }}
+            sx={{ bgcolor: isDark ? "#ea580c" : "#2d3448", color: "#fff", fontWeight: 800, "&:hover": { bgcolor: isDark ? "#c2410c" : "#1f2638" } }}
           >
             New Design
           </Button>
@@ -4236,12 +4250,12 @@ export const ThreeDDesignDashboard = () => {
       ) : (
         <Paper
           elevation={0}
-          sx={{ p: 5, textAlign: "center", border: "1px solid #e5e7eb", borderRadius: "14px" }}
+          sx={{ p: 5, textAlign: "center", border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e5e7eb", borderRadius: "14px", bgcolor: isDark ? "#0b0e1a" : "#fff", color: isDark ? "#f8fafc" : "inherit" }}
         >
-          <Typography variant="h6" fontWeight={800} color="#0f1f3d">
+          <Typography variant="h6" fontWeight={800} color={isDark ? "#f8fafc" : "#0f1f3d"}>
             No saved 3D designs found
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary", mt: 1 }}>
             Open a lead, create a 3D house design, then it will appear here.
           </Typography>
         </Paper>
@@ -4260,442 +4274,126 @@ export const ThreeDDesignDashboard = () => {
   );
 };
 
+// ========== LEAFLET ROOF MAP COMPONENT FOR 3D DESIGN ==========
+const LeafletRoofMap = ({ center, roofPoints, onMapClick }) => {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markersRef = useRef([]);
+  const polygonRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const lat = center?.lat || 20.2961;
+    const lng = center?.lng || 85.8245;
+
+    if (!mapRef.current) {
+      const map = L.map(containerRef.current, {
+        center: [lat, lng],
+        zoom: 19,
+        zoomControl: true,
+      });
+
+      L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          maxZoom: 19,
+          attribution: "Esri World Imagery",
+        }
+      ).addTo(map);
+
+      map.on("click", (e) => {
+        if (onMapClick) {
+          onMapClick({ latLng: { lat: () => e.latlng.lat, lng: () => e.latlng.lng } });
+        }
+      });
+
+      mapRef.current = map;
+    } else {
+      mapRef.current.setView([lat, lng]);
+    }
+  }, [center?.lat, center?.lng]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    markersRef.current.forEach((m) => map.removeLayer(m));
+    markersRef.current = [];
+
+    roofPoints.forEach((point, idx) => {
+      const iconHtml = `<div style="background:#10b981;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:11px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);">${idx + 1}</div>`;
+      const customIcon = L.divIcon({
+        html: iconHtml,
+        className: "",
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      });
+      const marker = L.marker([point.lat, point.lng], { icon: customIcon }).addTo(map);
+      markersRef.current.push(marker);
+    });
+
+    if (polygonRef.current) {
+      map.removeLayer(polygonRef.current);
+      polygonRef.current = null;
+    }
+
+    if (roofPoints.length >= 3) {
+      const latLngs = roofPoints.map((p) => [p.lat, p.lng]);
+      const polygon = L.polygon(latLngs, {
+        color: "#0f9f6e",
+        fillColor: "#10b981",
+        fillOpacity: 0.35,
+        weight: 3,
+      }).addTo(map);
+      polygonRef.current = polygon;
+    }
+  }, [roofPoints]);
+
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
+
+  return <div ref={containerRef} style={{ width: "100%", height: "100%", position: "absolute", inset: 0 }} />;
+};
+
 const ThreeDDesign = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const sourceLead = location.state?.lead || null;
+  const returnTo = location.state?.returnTo || (sourceLead?._id ? `/all-leads/${sourceLead._id}` : "");
+  const handleBack = useCallback(() => {
+    if (returnTo) {
+      navigate(returnTo, { state: { lead: sourceLead } });
+      return;
+    }
+    navigate(-1);
+  }, [navigate, returnTo, sourceLead]);
   const shouldRestoreOutline = location.state?.restoreOutline === true;
   const stateDesign =
     shouldRestoreOutline && location.state?.design?.points?.length ? location.state.design : null;
   const sourceLeadDesign = stateDesign || sourceLead?.threeDDesign || null;
-  const incomingLeadSeed = useMemo(
-    () => getIncomingLeadLocationSeed(sourceLead, location.state?.initialLocation),
-    [sourceLead, location.state?.initialLocation]
-  );
-  const incomingLeadSeedKey = useMemo(() => {
-    if (!incomingLeadSeed) return "";
-    return JSON.stringify({
-      center: incomingLeadSeed.center || null,
-      searchText: incomingLeadSeed.searchText || "",
-      selectedPlaceId: incomingLeadSeed.selectedPlace?.id || "",
-    });
-  }, [incomingLeadSeed]);
-  const appliedIncomingLeadSeedRef = useRef("");
-  const savedRoofPoints = useMemo(
-    () => sanitizeRoofPoints(stateDesign?.points),
-    [stateDesign]
-  );
-  const savedRoofPointsKey = useMemo(
-    () => savedRoofPoints.map((point) => `${point.lat},${point.lng}`).join("|"),
-    [savedRoofPoints]
-  );
-  const [map, setMap] = useState(null);
-  const [searchText, setSearchText] = useState(() => incomingLeadSeed?.searchText || "");
-  const [center, setCenter] = useState(() => incomingLeadSeed?.center || DEFAULT_CENTER);
-  const [roofPoints, setRoofPoints] = useState([]);
-  const [status, setStatus] = useState("Ready");
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchResultsOpen, setSearchResultsOpen] = useState(false);
-  const [selectedSearchPlace, setSelectedSearchPlace] = useState(
-    () => incomingLeadSeed?.selectedPlace || null
-  );
-  const [placeInfoOpen, setPlaceInfoOpen] = useState(
-    () => Boolean(incomingLeadSeed?.selectedPlace)
-  );
-  const [mapRenderKey, setMapRenderKey] = useState(0);
-  const [savedOutlineDismissed, setSavedOutlineDismissed] = useState(false);
-  const roofPolylineRef = useRef(null);
-  const roofPolygonRef = useRef(null);
-  const appliedSavedOutlineKeyRef = useRef("");
-
-  const clearRoofOverlays = useCallback(() => {
-    if (roofPolylineRef.current) {
-      try {
-        roofPolylineRef.current.setPath([]);
-        roofPolylineRef.current.setMap(null);
-      } catch {}
-      roofPolylineRef.current = null;
-    }
-
-    if (roofPolygonRef.current) {
-      try {
-        roofPolygonRef.current.setPaths([]);
-        roofPolygonRef.current.setMap(null);
-      } catch {}
-      roofPolygonRef.current = null;
-    }
-  }, []);
-
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: GOOGLE_MAPS_KEY,
-    libraries: MAP_LIBRARIES,
-  });
-
-  const roofOverlayKey = useMemo(
-    () => roofPoints.map((point) => `${point.lat},${point.lng}`).join("|"),
-    [roofPoints]
-  );
-
   useEffect(() => {
-    if (!roofPoints.length) {
-      clearRoofOverlays();
-      return;
-    }
-
-    if (roofPoints.length < MIN_ROOF_POINTS && roofPolygonRef.current) {
-      try {
-        roofPolygonRef.current.setPaths([]);
-        roofPolygonRef.current.setMap(null);
-      } catch {}
-      roofPolygonRef.current = null;
-    }
-  }, [clearRoofOverlays, roofPoints]);
-
-  useEffect(() => {
-    if (!savedRoofPoints.length) {
-      appliedSavedOutlineKeyRef.current = "";
-      setSavedOutlineDismissed(false);
-      return;
-    }
-
-    if (savedOutlineDismissed) {
-      return;
-    }
-
-    if (appliedSavedOutlineKeyRef.current === savedRoofPointsKey) {
-      return;
-    }
-
-    appliedSavedOutlineKeyRef.current = savedRoofPointsKey;
-    setRoofPoints(savedRoofPoints);
-    setStatus(`Saved outline restored (${savedRoofPoints.length} points)`);
-  }, [savedOutlineDismissed, savedRoofPoints, savedRoofPointsKey]);
-
-  const handleSearchResults = useCallback((query, results = []) => {
-    const nextResults = results
-      .map((result, index) => normalizeSearchResult(result, index, query))
-      .filter(Boolean)
-      .slice(0, 6);
-
-    setIsSearching(false);
-    setSearchResults(nextResults);
-    setSearchResultsOpen(nextResults.length > 0);
-
-    if (!nextResults.length) {
-      setStatus("Location not found");
-      return;
-    }
-
-    setStatus(`${nextResults.length} location${nextResults.length > 1 ? "s" : ""} found`);
-  }, []);
-
-  const handleSearch = useCallback(() => {
-    const query = searchText.trim();
-    if (!query || !window.google?.maps) return;
-
-    setIsSearching(true);
-    setStatus("Searching");
-    setSearchResultsOpen(false);
-    setSearchResults([]);
-
-    const runGeocodeSearch = () => {
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode({ address: query }, (results, geocodeStatus) => {
-        if (geocodeStatus !== "OK" || !results?.length) {
-          handleSearchResults(query, []);
-          return;
-        }
-
-        handleSearchResults(query, results);
-      });
-    };
-
-    const PlacesService = window.google.maps.places?.PlacesService;
-    const placesStatus = window.google.maps.places?.PlacesServiceStatus;
-
-    if (map && PlacesService && placesStatus) {
-      const service = new PlacesService(map);
-      service.textSearch({ query }, (results, placeStatus) => {
-        if (placeStatus === placesStatus.OK && results?.length) {
-          handleSearchResults(query, results);
-          return;
-        }
-
-        runGeocodeSearch();
-      });
-      return;
-    }
-
-    runGeocodeSearch();
-  }, [handleSearchResults, map, searchText]);
-
-  const selectSearchResult = useCallback(
-    (result) => {
-      setSearchText(result.description || result.title);
-      setSelectedSearchPlace(result);
-      setPlaceInfoOpen(true);
-      setCenter(result.position);
-      clearRoofOverlays();
-      setRoofPoints([]);
-      setSearchResultsOpen(false);
-      setSearchResults([]);
-      setStatus("Location selected");
-
-      if (map) {
-        map.panTo(result.position);
-        map.setZoom(20);
-        map.setMapTypeId(window.google.maps.MapTypeId.SATELLITE);
-      }
-    },
-    [clearRoofOverlays, map]
-  );
-
-  const handleMapClick = useCallback((event) => {
-    if (!event?.latLng) return;
-    setSearchResultsOpen(false);
-
-    setRoofPoints((currentPoints) => {
-      if (currentPoints.length >= MAX_ROOF_POINTS) {
-        setStatus(`${MAX_ROOF_POINTS} roof points selected`);
-        return currentPoints;
-      }
-
-      const nextPoint = { lat: event.latLng.lat(), lng: event.latLng.lng() };
-      const isDuplicate = currentPoints.some(
-        (point) =>
-          getApproxPointDistanceMeters(point, nextPoint) <
-          MIN_ROOF_POINT_SPACING_METERS
-      );
-      if (isDuplicate) {
-        setStatus("Point is too close to an existing point");
-        return currentPoints;
-      }
-
-      const nextPoints = [...currentPoints, nextPoint];
-      setStatus(`${nextPoints.length} roof point${nextPoints.length > 1 ? "s" : ""} selected`);
-      return nextPoints;
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!incomingLeadSeedKey || appliedIncomingLeadSeedRef.current === incomingLeadSeedKey) {
-      return;
-    }
-
-    appliedIncomingLeadSeedRef.current = incomingLeadSeedKey;
-
-    if (incomingLeadSeed?.searchText) {
-      setSearchText(incomingLeadSeed.searchText);
-    }
-
-    if (incomingLeadSeed?.center) {
-      setCenter(incomingLeadSeed.center);
-    }
-
-    if (incomingLeadSeed?.selectedPlace) {
-      setSelectedSearchPlace(incomingLeadSeed.selectedPlace);
-      setPlaceInfoOpen(true);
-      setStatus("Lead location loaded");
-      return;
-    }
-
-    if (incomingLeadSeed?.searchText) {
-      setStatus("Lead address loaded");
-    }
-  }, [incomingLeadSeed, incomingLeadSeedKey, sourceLeadDesign]);
-
-  useEffect(() => {
-    if (!map || !selectedSearchPlace?.position || !window.google?.maps) return;
-
-    map.panTo(selectedSearchPlace.position);
-    map.setZoom(20);
-    map.setMapTypeId(window.google.maps.MapTypeId.SATELLITE);
-  }, [map, selectedSearchPlace]);
-
-  const clearSelection = () => {
-    clearRoofOverlays();
-    setSavedOutlineDismissed(true);
-    setRoofPoints([]);
-    setMapRenderKey((current) => current + 1);
-    setStatus("Selection cleared");
-  };
-
-  const undoPoint = () => {
-    setRoofPoints((currentPoints) => {
-      const nextPoints = currentPoints.slice(0, -1);
-      if (!nextPoints.length) {
-        clearRoofOverlays();
-      }
-      setStatus(nextPoints.length ? `${nextPoints.length} roof points selected` : "Ready");
-      return nextPoints;
-    });
-  };
-
-  const generateModel = () => {
-    const modelRoofPoints = sanitizeRoofPoints(roofPoints);
-    if (modelRoofPoints.length < MIN_ROOF_POINTS) return;
-
-    const design = {
-      leadId: sourceLead?._id || null,
-      points: modelRoofPoints,
-      satelliteTextureUrl: getSatelliteTextureUrl(modelRoofPoints),
-      solarLayout: sanitizeSolarLayout(sourceLeadDesign?.solarLayout || DEFAULT_SOLAR_LAYOUT),
-      sunSettings: sanitizeSunSettings(sourceLeadDesign?.sunSettings || DEFAULT_SUN_SETTINGS),
-      environmentMode: getEnvironmentMode(sourceLeadDesign?.environmentMode),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
+    if (!sourceLead?._id) return;
     try {
-      sessionStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(design));
+      sessionStorage.setItem(DESIGN_LEAD_STORAGE_KEY, JSON.stringify({ _id: sourceLead._id, lead: sourceLead }));
     } catch (error) {
-      console.warn("Unable to save 3D design preview data", error);
+      console.warn("Unable to save active 3D design lead", error);
     }
-
-    navigate("/3d-design/preview", { state: { design, lead: sourceLead } });
-  };
-
-  const mapOptions = useMemo(
-    () => ({
-      mapTypeId: "satellite",
-      clickableIcons: false,
-      fullscreenControl: true,
-      mapTypeControl: true,
-      streetViewControl: false,
-      rotateControl: true,
-      tilt: 0,
-      zoomControl: true,
-    }),
-    []
-  );
-
-  const selectedPlaceMarkerIcon = useMemo(() => {
-    if (!isLoaded || !window.google?.maps) return undefined;
-
-    return {
-      path: window.google.maps.SymbolPath.CIRCLE,
-      scale: 9,
-      fillColor: PRIMARY,
-      fillOpacity: 1,
-      strokeColor: "#ffffff",
-      strokeWeight: 3,
-    };
-  }, [isLoaded]);
-
-  const roofPointMarkerIcon = useMemo(() => {
-    if (!isLoaded || !window.google?.maps) return undefined;
-
-    return {
-      path: window.google.maps.SymbolPath.CIRCLE,
-      scale: 7,
-      fillColor: "#e53935",
-      fillOpacity: 1,
-      strokeColor: "#ffffff",
-      strokeWeight: 1.5,
-    };
-  }, [isLoaded]);
+  }, [sourceLead]);
 
   return (
-    <Box
-      sx={{
-        width: "100%",
-        height: { xs: "calc(100vh - 92px)", sm: "calc(100vh - 122px)" },
-        minHeight: { xs: 560, md: 650 },
-        position: "relative",
-        borderRadius: 2,
-        overflow: "hidden",
-        border: "1px solid",
-        borderColor: "divider",
-        bgcolor: "#eef3f8",
-      }}
-    >
-      {loadError && (
-        <Alert severity="error" sx={{ position: "absolute", zIndex: 3, m: 2 }}>
-          Google Maps could not load.
-        </Alert>
-      )}
-
-      {!loadError && !isLoaded && (
-        <Stack alignItems="center" justifyContent="center" sx={{ height: "100%" }} gap={1}>
-          <CircularProgress size={32} />
-          <Typography variant="body2" color="text.secondary">
-            Loading map
-          </Typography>
-        </Stack>
-      )}
-
-      {isLoaded && (
-        <GoogleMap
-          key={`roof-map-${mapRenderKey}`}
-          mapContainerStyle={mapContainerStyle}
-          center={center}
-          zoom={19}
-          options={mapOptions}
-          onLoad={(loadedMap) => setMap(loadedMap)}
-          onUnmount={() => setMap(null)}
-          onClick={handleMapClick}
-        >
-          {selectedSearchPlace && (
-            <Marker
-              position={selectedSearchPlace.position}
-              icon={selectedPlaceMarkerIcon}
-              onClick={() => setPlaceInfoOpen(true)}
-            />
-          )}
-          {selectedSearchPlace && placeInfoOpen && (
-            <InfoWindow
-              position={selectedSearchPlace.position}
-              onCloseClick={() => setPlaceInfoOpen(false)}
-            >
-              <Box sx={{ maxWidth: 260, pr: 0.5 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#172033" }}>
-                  {selectedSearchPlace.title}
-                </Typography>
-                {selectedSearchPlace.subtitle && (
-                  <Typography variant="caption" sx={{ display: "block", color: "text.secondary" }}>
-                    {selectedSearchPlace.subtitle}
-                  </Typography>
-                )}
-              </Box>
-            </InfoWindow>
-          )}
-          {roofPoints.map((point, index) => (
-            <Marker
-              key={`${point.lat}-${point.lng}-${index}`}
-              position={point}
-              icon={roofPointMarkerIcon}
-              label={{
-                text: `${index + 1}`,
-                color: "#ffffff",
-                fontWeight: "700",
-                fontSize: "9px",
-              }}
-            />
-          ))}
-          {roofPoints.length >= 3 && (
-            <Polygon
-              key={`roof-polygon-${roofOverlayKey}`}
-              paths={roofPoints}
-              onLoad={(polygon) => {
-                roofPolygonRef.current = polygon;
-              }}
-              onUnmount={() => {
-                roofPolygonRef.current = null;
-              }}
-              options={{
-                fillColor: "#10b981",
-                fillOpacity: 0.22,
-                strokeColor: "#0f9f6e",
-                strokeOpacity: 1,
-                strokeWeight: 2,
-                clickable: false,
-              }}
-            />
-          )}
-        </GoogleMap>
-      )}
-
+    <Box sx={{ position: "relative", width: "100%", height: "100vh", overflow: "hidden" }}>
+      <LeafletRoofMap
+        center={center}
+        roofPoints={roofPoints}
+        onMapClick={handleMapClick}
+      />
       <Paper
         elevation={3}
         sx={{
@@ -4718,7 +4416,7 @@ const ThreeDDesign = () => {
         >
           <Stack direction="row" alignItems="center" gap={1} sx={{ minWidth: { md: 235 } }}>
             <IconButton
-              onClick={() => navigate(-1)}
+              onClick={handleBack}
               sx={{
                 border: "1px solid",
                 borderColor: "divider",
@@ -4928,7 +4626,23 @@ export const ThreeDDesignPreview = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { fetchAPI } = useAuth();
-  const sourceLead = location.state?.lead || null;
+  const storedLead = useMemo(() => {
+    try {
+      const saved = sessionStorage.getItem(DESIGN_LEAD_STORAGE_KEY);
+      return saved ? JSON.parse(saved)?.lead || JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+  const sourceLead = location.state?.lead || storedLead || null;
+  const previewReturnTo = location.state?.returnTo || (sourceLead?._id ? `/all-leads/${sourceLead._id}` : "");
+  const handlePreviewBack = useCallback(() => {
+    if (previewReturnTo) {
+      navigate(previewReturnTo, { state: { lead: sourceLead } });
+      return;
+    }
+    navigate(-1);
+  }, [navigate, previewReturnTo, sourceLead]);
   const capturePreviewRef = useRef(null);
 
   const design = useMemo(() => {
@@ -4958,11 +4672,21 @@ export const ThreeDDesignPreview = () => {
   const [shareOpen, setShareOpen] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [isSunPlaying, setIsSunPlaying] = useState(false);
+  const [saveStatus, setSaveStatus] = useState({ saving: false, message: "", severity: "info" });
   const [captureImage, setCaptureImage] = useState(() => design?.captureImage || "");
-  const [saveStatus, setSaveStatus] = useState({ saving: false, message: "", severity: "success" });
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === "clickaway") return;
+    setSaveStatus((prev) => ({ ...prev, message: "" }));
+  };
   const solarConfig = useMemo(() => sanitizeSolarLayout(solarLayout), [solarLayout]);
   const sunConfig = useMemo(() => sanitizeSunSettings(sunSettings), [sunSettings]);
-  const designLeadId = design?.leadId || sourceLead?._id || null;
+  const designLeadId = useMemo(() => {
+    if (design?.leadId) return design.leadId;
+    if (sourceLead?._id) return sourceLead._id;
+    const match = String(previewReturnTo || "").match(/\/all-leads\/([^/?#]+)/);
+    return match?.[1] || null;
+  }, [design?.leadId, previewReturnTo, sourceLead?._id]);
   const sunInfo = useMemo(
     () => getSunPositionInfo(sunConfig, modelPoints?.[0]?.lat || DEFAULT_CENTER.lat),
     [modelPoints, sunConfig]
@@ -5018,7 +4742,7 @@ export const ThreeDDesignPreview = () => {
 
   }, [design, designLeadId, environmentMode, solarConfig, sunConfig]);
 
-  const buildCurrentDraftDesign = useCallback(
+  const buildCurrentSavedDesign = useCallback(
     (nextCaptureImage = captureImage) => ({
       ...design,
       leadId: designLeadId,
@@ -5028,48 +4752,51 @@ export const ThreeDDesignPreview = () => {
       sunSettings: sunConfig,
       environmentMode,
       captureImage: nextCaptureImage,
-      status: "draft",
+      status: "saved",
       updatedAt: Date.now(),
       createdAt: design?.createdAt || Date.now(),
     }),
     [captureImage, design, designLeadId, environmentMode, modelPoints, satelliteTextureUrl, solarConfig, sunConfig]
   );
 
-  const saveDraftDesign = useCallback(async (event) => {
+  const saveDesign = useCallback(async (event) => {
     event?.preventDefault?.();
     event?.stopPropagation?.();
 
     if (!designLeadId) {
       setSaveStatus({
         saving: false,
-        message: "Open 3D Design from a lead, then Save Draft will store it in that lead.",
+        message: "Lead is not selected for this 3D design. Open it from the lead page and try Save again.",
         severity: "warning",
       });
       return;
     }
 
-    const draftDesign = buildCurrentDraftDesign();
+    const savedDesign = buildCurrentSavedDesign();
     setSaveStatus({ saving: true, message: "", severity: "success" });
 
     try {
-      sessionStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(draftDesign));
-      await fetchAPI(`/lead/updateLead/${designLeadId}`, {
+      sessionStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(savedDesign));
+      const response = await fetchAPI(`/lead/updateLead/${designLeadId}`, {
         method: "PUT",
-        body: JSON.stringify({ threeDDesign: draftDesign }),
+        body: JSON.stringify({ threeDDesign: savedDesign }),
       });
+      const updatedLead = response?.result || (sourceLead ? { ...sourceLead, threeDDesign: savedDesign } : null);
       setSaveStatus({
         saving: false,
-        message: "Draft saved. It will show on the 3D Design page.",
+        message: "Design saved.",
         severity: "success",
       });
+      const targetPath = previewReturnTo || `/all-leads/${designLeadId}`;
+      navigate(targetPath, { state: { lead: updatedLead || sourceLead, initialTab: "threeDDesign" } });
     } catch (error) {
       setSaveStatus({
         saving: false,
-        message: error.message || "Draft save failed",
+        message: error.message || "Design save failed",
         severity: "error",
       });
     }
-  }, [buildCurrentDraftDesign, designLeadId, fetchAPI, navigate]);
+  }, [buildCurrentSavedDesign, designLeadId, fetchAPI, navigate, previewReturnTo, sourceLead]);
 
   useEffect(() => {
     if (!isSunPlaying) return undefined;
@@ -5329,7 +5056,7 @@ export const ThreeDDesignPreview = () => {
 
       const imageDataUrl = capturePreviewRef.current();
       setCaptureImage(imageDataUrl);
-      const capturedDesign = buildCurrentDraftDesign(imageDataUrl);
+      const capturedDesign = buildCurrentSavedDesign(imageDataUrl);
 
       try {
         sessionStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(capturedDesign));
@@ -5358,7 +5085,7 @@ export const ThreeDDesignPreview = () => {
         severity: "error",
       });
     }
-  }, [buildCurrentDraftDesign, designLeadId, fetchAPI]);
+  }, [buildCurrentSavedDesign, designLeadId, fetchAPI, navigate, previewReturnTo, sourceLead]);
 
   if (modelPoints.length < MIN_ROOF_POINTS) {
     return (
@@ -5369,14 +5096,10 @@ export const ThreeDDesignPreview = () => {
         <Button
           variant="contained"
           startIcon={<ArrowBack />}
-          onClick={() =>
-            navigate("/3d-design/new", {
-              state: { design, lead: sourceLead, restoreOutline: true },
-            })
-          }
+          onClick={handlePreviewBack}
           sx={{ alignSelf: "flex-start" }}
         >
-          Back to Map
+          {previewReturnTo ? "Back to Lead" : "Back to Map"}
         </Button>
       </Stack>
     );
@@ -5412,13 +5135,9 @@ export const ThreeDDesignPreview = () => {
             <Button
               variant="outlined"
               startIcon={<ArrowBack />}
-              onClick={() =>
-                navigate("/3d-design/new", {
-                  state: { design, lead: sourceLead, restoreOutline: true },
-                })
-              }
+              onClick={handlePreviewBack}
             >
-              Back to Map
+              {previewReturnTo ? "Back to Lead" : "Back to Map"}
             </Button>
             <Chip
               size="small"
@@ -5467,7 +5186,7 @@ export const ThreeDDesignPreview = () => {
               type="button"
               variant="contained"
               startIcon={saveStatus.saving ? <CircularProgress size={14} color="inherit" /> : <Save />}
-              onClick={saveDraftDesign}
+              onClick={saveDesign}
               disabled={saveStatus.saving}
               sx={{
                 bgcolor: "#2d3448",
@@ -5475,7 +5194,7 @@ export const ThreeDDesignPreview = () => {
                 "&:hover": { bgcolor: "#1f2638" },
               }}
             >
-              Save Draft
+              Save
             </Button>
             <Button
               size="small"

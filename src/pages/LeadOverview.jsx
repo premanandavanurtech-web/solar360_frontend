@@ -1,4 +1,4 @@
-﻿// pages/LeadOverview.jsx (Updated Modals Design)
+// pages/LeadOverview.jsx (Updated Modals Design)
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
@@ -173,7 +173,7 @@ const PERIOD_OPTIONS = [
   { value: "All", label: "All time", icon: <DateRange /> },  // ← only this skips date filter
 ];
 
-const ROLE_PERMISSIONS = {
+export const ROLE_PERMISSIONS = {
   Admin_panel: {
     view: true, edit: true, assign: true, delete: true, bulkActions: true,
     export: true, settings: true, color: PRIMARY_COLOR,
@@ -453,17 +453,15 @@ const modalSectionSx = {
   border: `1px solid ${alpha(PRIMARY_COLOR, 0.16)}`,
   background: GRADIENT_CARD,
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.72)",
-};
-
-const tableHeaderCellSx = {
-  background: "linear-gradient(180deg, #f8faff, #f0f6ff)",
+};const getTableHeaderCellSx = (isDark) => ({
+  background: isDark ? "#090f1d" : "linear-gradient(180deg, #f8faff, #f0f6ff)",
   fontWeight: 700,
   fontSize: "0.78rem",
   letterSpacing: ".05em",
   textTransform: "uppercase",
-  color: "#5f6b80",
-  borderBottom: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-};
+  color: isDark ? "#64748b" : "#5f6b80",
+  borderBottom: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+});
 
 // ========== SHARED MODAL HEADER ==========
 const ModalHeader = ({ icon, title, subtitle, color = PRIMARY_COLOR, onClose, iconGradient = GRADIENT_BLUE }) => (
@@ -736,12 +734,6 @@ const LeadActionMenu = ({
           },
         }}
       >
-        {permissions.edit && (
-          <MenuItem sx={menuItemSx} onClick={() => runAction(onEdit)}>
-            <Edit />
-            Edit Lead
-          </MenuItem>
-        )}
         <MenuItem sx={menuItemSx} onClick={() => runAction(onQuickView)}>
           <Visibility />
           Quick View
@@ -893,6 +885,7 @@ const MobileLeadCard = ({ lead, onView, onEdit, onAssign, onDelete, onConvertToP
 // ---- VIEW LEAD MODAL ----
 const ViewLeadModal = React.memo(({ open, onClose, lead, userRole }) => {
   const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { fetchAPI } = useAuth();
 
@@ -1802,7 +1795,6 @@ const DeleteConfirmationDialog = React.memo(({ open, onClose, leadsToDelete, onD
     : confirmText.toLowerCase() === "delete";
 
   const handleClose = () => { setConfirmText(""); onClose(); };
-
   const handleDelete = async () => {
     setDeleting(true);
     await onDelete();
@@ -1987,11 +1979,11 @@ const applyPipelineStageToRows = (items = [], stageKey = "") => {
   return items.filter((lead) => getPipelineBucket(lead) === stageKey);
 };
 
-
 // ========== MAIN COMPONENT ==========
 const LeadOverview = () => {
   const { fetchAPI, user } = useAuth();
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
   const navigate = useNavigate();
@@ -2052,7 +2044,7 @@ const LeadOverview = () => {
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState("desc");
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
-const [todayFollowUpLeads, setTodayFollowUpLeads] = useState([]);
+  const [todayFollowUpLeads, setTodayFollowUpLeads] = useState([]);
   const containerRef = useRef(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
@@ -2071,158 +2063,148 @@ const [todayFollowUpLeads, setTodayFollowUpLeads] = useState([]);
     return count;
   }, [searchTerm, statusFilter, period, quickFilter]);
 
-
-
-
   const isDueTodayOrEarlier = (value) => {
-  if (!value) return false;
-  const date = typeof value === "string" ? parseISO(value) : new Date(value);
-  if (!isValid(date)) return false;
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
-  return date.getTime() <= endOfToday.getTime();
-};
+    if (!value) return false;
+    const date = typeof value === "string" ? parseISO(value) : new Date(value);
+    if (!isValid(date)) return false;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    return date.getTime() <= endOfToday.getTime();
+  };
 
+  const leadHasActiveFollowUpToday = (lead = {}) => {
+    const followUpDateDue = Boolean(lead.followUpDate) && isDueTodayOrEarlier(lead.followUpDate);
 
+    const hasActiveReminderActivity =
+      Array.isArray(lead.leadActivities) &&
+      lead.leadActivities.some((activity) => {
+        const type = String(activity?.type || activity?.activityType || "").trim().toLowerCase();
+        if (type !== "reminder") return false;
+        if (activity?.completedAt) return false;
+        return isDueTodayOrEarlier(activity?.scheduledAt);
+      });
 
-// Covers both the lead-level followUpDate AND custom "Reminder" activities
-// (the ones created from the Reminders tab), so nothing gets missed just
-// because it lives in leadActivities instead of followUpDate.
-const leadHasActiveFollowUpToday = (lead = {}) => {
-  const followUpDateDue = Boolean(lead.followUpDate) && isDueTodayOrEarlier(lead.followUpDate);
-
-  const hasActiveReminderActivity =
-    Array.isArray(lead.leadActivities) &&
-    lead.leadActivities.some((activity) => {
-      const type = String(activity?.type || activity?.activityType || "").trim().toLowerCase();
-      if (type !== "reminder") return false;
-      if (activity?.completedAt) return false;
-      return isDueTodayOrEarlier(activity?.scheduledAt);
-    });
-
-  return followUpDateDue || hasActiveReminderActivity;
-};
-
+    return followUpDateDue || hasActiveReminderActivity;
+  };
 
   const addLeads = () => navigate("/add-lead");
   const showSnackbar = useCallback((message, severity = "success") => setSnackbar({ open: true, message, severity }), []);
 
- const fetchLeads = useCallback(async () => {
-  try {
-    setLoading(true);
+  const fetchLeads = useCallback(async () => {
+    try {
+      setLoading(true);
 
-    // Follow-up-today needs client-side filtering because the backend's
-    // followUpDue=today filter doesn't account for reminders stored in
-    // leadActivities — same issue we already fixed for the summary count.
-    if (quickFilter === "followUpToday") {
-      const leadData = await fetchAPI(`/lead/getAll?limit=1000&sortBy=followUpDate&sortOrder=asc`);
-      if (leadData.success) {
-        const allLeads = leadData.result?.leads || [];
-        const filtered = allLeads.filter(leadHasActiveFollowUpToday);
-        setLeads(filtered);
-        setTotalLeads(filtered.length);
-      } else {
-        showSnackbar(leadData.message || "Failed to fetch leads", "error");
-        setLeads([]);
-        setTotalLeads(0);
+      if (quickFilter === "followUpToday") {
+        const leadData = await fetchAPI(`/lead/getAll?isProject=false&limit=1000&sortBy=followUpDate&sortOrder=asc`);
+        if (leadData.success) {
+          const allLeads = leadData.result?.leads || [];
+          const filtered = allLeads.filter(leadHasActiveFollowUpToday);
+          setLeads(filtered);
+          setTotalLeads(filtered.length);
+        } else {
+          showSnackbar(leadData.message || "Failed to fetch leads", "error");
+          setLeads([]);
+          setTotalLeads(0);
+        }
+        return;
       }
-      return;
-    }
 
-    const params = new URLSearchParams({
-      page: (page + 1).toString(),
-      limit: rowsPerPage.toString(),
-      sortBy,
-      sortOrder,
-    });
+      const params = new URLSearchParams({
+        page: (page + 1).toString(),
+        limit: rowsPerPage.toString(),
+        sortBy,
+        sortOrder,
+      });
 
-    if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
-    if (statusFilter !== "all") params.append("status", statusFilter);
-    if (quickFilter.startsWith("pipeline:")) params.append("pipelineStage", quickFilter.replace("pipeline:", ""));
-
-    const today = toDateInputValue(new Date());
-    const fromDate = periodRange.fromDate ?? today;
-    const toDate = periodRange.toDate ?? today;
-
-    if (period !== "All") {
-      params.append("fromDate", fromDate);
-      params.append("toDate", toDate);
-    }
-
-    const data = await fetchAPI(`/lead/getAll?${params.toString()}`);
-    if (data.success) {
       const pipelineStageKey = quickFilter.startsWith("pipeline:")
         ? quickFilter.replace("pipeline:", "")
         : "";
-      const rows = data.result.leads || [];
-      const visibleRows = applyPipelineStageToRows(rows, pipelineStageKey);
 
-      setLeads(visibleRows);
-      setTotalLeads(pipelineStageKey ? visibleRows.length : data.result.pagination?.total || 0);
-    } else {
-      showSnackbar(data.message || "Failed to fetch leads", "error");
+      if (pipelineStageKey !== "projectConverted") params.append("isProject", "false");
+      if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+      if (statusFilter !== "all") params.append("status", statusFilter);
+      if (pipelineStageKey) params.append("pipelineStage", pipelineStageKey);
+
+      const today = toDateInputValue(new Date());
+      const fromDate = periodRange.fromDate ?? today;
+      const toDate = periodRange.toDate ?? today;
+
+      if (period !== "All") {
+        params.append("fromDate", fromDate);
+        params.append("toDate", toDate);
+      }
+
+      const data = await fetchAPI(`/lead/getAll?${params.toString()}`);
+      if (data.success) {
+        const rows = data.result.leads || [];
+        const visibleRows = applyPipelineStageToRows(rows, pipelineStageKey);
+
+        setLeads(visibleRows);
+        setTotalLeads(pipelineStageKey ? visibleRows.length : data.result.pagination?.total || 0);
+      } else {
+        showSnackbar(data.message || "Failed to fetch leads", "error");
+      }
+    } catch (error) {
+      showSnackbar(error.message || "Failed to fetch leads", "error");
+      setLeads([]);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    showSnackbar(error.message || "Failed to fetch leads", "error");
-    setLeads([]);
-  } finally {
-    setLoading(false);
-  }
-}, [fetchAPI, page, rowsPerPage, debouncedSearchTerm, statusFilter, quickFilter, sortBy, sortOrder, periodRange, period, showSnackbar]);
+  }, [fetchAPI, page, rowsPerPage, debouncedSearchTerm, statusFilter, quickFilter, sortBy, sortOrder, periodRange, period, showSnackbar]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
-const fetchOverviewStats = useCallback(async () => {
-  try {
-    const ts = Date.now();
-    const data = await fetchAPI(`/lead/stats?page=1&limit=1&_ts=${ts}`);
-    if (data.success) {
-      const stats = data.result?.stats || {};
-      let pipelineThisQuarter = stats.pipelineThisQuarter || { ...EMPTY_PIPELINE_COUNTS };
-      const totalStatsLeads = stats.totalLeads || 0;
+  const fetchOverviewStats = useCallback(async () => {
+    try {
+      const ts = Date.now();
+      const data = await fetchAPI(`/lead/stats?page=1&limit=1&_ts=${ts}`);
+      if (data.success) {
+        const stats = data.result?.stats || {};
+        let pipelineThisQuarter = stats.pipelineThisQuarter || { ...EMPTY_PIPELINE_COUNTS };
+        let totalStatsLeads = stats.totalLeads || 0;
 
-      // Pull the full lead list once and use it as the source of truth for
-      // both pipeline counts and "follow-up due today", since the backend
-      // aggregate can miss reminders stored on leadActivities.
-      let allLeads = null;
-      try {
-        const leadData = await fetchAPI("/lead/getAll?limit=1000&sortBy=createdAt&sortOrder=desc");
-        if (leadData.success) allLeads = leadData.result?.leads || [];
-      } catch {
-        // fall back to backend stats below if this fails
-      }
-
-      if (Array.isArray(allLeads) && (pipelineThisQuarter.all || 0) === 0 && totalStatsLeads > 0) {
-        pipelineThisQuarter = buildPipelineCountsFromLeads(allLeads);
-      }
-
-      let followUpToday = stats.followUpToday || 0;
-      let followUpLeads = [];
-      if (Array.isArray(allLeads)) {
-        followUpLeads = allLeads.filter(leadHasActiveFollowUpToday);
-        followUpToday = followUpLeads.length;
-      } else {
+        let allLeads = null;
         try {
-          const followUpData = await fetchAPI(`/lead/getAll?page=1&limit=1&followUpDue=today&_ts=${ts}`);
-          if (followUpData?.success) followUpToday = followUpData.result?.pagination?.total || 0;
-        } catch {}
-      }
+          const leadData = await fetchAPI("/lead/getAll?isProject=false&limit=1000&sortBy=createdAt&sortOrder=desc");
+          if (leadData.success) {
+            allLeads = leadData.result?.leads || [];
+            totalStatsLeads = leadData.result?.pagination?.total ?? allLeads.length;
+          }
+        } catch {
+          // fall back to backend stats below if this fails
+        }
 
-      setTodayFollowUpLeads(followUpLeads);
-      setOverviewStats({
-        totalLeads: totalStatsLeads,
-        activeLeads: stats.activeLeads || 0,
-        newLeads: stats.newLeads || stats.activeLeads || 0,
-        convertedLeads: stats.convertedLeads || 0,
-        conversionRate: stats.conversionRate || 0,
-        followUpToday,
-        pipelineThisQuarter,
-      });
+        if (Array.isArray(allLeads)) {
+          pipelineThisQuarter = buildPipelineCountsFromLeads(allLeads);
+        }
+
+        let followUpToday = stats.followUpToday || 0;
+        let followUpLeads = [];
+        if (Array.isArray(allLeads)) {
+          followUpLeads = allLeads.filter((lead) => !lead?.isProject && leadHasActiveFollowUpToday(lead));
+          followUpToday = followUpLeads.length;
+        } else {
+          try {
+            const followUpData = await fetchAPI(`/lead/getAll?page=1&limit=1&followUpDue=today&_ts=${ts}`);
+            if (followUpData?.success) followUpToday = followUpData.result?.pagination?.total || 0;
+          } catch {}
+        }
+
+        setTodayFollowUpLeads(followUpLeads);
+        setOverviewStats({
+          totalLeads: totalStatsLeads,
+          activeLeads: stats.activeLeads || 0,
+          newLeads: stats.newLeads || stats.activeLeads || 0,
+          convertedLeads: stats.convertedLeads || 0,
+          conversionRate: stats.conversionRate || 0,
+          followUpToday,
+          pipelineThisQuarter,
+        });
+      }
+    } catch {
+      setOverviewStats((prev) => prev);
     }
-  } catch {
-    setOverviewStats((prev) => prev);
-  }
-}, [fetchAPI]);
+  }, [fetchAPI]);
 
   const fetchVisitSummary = useCallback(async () => {
     try {
@@ -2270,42 +2252,40 @@ const fetchOverviewStats = useCallback(async () => {
   const handleAssignLead = useCallback(async () => { showSnackbar("Lead assigned successfully", "success"); await fetchLeads(); setSelectedLeads([]); setSelectAll(false); }, [fetchLeads, showSnackbar]);
   const handleBulkAssign = useCallback(async (assignData) => { showSnackbar(`${assignData.leadIds?.length || 0} leads assigned successfully`, "success"); setSelectedLeads([]); setSelectAll(false); await fetchLeads(); }, [fetchLeads, showSnackbar]);
 
-  // âœ… FIXED: Use fetchAPI instead of hardcoded fetch URL
- const handleDeleteLeads = useCallback(async () => {
-  try {
-    if (!leadsToDelete || leadsToDelete.length === 0) {
-      showSnackbar("No leads selected for deletion", "error");
-      return;
-    }
-    for (const leadId of leadsToDelete) {
-      await fetchAPI(`/lead/deleteLead/${leadId}`, { method: "DELETE" });
-    }
-    showSnackbar(`${leadsToDelete.length} lead(s) deleted successfully`, "success");
-    setDeleteDialogOpen(false);
-    setLeadsToDelete([]);
-    setSelectedLeads([]);
-    setSelectAll(false);
-    await fetchLeads();
-  } catch (error) {
-    showSnackbar(error.message || "Failed to delete leads", "error");
-  }
-}, [fetchAPI, fetchLeads, showSnackbar, leadsToDelete]);
-
-  // âœ… FIXED: Use fetchAPI instead of hardcoded fetch URL
-  const handleDeleteSingleLead = useCallback(async (leadId) => {
-  try {
-    if (!leadId) { showSnackbar("Invalid lead ID", "error"); return; }
-    const response = await fetchAPI(`/lead/deleteLead/${leadId}`, { method: "DELETE" });
-    if (response.success) {
-      showSnackbar("Lead deleted successfully", "success");
+  const handleDeleteLeads = useCallback(async () => {
+    try {
+      if (!leadsToDelete || leadsToDelete.length === 0) {
+        showSnackbar("No leads selected for deletion", "error");
+        return;
+      }
+      for (const leadId of leadsToDelete) {
+        await fetchAPI(`/lead/deleteLead/${leadId}`, { method: "DELETE" });
+      }
+      showSnackbar(`${leadsToDelete.length} lead(s) deleted successfully`, "success");
+      setDeleteDialogOpen(false);
+      setLeadsToDelete([]);
+      setSelectedLeads([]);
+      setSelectAll(false);
       await fetchLeads();
-    } else {
-      throw new Error(response.message || "Failed to delete lead");
+    } catch (error) {
+      showSnackbar(error.message || "Failed to delete leads", "error");
     }
-  } catch (error) {
-    showSnackbar(error.message || "Failed to delete lead", "error");
-  }
-}, [fetchAPI, fetchLeads, showSnackbar]);
+  }, [fetchAPI, fetchLeads, showSnackbar, leadsToDelete]);
+
+  const handleDeleteSingleLead = useCallback(async (leadId) => {
+    try {
+      if (!leadId) { showSnackbar("Invalid lead ID", "error"); return; }
+      const response = await fetchAPI(`/lead/deleteLead/${leadId}`, { method: "DELETE" });
+      if (response.success) {
+        showSnackbar("Lead deleted successfully", "success");
+        await fetchLeads();
+      } else {
+        throw new Error(response.message || "Failed to delete lead");
+      }
+    } catch (error) {
+      showSnackbar(error.message || "Failed to delete lead", "error");
+    }
+  }, [fetchAPI, fetchLeads, showSnackbar]);
 
   const handleUpdateLead = useCallback(async () => { showSnackbar("Lead updated successfully", "success"); await fetchLeads(); }, [fetchLeads, showSnackbar]);
 
@@ -2487,15 +2467,19 @@ const fetchOverviewStats = useCallback(async () => {
     const isSelected = selectedLeads.includes(lead._id);
     const statusColor = getStatusColor(lead.status);
     return (
-      <TableRow key={lead._id} hover selected={isSelected} sx={{ "&:hover": { bgcolor: alpha(PRIMARY_COLOR, 0.02) }, "&.Mui-selected": { bgcolor: alpha(PRIMARY_COLOR, 0.08) }, "& td": { borderBottom: `1px solid ${alpha(PRIMARY_COLOR, 0.06)}` } }}>
-        <TableCell padding="checkbox">{permissions.bulkActions && <Checkbox checked={isSelected} onChange={() => handleSelectLead(lead._id)} sx={{ color: PRIMARY_COLOR, "&.Mui-checked": { color: PRIMARY_COLOR } }} />}</TableCell>
+      <TableRow key={lead._id} hover selected={isSelected} sx={{
+        "&:hover": { bgcolor: isDark ? "rgba(37, 99, 235, 0.12)" : alpha(PRIMARY_COLOR, 0.02) },
+        "&.Mui-selected": { bgcolor: isDark ? "rgba(37, 99, 235, 0.2)" : alpha(PRIMARY_COLOR, 0.08) },
+        "& td": { borderBottom: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : `1px solid ${alpha(PRIMARY_COLOR, 0.06)}`, color: isDark ? "#f8fafc" : "inherit" }
+      }}>
+        <TableCell padding="checkbox">{permissions.bulkActions && <Checkbox checked={isSelected} onChange={() => handleSelectLead(lead._id)} sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, "&.Mui-checked": { color: isDark ? "#60a5fa" : PRIMARY_COLOR } }} />}</TableCell>
         <TableCell>
           <Box display="flex" alignItems="center" gap={2}>
             <Avatar sx={{ background: statusColor.avatar, boxShadow: "0 12px 24px rgba(37,99,235,0.15)" }}>{lead.firstName?.[0]}</Avatar>
-            <Box><Typography variant="body1" fontWeight={600}>{lead.firstName} {lead.lastName}</Typography><Typography variant="caption" color="text.secondary">{lead.email}</Typography></Box>
+            <Box><Typography variant="body1" fontWeight={600} sx={{ color: isDark ? "#f8fafc" : "inherit" }}>{lead.firstName} {lead.lastName}</Typography><Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>{lead.email}</Typography></Box>
           </Box>
         </TableCell>
-        <TableCell><Box display="flex" alignItems="center" gap={1}><Phone fontSize="small" sx={{ color: "text.secondary" }} /><Typography variant="body2">{lead.phone || "Not set"}</Typography></Box></TableCell>
+        <TableCell><Box display="flex" alignItems="center" gap={1}><Phone fontSize="small" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }} /><Typography variant="body2" sx={{ color: isDark ? "#e2e8f0" : "inherit" }}>{lead.phone || "Not set"}</Typography></Box></TableCell>
         <TableCell><Chip label={lead.status} icon={statusColor.icon} size="small" sx={{ background: statusColor.bg, color: statusColor.color, fontWeight: 700, border: `1px solid ${statusColor.border}`, "& .MuiChip-icon": { color: statusColor.color } }} /></TableCell>
         <TableCell>
           {(() => {
@@ -2503,7 +2487,7 @@ const fetchOverviewStats = useCallback(async () => {
             return assignedPerson ? (
               <Box display="flex" alignItems="center" gap={1}>
                 <Avatar sx={{ width: 24, height: 24, fontSize: 12, background: GRADIENT_BLUE, color: "#fff" }}>{assignedPerson.initial}</Avatar>
-                <Box><Typography variant="body2">{assignedPerson.name}</Typography><Typography variant="caption" color="text.secondary">{assignedPerson.role}</Typography></Box>
+                <Box><Typography variant="body2" sx={{ color: isDark ? "#f8fafc" : "inherit" }}>{assignedPerson.name}</Typography><Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>{assignedPerson.role}</Typography></Box>
               </Box>
             ) : permissions.assign ? (
               <Button
@@ -2516,23 +2500,23 @@ const fetchOverviewStats = useCallback(async () => {
                   py: 0.5,
                   borderRadius: 2,
                   borderStyle: "dashed",
-                  borderColor: alpha(PRIMARY_COLOR, 0.45),
-                  color: PRIMARY_COLOR,
+                  borderColor: isDark ? "rgba(59, 130, 246, 0.45)" : alpha(PRIMARY_COLOR, 0.45),
+                  color: isDark ? "#60a5fa" : PRIMARY_COLOR,
                   fontWeight: 600,
                   textTransform: "none",
                   "&:hover": {
                     borderStyle: "dashed",
-                    borderColor: PRIMARY_COLOR,
-                    bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                    borderColor: isDark ? "#60a5fa" : PRIMARY_COLOR,
+                    bgcolor: isDark ? "rgba(59, 130, 246, 0.1)" : alpha(PRIMARY_COLOR, 0.05),
                   },
                 }}
               >
                 + Assign
               </Button>
-            ) : <Typography variant="body2" color="text.secondary">Unassigned</Typography>;
+            ) : <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Unassigned</Typography>;
           })()}
         </TableCell>
-        <TableCell><Typography variant="caption">{formatDate(lead.createdAt, "MMM dd, yyyy")}</Typography></TableCell>
+        <TableCell><Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "inherit" }}>{formatDate(lead.createdAt, "MMM dd, yyyy")}</Typography></TableCell>
         <TableCell align="center">
           <LeadActionMenu
             lead={lead}
@@ -2548,7 +2532,7 @@ const fetchOverviewStats = useCallback(async () => {
         </TableCell>
       </TableRow>
     );
-  }, [selectedLeads, permissions, handleSelectLead, openLeadDetailsPage, openViewDialog, openAssignDialog, handleCreateQuote, handleConvertToProject, handleUnsupportedLeadAction]);
+  }, [selectedLeads, permissions, handleSelectLead, openLeadDetailsPage, openViewDialog, openAssignDialog, handleCreateQuote, handleConvertToProject, handleUnsupportedLeadAction, isDark]);
 
   const renderCardView = useCallback(() => {
     if (loading) return <LoadingSkeleton count={6} isMobile={isMobile} />;
@@ -2561,49 +2545,49 @@ const fetchOverviewStats = useCallback(async () => {
   }, [loading, leads, hasFilters, permissions, openViewDialog, openEditDialog, openAssignDialog, handleDeleteSingleLead, handleConvertToProject, isMobile, handleResetFilters]);
 
   const summaryCards = useMemo(() => ([
-  {
-    label: "Need follow-up today",
-    value: overviewStats.followUpToday || 0,
-    caption: "Reminders due today or overdue",
-    action: "View list",
-    icon: <Warning />,
-    iconBg: "rgba(255,255,255,0.14)",       // subtle glass circle, not solid navy-on-navy
-    iconColor: "#fff",
-    borderColor: "#f97316",                  // orange accent border like your screenshot
-    background: "linear-gradient(115deg, #0f1f3d 0%, #3b57f7 55%, #0f1f3d 100%)",
-    actionColor: "#fdba74",                   // light orange so it's visible on dark bg
-    textOnDark: true,                         // <-- new flag
-    onClick: handleViewTodayFollowUps,
-  },
-  {
-    label: "New leads",
-    value: overviewStats.newLeads || overviewStats.activeLeads || 0,
-    caption: "Fresh in the pipeline - assign & engage",
-    action: "Assign now",
-    icon: <AssignmentInd />,
-    iconBg: alpha("#2563eb", 0.08),
-    iconColor: PRIMARY_COLOR,
-    borderColor: alpha("#94a3b8", 0.25),
-    background: "#fff",
-    actionColor: "#1d4ed8",
-    textOnDark: false,
-    onClick: handleViewNewLeads,
-  },
-  {
-    label: "Site visits scheduled",
-    value: visitSummary.scheduledVisits || 0,
-    caption: "Inspector visits coming up",
-    action: "View calendar",
-    icon: <CalendarToday />,
-    iconBg: alpha("#10b981", 0.1),
-    iconColor: "#047857",
-    borderColor: alpha("#94a3b8", 0.25),
-    background: "#fff",
-    actionColor: "#1d4ed8",
-    textOnDark: false,
-    onClick: handleViewVisitCalendar,
-  },
-]), [handleViewNewLeads, handleViewTodayFollowUps, handleViewVisitCalendar, overviewStats, visitSummary.scheduledVisits]);
+    {
+      label: "Need follow-up today",
+      value: overviewStats.followUpToday || 0,
+      caption: "Reminders due today or overdue",
+      action: "View list",
+      icon: <Warning />,
+      gradientBorder: "linear-gradient(135deg, #f97316 0%, #3b82f6 35%, #60a5fa 70%, #818cf8 100%)",
+      backgroundDark: "radial-gradient(circle at 40% 40%, #1e3a8a 0%, #0d1a3e 50%, #070d1a 100%)",
+      backgroundLight: "#fff",
+      borderColorLight: alpha("#f97316", 0.3),
+      actionColor: "#f97316",
+      textOnDark: true,
+      onClick: handleViewTodayFollowUps,
+    },
+    {
+      label: "New leads",
+      value: overviewStats.newLeads || overviewStats.activeLeads || 0,
+      caption: "Fresh in the pipeline - assign & engage",
+      action: "Assign now",
+      icon: <AssignmentInd />,
+      gradientBorder: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 50%, #38bdf8 100%)",
+      backgroundDark: "radial-gradient(circle at 40% 40%, #1d4ed8 0%, #0d1a3e 50%, #070d1a 100%)",
+      backgroundLight: "#fff",
+      borderColorLight: alpha("#94a3b8", 0.25),
+      actionColor: isDark ? "#60a5fa" : "#1d4ed8",
+      textOnDark: isDark,
+      onClick: handleViewNewLeads,
+    },
+    {
+      label: "Site visits scheduled",
+      value: visitSummary.scheduledVisits || 0,
+      caption: "Inspector visits coming up",
+      action: "View calendar",
+      icon: <CalendarToday />,
+      gradientBorder: "linear-gradient(135deg, #10b981 0%, #34d399 50%, #38bdf8 100%)",
+      backgroundDark: "radial-gradient(circle at 40% 40%, #047857 0%, #092820 50%, #070d1a 100%)",
+      backgroundLight: "#fff",
+      borderColorLight: alpha("#94a3b8", 0.25),
+      actionColor: isDark ? "#34d399" : "#047857",
+      textOnDark: isDark,
+      onClick: handleViewVisitCalendar,
+    },
+  ]), [handleViewNewLeads, handleViewTodayFollowUps, handleViewVisitCalendar, overviewStats, visitSummary.scheduledVisits, isDark]);
 
   const pipelineQuarterCards = useMemo(() => {
     const counts = overviewStats.pipelineThisQuarter || {};
@@ -2626,8 +2610,9 @@ const fetchOverviewStats = useCallback(async () => {
     if (card.key === "all") return statusFilter === "all" && !quickFilter;
     return quickFilter === `pipeline:${card.key}` || (quickFilter === "" && statusFilter === card.status);
   }, [quickFilter, statusFilter]);
+
   return (
-    <Box ref={containerRef} sx={{ p: { xs: 1.5, sm: 2, md: 3 }, minHeight: "100vh", pb: { xs: 8, sm: 3 }, bgcolor: "#f8fafc" }}>
+    <Box ref={containerRef} sx={{ p: { xs: 1.5, sm: 2, md: 3 }, minHeight: "100vh", pb: { xs: 8, sm: 3 }, bgcolor: isDark ? "#06090e" : "#f8fafc" }}>
       <MobileFilterDrawer open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)} period={period} setPeriod={setPeriod} statusFilter={statusFilter} setStatusFilter={setStatusFilter} handleClearFilters={handleClearFiltersMobile} searchQuery={searchTerm} setSearchQuery={setSearchTerm} activeFilterCount={activeFilterCount} />
       <ConvertProjectDialog
         open={projectDialogOpen}
@@ -2641,12 +2626,12 @@ const fetchOverviewStats = useCallback(async () => {
       />
 
       {/* Header */}
-      <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, mb: 3, borderRadius: 4, background: GRADIENT_MAIN, color: "#fff", boxShadow: "0 24px 44px rgba(15,31,61,0.18)" }}>
+      <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, mb: 3, borderRadius: 4, background: isDark ? "linear-gradient(135deg, #0b1329 0%, #0d1b3e 100%)" : GRADIENT_MAIN, border: isDark ? "1px solid rgba(59, 130, 246, 0.25)" : "none", color: "#fff", boxShadow: "0 24px 44px rgba(15,31,61,0.18)" }}>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }}>
           <Box display="flex" alignItems="center" gap={2}>
             <Avatar sx={{ background: "linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 100%)", color: "#fff", width: 52, height: 52, border: "1px solid rgba(255,255,255,0.18)" }}><Groups /></Avatar>
             <Box>
-              <Typography variant={isMobile ? "h6" : "h5"} fontWeight={700} gutterBottom>Lead Management</Typography>
+              <Typography variant={isMobile ? "h6" : "h5"} fontWeight={800} gutterBottom>Lead Management</Typography>
               <Typography variant="body2" sx={{ opacity: 0.9, fontSize: { xs: "0.75rem", sm: "0.875rem" } }}>Total {totalLeads} leads • {permissions.label} view</Typography>
             </Box>
           </Box>
@@ -2657,99 +2642,100 @@ const fetchOverviewStats = useCallback(async () => {
                 {activeFilterCount > 0 && <Badge badgeContent={activeFilterCount} color="error" sx={{ position: "absolute", top: -8, right: -8, "& .MuiBadge-badge": { fontSize: "0.6rem", minWidth: 16, height: 16 } }} />}
               </Button>
             )}
-            <Button variant="contained" startIcon={<Add />} onClick={addLeads} size={isMobile ? "small" : "medium"} sx={{ bgcolor: "rgba(255,255,255,0.2)", color: "#fff", "&:hover": { bgcolor: "rgba(255,255,255,0.3)" } }}>Add Lead</Button>
+            <Button variant="contained" startIcon={<Add />} onClick={addLeads} size={isMobile ? "small" : "medium"} sx={{ background: "linear-gradient(45deg, #f97316 0%, #ea580c 100%)", color: "#fff", fontWeight: 700, borderRadius: 2.5, "&:hover": { background: "linear-gradient(45deg, #ea580c 0%, #c2410c 100%)" } }}>+ Add Lead</Button>
           </Box>
         </Stack>
       </Paper>
 
-     <Grid container spacing={2.25} sx={{ mb: 3 }}>
-  {summaryCards.map((card) => (
-    <Grid item xs={12} md={4} key={card.label}>
-      <Paper
-        elevation={0}
-        onClick={card.onClick}
-        sx={{
-          overflow: "hidden",
-          borderRadius: 3,
-          px: { xs: 2, sm: 2.25 },
-          py: { xs: 2, sm: 2.25 },
-          minHeight: 154,
-          background: card.background,
-          border: card.textOnDark
-            ? `1px solid ${alpha(card.borderColor, 0.9)}`
-            : `1px solid ${card.borderColor}`,
-          borderLeft: card.textOnDark ? `3px solid ${card.borderColor}` : undefined,
-          boxShadow: card.textOnDark
-            ? "0 18px 36px rgba(15,23,42,0.35)"
-            : "0 14px 30px rgba(15,23,42,0.04)",
-          cursor: "pointer",
-          transition: "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
-          "&:hover": {
-            transform: "translateY(-2px)",
-            boxShadow: card.textOnDark
-              ? "0 22px 44px rgba(15,23,42,0.45)"
-              : "0 18px 36px rgba(15,23,42,0.08)",
-            borderColor: card.actionColor,
-          },
-        }}
-      >
-        <Stack direction="row" spacing={1.75} alignItems="flex-start">
-          <Box
-            sx={{
-              width: 56,
-              height: 56,
-              borderRadius: 2.5,
-              display: "grid",
-              placeItems: "center",
-              flexShrink: 0,
-              bgcolor: card.iconBg,
-              border: card.textOnDark ? "1px solid rgba(255,255,255,0.18)" : "none",
-              boxShadow: card.textOnDark ? "0 12px 24px rgba(0,0,0,0.25)" : "none",
-            }}
-          >
-            {React.cloneElement(card.icon, { sx: { color: card.iconColor, fontSize: 25 } })}
-          </Box>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{
-              fontSize: { xs: "2rem", sm: "2.25rem" },
-              fontWeight: 900,
-              lineHeight: 0.9,
-              color: card.textOnDark ? "#fff" : "#0f172a",
-            }}>
-              {card.value}
-            </Typography>
-            <Typography sx={{
-              mt: 0.5, fontSize: "0.92rem", fontWeight: 800, lineHeight: 1.25,
-              color: card.textOnDark ? "#fff" : "#020617",
-            }}>
-              {card.label}
-            </Typography>
-            <Typography sx={{
-              mt: 1.05, fontSize: "0.84rem", lineHeight: 1.45,
-              color: card.textOnDark ? "rgba(255,255,255,0.72)" : "#64748b",
-            }}>
-              {card.caption}
-            </Typography>
-            <Button
-              size="small"
-              endIcon={<OpenInNew sx={{ fontSize: 13 }} />}
-              onClick={(event) => { event.stopPropagation(); card.onClick(); }}
+      <Grid container spacing={2.25} sx={{ mb: 3 }}>
+        {summaryCards.map((card) => (
+          <Grid item xs={12} md={4} key={card.label}>
+            <Paper
+              elevation={0}
+              onClick={card.onClick}
               sx={{
-                mt: 0.8, p: 0, minWidth: 0,
-                color: card.actionColor,
-                fontWeight: 900, fontSize: "0.8rem", textTransform: "none",
-                "& .MuiButton-endIcon": { ml: 0.45 },
-                "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
+                overflow: "hidden",
+                borderRadius: "16px",
+                px: { xs: 2.25, sm: 2.5 },
+                py: { xs: 2.25, sm: 2.5 },
+                minHeight: 154,
+                position: "relative",
+                background: isDark
+                  ? `${card.backgroundDark} padding-box, ${card.gradientBorder} border-box`
+                  : card.backgroundLight,
+                border: isDark
+                  ? "1.5px solid transparent"
+                  : `1px solid ${card.borderColorLight}`,
+                boxShadow: isDark
+                  ? "0 18px 40px rgba(5, 10, 24, 0.65), inset 0 1px 1px rgba(255, 255, 255, 0.12)"
+                  : "0 14px 30px rgba(15,23,42,0.04)",
+                cursor: "pointer",
+                transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                "&:hover": {
+                  transform: "translateY(-3px)",
+                  boxShadow: isDark
+                    ? "0 22px 50px rgba(30, 58, 138, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.18)"
+                    : "0 18px 36px rgba(15,23,42,0.08)",
+                },
               }}
             >
-              {card.action}
-            </Button>
-          </Box>
-        </Stack>
-      </Paper>
-    </Grid>
-  ))}
-</Grid>
+              <Stack direction="row" spacing={2} alignItems="flex-start">
+                <Box
+                  sx={{
+                    width: 54,
+                    height: 54,
+                    borderRadius: "50%",
+                    display: "grid",
+                    placeItems: "center",
+                    flexShrink: 0,
+                    bgcolor: isDark ? "rgba(255, 255, 255, 0.08)" : alpha(card.actionColor, 0.1),
+                    border: isDark ? "1px solid rgba(255, 255, 255, 0.16)" : "none",
+                    boxShadow: isDark ? "inset 0 0 12px rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0,0,0,0.3)" : "none",
+                  }}
+                >
+                  {React.cloneElement(card.icon, { sx: { color: isDark ? "#fff" : card.actionColor, fontSize: 24 } })}
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{
+                    fontSize: { xs: "2.1rem", sm: "2.35rem" },
+                    fontWeight: 900,
+                    lineHeight: 1,
+                    color: isDark ? "#fff" : "#0f172a",
+                  }}>
+                    {card.value}
+                  </Typography>
+                  <Typography sx={{
+                    mt: 0.5, fontSize: "1.02rem", fontWeight: 800, lineHeight: 1.25,
+                    color: isDark ? "#fff" : "#020617",
+                  }}>
+                    {card.label}
+                  </Typography>
+                  <Typography sx={{
+                    mt: 0.7, fontSize: "0.84rem", lineHeight: 1.4,
+                    color: isDark ? "rgba(203, 213, 225, 0.8)" : "#64748b",
+                  }}>
+                    {card.caption}
+                  </Typography>
+                  <Button
+                    size="small"
+                    endIcon={<OpenInNew sx={{ fontSize: 13 }} />}
+                    onClick={(event) => { event.stopPropagation(); card.onClick(); }}
+                    sx={{
+                      mt: 0.8, p: 0, minWidth: 0,
+                      color: card.actionColor,
+                      fontWeight: 900, fontSize: "0.85rem", textTransform: "none",
+                      "& .MuiButton-endIcon": { ml: 0.4 },
+                      "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
+                    }}
+                  >
+                    {card.action}
+                  </Button>
+                </Box>
+              </Stack>
+            </Paper>
+          </Grid>
+        ))}
+      </Grid>
 
       <Paper
         elevation={0}
@@ -2757,19 +2743,19 @@ const fetchOverviewStats = useCallback(async () => {
           mb: 3,
           p: { xs: 2, md: 3 },
           borderRadius: "14px",
-          bgcolor: "#fff",
-          border: `1px solid ${alpha("#94a3b8", 0.28)}`,
+          bgcolor: isDark ? "#0b101c" : "#fff",
+          border: isDark ? "1px solid rgba(59, 130, 246, 0.15)" : `1px solid ${alpha("#94a3b8", 0.28)}`,
           boxShadow: "none",
         }}
       >
         <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2} sx={{ mb: 2.3 }}>
           <Box>
-            <Typography sx={{ fontSize: "1rem", fontWeight: 900, color: "#0f172a", lineHeight: 1.2 }}>
+            <Typography sx={{ fontSize: "1rem", fontWeight: 900, color: isDark ? "#f8fafc" : "#0f172a", lineHeight: 1.2 }}>
               Lead pipeline
             </Typography>
           </Box>
           <Stack direction="row" spacing={1.25} alignItems="center">
-            <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: "#475569" }}>
+            <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: isDark ? "#94a3b8" : "#475569" }}>
               Click a stage to filter
             </Typography>
             {(statusFilter !== "all" || quickFilter) && (
@@ -2777,7 +2763,7 @@ const fetchOverviewStats = useCallback(async () => {
                 size="small"
                 startIcon={<Close sx={{ fontSize: 14 }} />}
                 onClick={handleResetFilters}
-                sx={{ color: PRIMARY_COLOR, fontWeight: 800, fontSize: "0.76rem", textTransform: "none", px: 0.75 }}
+                sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, fontWeight: 800, fontSize: "0.76rem", textTransform: "none", px: 0.75 }}
               >
                 Clear
               </Button>
@@ -2807,13 +2793,17 @@ const fetchOverviewStats = useCallback(async () => {
                       py: 1.1,
                       borderRadius: "12px",
                       cursor: "pointer",
-                      border: `1.5px solid ${isActive && !activeDark ? style.icon : "#dbe3ef"}`,
-                      bgcolor: activeDark ? "#263d63" : isActive ? alpha(style.icon, 0.07) : "#fafbfe",
-                      color: activeDark ? "#fff" : "#0f172a",
+                      border: isDark
+                        ? `1.5px solid ${isActive ? "#2563eb" : "#1c2842"}`
+                        : `1.5px solid ${isActive && !activeDark ? style.icon : "#dbe3ef"}`,
+                      bgcolor: isDark
+                        ? (isActive ? "rgba(37, 99, 235, 0.25)" : "#0c1322")
+                        : (activeDark ? "#263d63" : isActive ? alpha(style.icon, 0.07) : "#fafbfe"),
+                      color: isDark ? "#f8fafc" : (activeDark ? "#fff" : "#0f172a"),
                       transition: "all 0.15s ease",
                       "&:hover": {
-                        borderColor: activeDark ? "#263d63" : style.icon,
-                        bgcolor: activeDark ? "#263d63" : alpha(style.icon, 0.06),
+                        borderColor: isDark ? "#2563eb" : (activeDark ? "#263d63" : style.icon),
+                        bgcolor: isDark ? "rgba(37, 99, 235, 0.3)" : (activeDark ? "#263d63" : alpha(style.icon, 0.06)),
                       },
                     }}
                   >
@@ -2823,8 +2813,8 @@ const fetchOverviewStats = useCallback(async () => {
                           width: 22,
                           height: 22,
                           borderRadius: "7px",
-                          bgcolor: activeDark ? "transparent" : alpha(style.icon, 0.14),
-                          color: activeDark ? "#fff" : style.icon,
+                          bgcolor: activeDark ? "transparent" : (isDark ? "rgba(59, 130, 246, 0.2)" : alpha(style.icon, 0.14)),
+                          color: activeDark ? "#fff" : (isDark ? "#60a5fa" : style.icon),
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -2835,7 +2825,7 @@ const fetchOverviewStats = useCallback(async () => {
                           sx: { fontSize: 13, color: "inherit" },
                         })}
                       </Box>
-                      <Typography sx={{ fontSize: "1.25rem", fontWeight: 900, color: activeDark ? "#fff" : style.icon, lineHeight: 1 }}>
+                      <Typography sx={{ fontSize: "1.25rem", fontWeight: 900, color: activeDark ? "#fff" : (isDark ? "#60a5fa" : style.icon), lineHeight: 1 }}>
                         {card.value}
                       </Typography>
                     </Stack>
@@ -2844,7 +2834,7 @@ const fetchOverviewStats = useCallback(async () => {
                       sx={{
                         fontSize: "0.73rem",
                         fontWeight: 800,
-                        color: activeDark ? alpha("#fff", 0.86) : "#334155",
+                        color: isDark ? "#94a3b8" : (activeDark ? alpha("#fff", 0.86) : "#334155"),
                         lineHeight: 1.15,
                         display: "-webkit-box",
                         overflow: "hidden",
@@ -2863,7 +2853,7 @@ const fetchOverviewStats = useCallback(async () => {
       </Paper>
     {/* ===== DESKTOP FILTERS ===== */}
 {!isMobile && (
-  <Card sx={{ mb: 3, borderRadius: 4, border: `1px solid ${alpha(PRIMARY_COLOR, 0.08)}`, boxShadow: "0 4px 24px rgba(15,23,42,0.05)" }}>
+  <Card sx={{ mb: 3, borderRadius: 4, bgcolor: isDark ? "#0b101c" : "#fff", border: isDark ? "1px solid rgba(59, 130, 246, 0.15)" : `1px solid ${alpha(PRIMARY_COLOR, 0.08)}`, boxShadow: "none" }}>
     <CardContent sx={{ p: "16px 20px !important" }}>
 
       {/* Row 1: Search · Period pills · Status select · View toggle */}
@@ -2879,16 +2869,17 @@ const fetchOverviewStats = useCallback(async () => {
             flex: 1, minWidth: 220,
             "& .MuiOutlinedInput-root": {
               borderRadius: 999,
-              bgcolor: alpha("#64748b", 0.06),
-              "& fieldset": { borderColor: alpha(PRIMARY_COLOR, 0.12) },
-              "&:hover fieldset": { borderColor: alpha(PRIMARY_COLOR, 0.3) },
-              "&.Mui-focused fieldset": { borderColor: PRIMARY_COLOR, borderWidth: 1 },
+              bgcolor: isDark ? "#0e1628" : alpha("#64748b", 0.06),
+              color: isDark ? "#f8fafc" : "inherit",
+              "& fieldset": { borderColor: isDark ? "rgba(59, 130, 246, 0.2)" : alpha(PRIMARY_COLOR, 0.12) },
+              "&:hover fieldset": { borderColor: isDark ? "#2563eb" : alpha(PRIMARY_COLOR, 0.3) },
+              "&.Mui-focused fieldset": { borderColor: "#2563eb", borderWidth: 1 },
             },
           }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <Search sx={{ fontSize: 18, color: "text.secondary" }} />
+                <Search sx={{ fontSize: 18, color: isDark ? "#64748b" : "text.secondary" }} />
               </InputAdornment>
             ),
             endAdornment: searchTerm && (
@@ -2915,12 +2906,12 @@ const fetchOverviewStats = useCallback(async () => {
                 fontSize: "0.75rem",
                 fontWeight: 600,
                 textTransform: "none",
-                border: `1px solid ${period === opt.value ? "transparent" : alpha(PRIMARY_COLOR, 0.14)}`,
-                background: period === opt.value ? GRADIENT_BLUE : alpha("#64748b", 0.06),
-                color: period === opt.value ? "#fff" : PRIMARY_COLOR,
+                border: `1px solid ${period === opt.value ? "transparent" : isDark ? "rgba(59, 130, 246, 0.2)" : alpha(PRIMARY_COLOR, 0.14)}`,
+                background: period === opt.value ? GRADIENT_BLUE : (isDark ? "#0e1628" : alpha("#64748b", 0.06)),
+                color: period === opt.value ? "#fff" : (isDark ? "#94a3b8" : PRIMARY_COLOR),
                 boxShadow: "none",
                 "&:hover": {
-                  background: period === opt.value ? GRADIENT_BLUE : alpha(PRIMARY_COLOR, 0.08),
+                  background: period === opt.value ? GRADIENT_BLUE : (isDark ? "rgba(59, 130, 246, 0.15)" : alpha(PRIMARY_COLOR, 0.08)),
                   boxShadow: "none",
                 },
               }}
@@ -2938,11 +2929,12 @@ const fetchOverviewStats = useCallback(async () => {
             displayEmpty
             sx={{
               borderRadius: 999,
-              bgcolor: alpha("#64748b", 0.06),
+              bgcolor: isDark ? "#0e1628" : alpha("#64748b", 0.06),
+              color: isDark ? "#f8fafc" : "inherit",
               fontSize: "0.8rem",
-              "& .MuiOutlinedInput-notchedOutline": { borderColor: alpha(PRIMARY_COLOR, 0.12) },
-              "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: alpha(PRIMARY_COLOR, 0.3) },
-              "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: PRIMARY_COLOR, borderWidth: 1 },
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: isDark ? "rgba(59, 130, 246, 0.2)" : alpha(PRIMARY_COLOR, 0.12) },
+              "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: isDark ? "#2563eb" : alpha(PRIMARY_COLOR, 0.3) },
+              "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#2563eb", borderWidth: 1 },
             }}
           >
             <MenuItem value="all">All statuses</MenuItem>
@@ -3122,16 +3114,16 @@ const fetchOverviewStats = useCallback(async () => {
       )}
 
       {/* Content */}
-      <Paper elevation={0} sx={{ borderRadius: 3, overflow: "hidden" }}>
-        <Box sx={{ p: { xs: 2, sm: 3 }, borderBottom: 1, borderColor: "divider", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2, bgcolor: "#fff" }}>
-          <Typography variant="h6" fontWeight={600} sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}>
+      <Paper elevation={0} sx={{ borderRadius: 3, overflow: "hidden", bgcolor: isDark ? "#0b101c" : "#fff", border: isDark ? "1px solid rgba(59, 130, 246, 0.15)" : "none" }}>
+        <Box sx={{ p: { xs: 2, sm: 3 }, borderBottom: 1, borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "divider", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2, bgcolor: isDark ? "#090f1d" : "#fff" }}>
+          <Typography variant="h6" fontWeight={700} sx={{ fontSize: { xs: "1rem", sm: "1.25rem" }, color: isDark ? "#f8fafc" : "inherit" }}>
             {viewMode === "table" ? "Lead List" : "Lead Cards"}
-            <Chip label={`${totalLeads} total`} size="small" sx={{ ml: 1, background: "linear-gradient(135deg, rgba(37,99,235,0.14) 0%, rgba(96,165,250,0.24) 100%)", color: PRIMARY_COLOR, border: `1px solid ${alpha(PRIMARY_COLOR, 0.12)}` }} />
+            <Chip label={`${totalLeads} total`} size="small" sx={{ ml: 1, background: isDark ? "rgba(37, 99, 235, 0.25)" : "linear-gradient(135deg, rgba(37,99,235,0.14) 0%, rgba(96,165,250,0.24) 100%)", color: isDark ? "#60a5fa" : PRIMARY_COLOR, border: `1px solid ${isDark ? "rgba(59, 130, 246, 0.3)" : alpha(PRIMARY_COLOR, 0.12)}` }} />
           </Typography>
           {!isMobile && viewMode === "table" && (
             <Stack direction="row" spacing={2} alignItems="center">
-              <Typography variant="body2" color="text.secondary">Rows per page:</Typography>
-              <Select size="small" value={rowsPerPage} onChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }} sx={{ minWidth: 80 }}>
+              <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Rows per page:</Typography>
+              <Select size="small" value={rowsPerPage} onChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }} sx={{ minWidth: 80, bgcolor: isDark ? "#0e1628" : "inherit", color: isDark ? "#f8fafc" : "inherit" }}>
                 {[5, 10, 25, 50].map((option) => <MenuItem key={option} value={option}>{option}</MenuItem>)}
               </Select>
             </Stack>
@@ -3144,12 +3136,12 @@ const fetchOverviewStats = useCallback(async () => {
               <Table stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell padding="checkbox" sx={tableHeaderCellSx}>{permissions.bulkActions && <Checkbox indeterminate={selectedCount > 0 && selectedCount < leads.length} checked={selectAll} onChange={handleSelectAll} sx={{ color: PRIMARY_COLOR, "&.Mui-checked": { color: PRIMARY_COLOR } }} />}</TableCell>
+                    <TableCell padding="checkbox" sx={getTableHeaderCellSx(isDark)}>{permissions.bulkActions && <Checkbox indeterminate={selectedCount > 0 && selectedCount < leads.length} checked={selectAll} onChange={handleSelectAll} sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, "&.Mui-checked": { color: isDark ? "#60a5fa" : PRIMARY_COLOR } }} />}</TableCell>
                     {[{ label: "Lead", key: "firstName", sortable: true }, { label: "Contact", sortable: false }, { label: "Status", key: "status", sortable: true }, { label: "Assigned To", key: "assignedUser", sortable: true }, { label: "Created Date", key: "createdAt", sortable: true }, { label: "Actions", sortable: false }].map((col) => (
-                      <TableCell key={col.label} sx={tableHeaderCellSx}>
+                      <TableCell key={col.label} sx={getTableHeaderCellSx(isDark)}>
                         <Box display="flex" alignItems="center" gap={1}>
-                          <Typography variant="subtitle2" fontWeight={600}>{col.label}</Typography>
-                          {col.sortable && <IconButton size="small" onClick={() => handleSort(col.key)} sx={{ color: sortBy === col.key ? PRIMARY_COLOR : "inherit" }}><Sort /></IconButton>}
+                          <Typography variant="subtitle2" fontWeight={700} sx={{ color: isDark ? "#94a3b8" : "#5f6b80" }}>{col.label}</Typography>
+                          {col.sortable && <IconButton size="small" onClick={() => handleSort(col.key)} sx={{ color: sortBy === col.key ? (isDark ? "#60a5fa" : PRIMARY_COLOR) : "inherit" }}><Sort /></IconButton>}
                         </Box>
                       </TableCell>
                     ))}
@@ -3162,16 +3154,16 @@ const fetchOverviewStats = useCallback(async () => {
                 </TableBody>
               </Table>
             </TableContainer>
-            <TablePagination component="div" count={totalLeads} page={page} onPageChange={handleChangePage} rowsPerPage={rowsPerPage} onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }} rowsPerPageOptions={[5, 10, 25, 50]} sx={{ borderTop: 1, borderColor: "divider" }} />
+            <TablePagination component="div" count={totalLeads} page={page} onPageChange={handleChangePage} rowsPerPage={rowsPerPage} onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }} rowsPerPageOptions={[5, 10, 25, 50]} sx={{ borderTop: 1, borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "divider", color: isDark ? "#94a3b8" : "inherit" }} />
           </>
         ) : renderCardView()}
       </Paper>
 
       {/* Role Info Button */}
       {!isMobile && (
-        <Box sx={{ position: "fixed", bottom: 16, right: 16 }}>
+        <Box sx={{ position: "fixed", bottom: 16, right: 16, zIndex: 10 }}>
           <Tooltip title="View Role Permissions">
-            <Button variant="contained" onClick={() => setShowRoleInfo(true)} startIcon={<Security />} sx={{ borderRadius: 3, bgcolor: PRIMARY_COLOR, "&:hover": { bgcolor: SECONDARY_COLOR } }}>{permissions.label}</Button>
+            <Button variant="contained" onClick={() => setShowRoleInfo(true)} startIcon={<Security />} sx={{ borderRadius: 999, px: 2, py: 0.8, background: "linear-gradient(45deg, #f97316 0%, #ea580c 100%)", color: "#fff", fontWeight: 700, textTransform: "none", boxShadow: "0 6px 18px rgba(249, 115, 22, 0.4)", "&:hover": { background: "linear-gradient(45deg, #ea580c 0%, #c2410c 100%)" } }}>{permissions.label}</Button>
           </Tooltip>
         </Box>
       )}

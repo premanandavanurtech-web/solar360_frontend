@@ -33,8 +33,17 @@ import {
   Tag,
   WhatsApp,
 } from "@mui/icons-material";
-import { Autocomplete, GoogleMap, MarkerF, useJsApiLoader } from "@react-google-maps/api";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { useLocation, useNavigate } from "react-router-dom";
+
+// Fix default Leaflet icon paths
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+});
 import { useAuth } from "../contexts/AuthContext";
 import { buildApiUrl } from "../utils/apiConfig";
 import { toBackendAssetUrl } from "../utils/backendAssetUrl";
@@ -52,7 +61,7 @@ const ERROR_COLOR = "#dc2626";
 const SUCCESS = "#16a34a";
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
 const DEFAULT_CENTER = { lat: 20.5937, lng: 78.9629 };
-const GOOGLE_MAPS_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyCqM7uF9c0ZMQjdssHqSMJJ3mBcmz5RNS0";
+const GOOGLE_MAPS_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyAqn70bioCdQL50Jj9nXsUIq0yGumoV9E8";
 const GOOGLE_MAP_CONTAINER_STYLE = { width: "100%", height: "100%" };
 const GOOGLE_MAP_LIBRARIES = ["places"];
 const SITE_SURVEY_DRAFT_STORAGE_KEY = "site-survey-active-draft";
@@ -497,6 +506,65 @@ function SuccessDialog({ open, onClose, leadName }) {
   );
 }
 
+// ========== LEAFLET MAP PICKER ==========
+const LeafletMapPicker = ({ center, markerPosition, onMapPick }) => {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const lat = markerPosition?.lat || center?.lat || 20.5937;
+    const lng = markerPosition?.lng || center?.lng || 78.9629;
+
+    if (!mapRef.current) {
+      const map = L.map(containerRef.current, {
+        center: [lat, lng],
+        zoom: markerPosition?.lat ? 16 : 6,
+        zoomControl: true,
+      });
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "© OpenStreetMap contributors",
+      }).addTo(map);
+
+      const marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+
+      marker.on("dragend", () => {
+        const pos = marker.getLatLng();
+        onMapPick(pos.lat, pos.lng);
+      });
+
+      map.on("click", (e) => {
+        const { lat: clickLat, lng: clickLng } = e.latlng;
+        marker.setLatLng([clickLat, clickLng]);
+        onMapPick(clickLat, clickLng);
+      });
+
+      mapRef.current = map;
+      markerRef.current = marker;
+    } else {
+      mapRef.current.setView([lat, lng], mapRef.current.getZoom());
+      if (markerRef.current) {
+        markerRef.current.setLatLng([lat, lng]);
+      }
+    }
+  }, [center?.lat, center?.lng, markerPosition?.lat, markerPosition?.lng]);
+
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
+
+  return <div ref={containerRef} style={{ width: "100%", height: "100%", borderRadius: "8px" }} />;
+};
+
 /* ════════════════════════════════════════════════
    MAIN COMPONENT
 ════════════════════════════════════════════════ */
@@ -518,10 +586,8 @@ export default function VisitDetails({ onClose, onSave }) {
   const currentUserRole = getUserRole?.() || null;
   const restoredDraftRef = useRef(canUseRestoredDraft && Boolean(restoredDraft));
 
-  const { isLoaded: isGoogleMapLoaded, loadError: googleMapLoadError } = useJsApiLoader({
-    googleMapsApiKey: GOOGLE_MAPS_KEY,
-    libraries: GOOGLE_MAP_LIBRARIES,
-  });
+  const isGoogleMapLoaded = true;
+  const googleMapLoadError = false;
 
   const [currentStep, setCurrentStep] = useState(() =>
     canUseRestoredDraft ? getDraftStep(restoredDraft) : 1
@@ -621,20 +687,12 @@ export default function VisitDetails({ onClose, onSave }) {
   const reverseGeocode = useCallback(async (lat, lng) => {
     try {
       const res = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_KEY}`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const addr = data?.results?.[0]?.formatted_address;
-        if (addr) return addr;
-      }
-      const res2 = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
         { headers: { Accept: "application/json" } }
       );
-      if (!res2.ok) return "";
-      const data2 = await res2.json();
-      return data2?.display_name || "";
+      if (!res.ok) return "";
+      const data = await res.json();
+      return data?.display_name || "";
     } catch {
       return "";
     }
@@ -818,17 +876,18 @@ export default function VisitDetails({ onClose, onSave }) {
     setError("");
     try {
       const res = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
           locationSearch.trim()
-        )}&key=${GOOGLE_MAPS_KEY}`
+        )}`
       );
       const payload = await res.json();
-      const result = payload?.results?.[0];
-      const coords = result?.geometry?.location;
-      if (!coords || typeof coords.lat !== "number" || typeof coords.lng !== "number")
+      const result = payload?.[0];
+      if (!result || !result.lat || !result.lon)
         throw new Error("No matching location found.");
-      const formattedAddress = result?.formatted_address || locationSearch.trim();
-      await applyCoordinates(coords.lat, coords.lng, {
+      const numLat = parseFloat(result.lat);
+      const numLng = parseFloat(result.lon);
+      const formattedAddress = result.display_name || locationSearch.trim();
+      await applyCoordinates(numLat, numLng, {
         shouldPrefillLocation: true,
         forcedLocationName: formattedAddress,
       });
@@ -928,7 +987,7 @@ export default function VisitDetails({ onClose, onSave }) {
   }, [surveyData]);
 
   const ensurePunchInReady = useCallback(async () => {
-    if (currentUserRole === "Admin_panel") return;
+    if (["ADMIN", "Admin_panel"].includes(currentUserRole)) return;
 
     const attendancePayload = await fetchAPI("/attendance?limit=31");
     const todayAttendance = getTodayAttendanceFromResponse(attendancePayload);
@@ -1655,35 +1714,11 @@ export default function VisitDetails({ onClose, onSave }) {
                   </Stack>
                 </Box>
               ) : (
-                <GoogleMap
-                  mapContainerStyle={GOOGLE_MAP_CONTAINER_STYLE}
+                <LeafletMapPicker
                   center={mapCenter}
-                  zoom={surveyData.latitude ? 16 : 5}
-                  onClick={(e) => {
-                    const lat = e.latLng?.lat();
-                    const lng = e.latLng?.lng();
-                    if (typeof lat === "number" && typeof lng === "number") handleMapPick(lat, lng);
-                  }}
-                  options={{
-                    mapTypeControl: true,
-                    streetViewControl: false,
-                    fullscreenControl: true,
-                    gestureHandling: "greedy",
-                  }}
-                >
-                  <MarkerF
-                    position={markerPosition}
-                    animation={surveyMarkerAnimation}
-                    draggable
-                    zIndex={1000}
-                    onDragEnd={(e) => {
-                      const lat = e.latLng?.lat();
-                      const lng = e.latLng?.lng();
-                      if (typeof lat === "number" && typeof lng === "number")
-                        handleMapPick(lat, lng);
-                    }}
-                  />
-                </GoogleMap>
+                  markerPosition={markerPosition}
+                  onMapPick={(lat, lng) => handleMapPick(lat, lng)}
+                />
               )}
             </Box>
 

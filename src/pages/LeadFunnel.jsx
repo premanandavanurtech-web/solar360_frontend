@@ -164,6 +164,7 @@ const STAGE_CONFIG = {
   "Installation Completion": {
     color: SUCCESS_COLOR,
     icon: <CheckCircle />,
+    icon: <CheckCircle />,
     description: "Solar installation completed",
     bgColor: alpha(PRIMARY_COLOR, 0.08),
     order: 6,
@@ -179,7 +180,7 @@ const STAGE_CONFIG = {
 
 const STAGE_ORDER = Object.keys(STAGE_CONFIG);
 
-// ========== MOBILE FILTER DRAWER ==========
+// // ========== MOBILE FILTER DRAWER ==========
 const MobileFilterDrawer = ({
   open,
   onClose,
@@ -194,6 +195,8 @@ const MobileFilterDrawer = ({
   setSortBy,
   activeFilterCount,
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const [expandedSection, setExpandedSection] = useState("search");
 
   const toggleSection = (section) => {
@@ -213,7 +216,7 @@ const MobileFilterDrawer = ({
           borderTopRightRadius: 24,
           maxHeight: "90vh",
           overflow: "hidden",
-          bgcolor: SURFACE_BG,
+          bgcolor: isDark ? "#0d1527" : SURFACE_BG,
         },
       }}
     >
@@ -223,7 +226,7 @@ const MobileFilterDrawer = ({
           sx={{
             width: 40,
             height: 4,
-            bgcolor: "grey.300",
+            bgcolor: isDark ? "rgba(255,255,255,0.2)" : "grey.300",
             borderRadius: 2,
             mx: "auto",
             my: 1.5,
@@ -238,21 +241,21 @@ const MobileFilterDrawer = ({
             alignItems: "center",
             px: 3,
             pb: 2,
-            borderBottom: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+            borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
           }}
         >
           <Box>
-            <Typography variant="h6" fontWeight="700" color={PRIMARY_COLOR}>
+            <Typography variant="h6" fontWeight="700" color={isDark ? "#60a5fa" : PRIMARY_COLOR}>
               Filter Funnel
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>
               {activeFilterCount} active filter{activeFilterCount !== 1 && "s"}
             </Typography>
           </Box>
           <IconButton
             onClick={onClose}
             size="small"
-            sx={{ bgcolor: alpha(PRIMARY_COLOR, 0.1) }}
+            sx={{ bgcolor: isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1), color: isDark ? "#f8fafc" : "inherit" }}
           >
             <Close />
           </IconButton>
@@ -265,17 +268,17 @@ const MobileFilterDrawer = ({
             <Paper
               elevation={0}
               sx={{
-                border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
                 borderRadius: 2.5,
-                bgcolor: "white",
-                boxShadow: "0 12px 28px rgba(39,76,167,0.08)",
+                bgcolor: isDark ? "#121b2d" : "white",
+                boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 12px 28px rgba(39,76,167,0.08)",
                 overflow: "hidden",
               }}
             >
               <Box
                 sx={{
                   p: 2,
-                  bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                  bgcolor: isDark ? "rgba(255,255,255,0.03)" : alpha(PRIMARY_COLOR, 0.02),
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -284,12 +287,12 @@ const MobileFilterDrawer = ({
                 onClick={() => toggleSection("search")}
               >
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Search sx={{ color: PRIMARY_COLOR, fontSize: 20 }} />
-                  <Typography variant="subtitle2" fontWeight={600}>
+                  <Search sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, fontSize: 20 }} />
+                  <Typography variant="subtitle2" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"}>
                     Search
                   </Typography>
                 </Stack>
-                {expandedSection === "search" ? <ExpandLess /> : <ExpandMore />}
+                {expandedSection === "search" ? <ExpandLess sx={{ color: isDark ? "#94a3b8" : "inherit" }} /> : <ExpandMore sx={{ color: isDark ? "#94a3b8" : "inherit" }} />}
               </Box>
               <Collapse in={expandedSection === "search"}>
                 <Box sx={{ p: 2 }}>
@@ -299,22 +302,24 @@ const MobileFilterDrawer = ({
                     placeholder="Search by name, email, phone..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        bgcolor: isDark ? "#0d1527" : "#fff",
+                        color: isDark ? "#f8fafc" : "inherit",
+                        "& fieldset": { borderColor: isDark ? "rgba(255,255,255,0.12)" : undefined },
+                      },
+                    }}
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
-                          <Search
-                            sx={{ color: "text.secondary", fontSize: 20 }}
-                          />
+                          <Search sx={{ color: isDark ? "#94a3b8" : "text.secondary", fontSize: 20 }} />
                         </InputAdornment>
                       ),
                       endAdornment: searchQuery && (
                         <InputAdornment position="end">
                           <Tooltip title="Clear Search">
-                            <IconButton
-                              size="small"
-                              onClick={() => setSearchQuery("")}
-                            >
-                              <Close fontSize="small" />
+                            <IconButton size="small" onClick={() => setSearchQuery("")}>
+                              <Close fontSize="small" sx={{ color: isDark ? "#94a3b8" : "inherit" }} />
                             </IconButton>
                           </Tooltip>
                         </InputAdornment>
@@ -329,17 +334,17 @@ const MobileFilterDrawer = ({
             <Paper
               elevation={0}
               sx={{
-                border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
                 borderRadius: 2.5,
-                bgcolor: "white",
-                boxShadow: "0 12px 28px rgba(39,76,167,0.08)",
+                bgcolor: isDark ? "#121b2d" : "white",
+                boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 12px 28px rgba(39,76,167,0.08)",
                 overflow: "hidden",
               }}
             >
               <Box
                 sx={{
                   p: 2,
-                  bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                  bgcolor: isDark ? "rgba(255,255,255,0.03)" : alpha(PRIMARY_COLOR, 0.02),
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -348,12 +353,12 @@ const MobileFilterDrawer = ({
                 onClick={() => toggleSection("period")}
               >
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <DateRange sx={{ color: PRIMARY_COLOR, fontSize: 20 }} />
-                  <Typography variant="subtitle2" fontWeight={600}>
+                  <DateRange sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, fontSize: 20 }} />
+                  <Typography variant="subtitle2" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"}>
                     Time Period
                   </Typography>
                 </Stack>
-                {expandedSection === "period" ? <ExpandLess /> : <ExpandMore />}
+                {expandedSection === "period" ? <ExpandLess sx={{ color: isDark ? "#94a3b8" : "inherit" }} /> : <ExpandMore sx={{ color: isDark ? "#94a3b8" : "inherit" }} />}
               </Box>
               <Collapse in={expandedSection === "period"}>
                 <Box sx={{ p: 2 }}>
@@ -362,26 +367,21 @@ const MobileFilterDrawer = ({
                       <Grid item xs={6} key={option.value}>
                         <Button
                           fullWidth
-                          variant={
-                            period === option.value ? "contained" : "outlined"
-                          }
+                          variant={period === option.value ? "contained" : "outlined"}
                           onClick={() => setPeriod(option.value)}
                           startIcon={option.icon}
                           size="small"
                           sx={{
-                            bgcolor:
-                              period === option.value
-                                ? PRIMARY_COLOR
-                                : "transparent",
-                            color:
-                              period === option.value ? "#fff" : PRIMARY_COLOR,
-                            borderColor: PRIMARY_COLOR,
-                             "&:hover": {
-                               bgcolor:
-                                 period === option.value
-                                  ? HEADER_DARK
-                                  : alpha(PRIMARY_COLOR, 0.1),
-                             },
+                            bgcolor: period === option.value
+                              ? (isDark ? "#3b82f6" : PRIMARY_COLOR)
+                              : "transparent",
+                            color: period === option.value ? "#fff" : (isDark ? "#60a5fa" : PRIMARY_COLOR),
+                            borderColor: isDark ? "rgba(255,255,255,0.12)" : PRIMARY_COLOR,
+                            "&:hover": {
+                              bgcolor: period === option.value
+                                ? HEADER_DARK
+                                : (isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)),
+                            },
                           }}
                         >
                           {option.label}
@@ -397,17 +397,17 @@ const MobileFilterDrawer = ({
             <Paper
               elevation={0}
               sx={{
-                border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
                 borderRadius: 2.5,
-                bgcolor: "white",
-                boxShadow: "0 12px 28px rgba(39,76,167,0.08)",
+                bgcolor: isDark ? "#121b2d" : "white",
+                boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 12px 28px rgba(39,76,167,0.08)",
                 overflow: "hidden",
               }}
             >
               <Box
                 sx={{
                   p: 2,
-                  bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                  bgcolor: isDark ? "rgba(255,255,255,0.03)" : alpha(PRIMARY_COLOR, 0.02),
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -416,12 +416,12 @@ const MobileFilterDrawer = ({
                 onClick={() => toggleSection("stage")}
               >
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Timeline sx={{ color: PRIMARY_COLOR, fontSize: 20 }} />
-                  <Typography variant="subtitle2" fontWeight={600}>
+                  <Timeline sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, fontSize: 20 }} />
+                  <Typography variant="subtitle2" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"}>
                     Lead Stage
                   </Typography>
                 </Stack>
-                {expandedSection === "stage" ? <ExpandLess /> : <ExpandMore />}
+                {expandedSection === "stage" ? <ExpandLess sx={{ color: isDark ? "#94a3b8" : "inherit" }} /> : <ExpandMore sx={{ color: isDark ? "#94a3b8" : "inherit" }} />}
               </Box>
               <Collapse in={expandedSection === "stage"}>
                 <Box sx={{ p: 2 }}>
@@ -430,6 +430,11 @@ const MobileFilterDrawer = ({
                       value={stageFilter}
                       onChange={(e) => setStageFilter(e.target.value)}
                       displayEmpty
+                      sx={{
+                        bgcolor: isDark ? "#0d1527" : "white",
+                        color: isDark ? "#f8fafc" : "inherit",
+                        "& fieldset": { borderColor: isDark ? "rgba(255,255,255,0.12)" : undefined },
+                      }}
                     >
                       <MenuItem value="all">All Stages</MenuItem>
                       {STAGE_ORDER.map((stage) => (
@@ -450,17 +455,17 @@ const MobileFilterDrawer = ({
             <Paper
               elevation={0}
               sx={{
-                border: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
                 borderRadius: 2.5,
-                bgcolor: "white",
-                boxShadow: "0 12px 28px rgba(39,76,167,0.08)",
+                bgcolor: isDark ? "#121b2d" : "white",
+                boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 12px 28px rgba(39,76,167,0.08)",
                 overflow: "hidden",
               }}
             >
               <Box
                 sx={{
                   p: 2,
-                  bgcolor: alpha(PRIMARY_COLOR, 0.02),
+                  bgcolor: isDark ? "rgba(255,255,255,0.03)" : alpha(PRIMARY_COLOR, 0.02),
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -469,12 +474,12 @@ const MobileFilterDrawer = ({
                 onClick={() => toggleSection("sort")}
               >
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Sort sx={{ color: PRIMARY_COLOR, fontSize: 20 }} />
-                  <Typography variant="subtitle2" fontWeight={600}>
+                  <Sort sx={{ color: isDark ? "#60a5fa" : PRIMARY_COLOR, fontSize: 20 }} />
+                  <Typography variant="subtitle2" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"}>
                     Sort By
                   </Typography>
                 </Stack>
-                {expandedSection === "sort" ? <ExpandLess /> : <ExpandMore />}
+                {expandedSection === "sort" ? <ExpandLess sx={{ color: isDark ? "#94a3b8" : "inherit" }} /> : <ExpandMore sx={{ color: isDark ? "#94a3b8" : "inherit" }} />}
               </Box>
               <Collapse in={expandedSection === "sort"}>
                 <Box sx={{ p: 2 }}>
@@ -483,6 +488,11 @@ const MobileFilterDrawer = ({
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value)}
                       displayEmpty
+                      sx={{
+                        bgcolor: isDark ? "#0d1527" : "white",
+                        color: isDark ? "#f8fafc" : "inherit",
+                        "& fieldset": { borderColor: isDark ? "rgba(255,255,255,0.12)" : undefined },
+                      }}
                     >
                       <MenuItem value="-createdAt">Newest First</MenuItem>
                       <MenuItem value="createdAt">Oldest First</MenuItem>
@@ -500,8 +510,8 @@ const MobileFilterDrawer = ({
         <Box
           sx={{
             p: 3,
-            borderTop: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-            bgcolor: SURFACE_BG,
+            borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
+            bgcolor: isDark ? "#0d1527" : SURFACE_BG,
           }}
         >
           <Stack direction="row" spacing={2}>
@@ -514,10 +524,10 @@ const MobileFilterDrawer = ({
               }}
               startIcon={<Clear />}
               sx={{
-                borderColor: PRIMARY_COLOR,
-                color: PRIMARY_COLOR,
+                borderColor: isDark ? "rgba(255,255,255,0.2)" : PRIMARY_COLOR,
+                color: isDark ? "#60a5fa" : PRIMARY_COLOR,
                 "&:hover": {
-                  bgcolor: alpha(PRIMARY_COLOR, 0.05),
+                  bgcolor: isDark ? "rgba(255,255,255,0.05)" : alpha(PRIMARY_COLOR, 0.05),
                 },
               }}
             >
@@ -544,144 +554,164 @@ const MobileFilterDrawer = ({
 };
 
 // ========== SUMMARY CARD ==========
-const SummaryCard = ({ title, value, icon, color, trend, trendDirection, index }) => (
-  <Fade in={true} timeout={500 + index * 100}>
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 1.5, sm: 2, md: 2.5 },
-        borderRadius: 3,
-        border: `1px solid ${alpha(color, 0.12)}`,
-        bgcolor: "white",
-        boxShadow: "0 16px 36px rgba(39,76,167,0.10)",
-        position: "relative",
-        overflow: "hidden",
-        transition: "transform 0.2s",
-        "&::before": {
-          content: '""',
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 4,
-          bgcolor: color,
-        },
-        "&:hover": {
-          transform: "translateY(-2px)",
-          boxShadow: `0 20px 40px ${alpha(color, 0.16)}`,
-        },
-      }}
-    >
-      <Stack spacing={1}>
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
+const SummaryCard = ({ title, value, icon, color, trend, trendDirection, index }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const displayColor = isDark && color === PRIMARY_COLOR ? "#60a5fa" : color;
+
+  return (
+    <Fade in={true} timeout={500 + index * 100}>
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 1.5, sm: 2, md: 2.5 },
+          borderRadius: 3,
+          border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${alpha(displayColor, 0.12)}`,
+          bgcolor: isDark ? "#0d1527" : "white",
+          boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.4)" : "0 16px 36px rgba(39,76,167,0.10)",
+          position: "relative",
+          overflow: "hidden",
+          transition: "all 0.2s ease",
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 4,
+            bgcolor: displayColor,
+          },
+          "&:hover": {
+            transform: "translateY(-2px)",
+            boxShadow: isDark 
+              ? `0 12px 30px ${alpha(displayColor, 0.25)}` 
+              : `0 20px 40px ${alpha(displayColor, 0.16)}`,
+          },
+        }}
+      >
+        <Stack spacing={1}>
           <Box
             sx={{
-              width: { xs: 32, sm: 40, md: 48 },
-              height: { xs: 32, sm: 40, md: 48 },
-              borderRadius: 999,
-              bgcolor: alpha(color, 0.1),
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              color: color,
+              justifyContent: "space-between",
             }}
           >
-            {React.cloneElement(icon, {
-              sx: { fontSize: { xs: 16, sm: 20, md: 24 } },
-            })}
-          </Box>
-          <Typography
-            variant="h4"
-            fontWeight={700}
-            sx={{
-              color: color,
-              fontSize: { xs: "1.25rem", sm: "1.5rem", md: "2rem" },
-            }}
-          >
-            {value}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography
-            variant="subtitle2"
-            fontWeight={600}
-            sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" } }}
-          >
-            {title}
-          </Typography>
-          {trend && (
-            <Typography
-              variant="caption"
-              color="text.secondary"
+            <Box
               sx={{
-                fontSize: { xs: "0.6rem", sm: "0.7rem" },
+                width: { xs: 32, sm: 40, md: 48 },
+                height: { xs: 32, sm: 40, md: 48 },
+                borderRadius: 999,
+                bgcolor: isDark ? alpha(displayColor, 0.2) : alpha(displayColor, 0.1),
                 display: "flex",
                 alignItems: "center",
-                gap: 0.5,
+                justifyContent: "center",
+                color: displayColor,
               }}
             >
-              {trendDirection === "up" && <ArrowUpward sx={{ fontSize: 12, color: "#4caf50" }} />}
-              {trendDirection === "down" && <ArrowDownward sx={{ fontSize: 12, color: "#f44336" }} />}
-              {trend}
+              {React.cloneElement(icon, {
+                sx: { fontSize: { xs: 16, sm: 20, md: 24 } },
+              })}
+            </Box>
+            <Typography
+              variant="h4"
+              fontWeight={700}
+              sx={{
+                color: isDark && displayColor === PRIMARY_COLOR ? "#ffffff" : displayColor,
+                fontSize: { xs: "1.25rem", sm: "1.5rem", md: "2rem" },
+              }}
+            >
+              {value}
             </Typography>
-          )}
-        </Box>
-      </Stack>
-    </Paper>
-  </Fade>
-);
+          </Box>
+          <Box>
+            <Typography
+              variant="subtitle2"
+              fontWeight={600}
+              color={isDark ? "#f8fafc" : "text.primary"}
+              sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" } }}
+            >
+              {title}
+            </Typography>
+            {trend && (
+              <Typography
+                variant="caption"
+                color={isDark ? "#94a3b8" : "text.secondary"}
+                sx={{
+                  fontSize: { xs: "0.6rem", sm: "0.7rem" },
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.5,
+                }}
+              >
+                {trendDirection === "up" && <ArrowUpward sx={{ fontSize: 12, color: isDark ? "#4ade80" : "#4caf50" }} />}
+                {trendDirection === "down" && <ArrowDownward sx={{ fontSize: 12, color: isDark ? "#f87171" : "#f44336" }} />}
+                {trend}
+              </Typography>
+            )}
+          </Box>
+        </Stack>
+      </Paper>
+    </Fade>
+  );
+};
 
 // ========== MOBILE STAGE CARD ==========
-const MobileStageCard = ({ stage, config, isSelected, onClick, count, percentage }) => (
-  <Paper
-    onClick={onClick}
-    sx={{
-      p: 2,
-      borderRadius: 2.5,
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      gap: 2,
-      transition: "all 0.2s",
-      border: `1px solid ${isSelected ? alpha(config.color, 0.28) : CARD_BORDER}`,
-      bgcolor: isSelected ? alpha(config.color, 0.05) : "#fff",
-      boxShadow: "0 10px 24px rgba(39,76,167,0.08)",
-      "&:hover": {
-        bgcolor: alpha(config.color, 0.05),
-        transform: "translateX(4px)",
-      },
-    }}
-  >
-    <Avatar
-      sx={{ 
-        bgcolor: config.color, 
-        color: "#fff", 
-        width: { xs: 40, sm: 48 }, 
-        height: { xs: 40, sm: 48 } 
+const MobileStageCard = ({ stage, config, isSelected, onClick, count, percentage }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
+  return (
+    <Paper
+      onClick={onClick}
+      sx={{
+        p: 2,
+        borderRadius: 2.5,
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        gap: 2,
+        transition: "all 0.2s",
+        border: isDark 
+          ? `1px solid ${isSelected ? alpha(config.color, 0.4) : "rgba(255, 255, 255, 0.08)"}`
+          : `1px solid ${isSelected ? alpha(config.color, 0.28) : CARD_BORDER}`,
+        bgcolor: isDark
+          ? (isSelected ? alpha(config.color, 0.15) : "#0d1527")
+          : (isSelected ? alpha(config.color, 0.05) : "#fff"),
+        boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 10px 24px rgba(39,76,167,0.08)",
+        "&:hover": {
+          bgcolor: isDark ? alpha(config.color, 0.2) : alpha(config.color, 0.05),
+          transform: "translateX(4px)",
+        },
       }}
     >
-      {config.icon}
-    </Avatar>
-    <Box sx={{ flex: 1 }}>
-      <Typography variant="subtitle1" fontWeight={600} sx={{ fontSize: { xs: "0.9rem", sm: "1rem" } }}>
-        {stage}
-      </Typography>
-      <Typography variant="caption" color="text.secondary">
-        {count} leads | {percentage}%
-      </Typography>
-    </Box>
-    <NavigateNext sx={{ color: "text.secondary" }} />
-  </Paper>
-);
+      <Avatar
+        sx={{ 
+          bgcolor: config.color, 
+          color: "#fff", 
+          width: { xs: 40, sm: 48 }, 
+          height: { xs: 40, sm: 48 } 
+        }}
+      >
+        {config.icon}
+      </Avatar>
+      <Box sx={{ flex: 1 }}>
+        <Typography variant="subtitle1" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"} sx={{ fontSize: { xs: "0.9rem", sm: "1rem" } }}>
+          {stage}
+        </Typography>
+        <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>
+          {count} leads | {percentage}%
+        </Typography>
+      </Box>
+      <NavigateNext sx={{ color: isDark ? "#94a3b8" : "text.secondary" }} />
+    </Paper>
+  );
+};
 
 // ========== MOBILE LEAD CARD ==========
 const MobileLeadCard = ({ lead, stageColor, onView, index }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const [expanded, setExpanded] = useState(false);
   const initials = `${lead.firstName?.[0] || ''}${lead.lastName?.[0] || ''}`;
   const assignedTo = lead.assignedUser
@@ -696,7 +726,8 @@ const MobileLeadCard = ({ lead, stageColor, onView, index }) => {
         sx={{
           mb: 1.5,
           borderRadius: 3,
-          border: `1px solid ${alpha(stageColor, 0.1)}`,
+          border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${alpha(stageColor, 0.1)}`,
+          bgcolor: isDark ? "#121b2d" : "white",
           overflow: "hidden",
         }}
       >
@@ -726,11 +757,11 @@ const MobileLeadCard = ({ lead, stageColor, onView, index }) => {
                 <Typography
                   variant="subtitle1"
                   fontWeight="700"
-                  color={stageColor}
+                  color={isDark ? "#f8fafc" : stageColor}
                 >
                   {lead.firstName} {lead.lastName}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>
                   ID: {lead._id?.slice(-8) || "N/A"}
                 </Typography>
               </Box>
@@ -741,7 +772,8 @@ const MobileLeadCard = ({ lead, stageColor, onView, index }) => {
               sx={{
                 transform: expanded ? "rotate(180deg)" : "none",
                 transition: "transform 0.3s",
-                bgcolor: alpha(stageColor, 0.1),
+                bgcolor: isDark ? "rgba(255,255,255,0.08)" : alpha(stageColor, 0.1),
+                color: isDark ? "#f8fafc" : "inherit",
               }}
             >
               {expanded ? <ExpandLess /> : <ExpandMore />}
@@ -752,16 +784,16 @@ const MobileLeadCard = ({ lead, stageColor, onView, index }) => {
           <Grid container spacing={1} sx={{ mb: 1.5 }}>
             <Grid item xs={6}>
               <Stack direction="row" spacing={0.5} alignItems="center">
-                <Phone sx={{ fontSize: 14, color: alpha(stageColor, 0.6) }} />
-                <Typography variant="caption" noWrap>
+                <Phone sx={{ fontSize: 14, color: isDark ? "#60a5fa" : alpha(stageColor, 0.6) }} />
+                <Typography variant="caption" color={isDark ? "#94a3b8" : "text.primary"} noWrap>
                   {lead.phone || "No phone"}
                 </Typography>
               </Stack>
             </Grid>
             <Grid item xs={6}>
               <Stack direction="row" spacing={0.5} alignItems="center">
-                <Email sx={{ fontSize: 14, color: alpha(stageColor, 0.6) }} />
-                <Typography variant="caption" noWrap>
+                <Email sx={{ fontSize: 14, color: isDark ? "#60a5fa" : alpha(stageColor, 0.6) }} />
+                <Typography variant="caption" color={isDark ? "#94a3b8" : "text.primary"} noWrap>
                   {lead.email || "No email"}
                 </Typography>
               </Stack>
@@ -772,15 +804,15 @@ const MobileLeadCard = ({ lead, stageColor, onView, index }) => {
           <Box sx={{ mb: 1.5 }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
               <CalendarToday
-                sx={{ fontSize: 14, color: alpha(stageColor, 0.6) }}
+                sx={{ fontSize: 14, color: isDark ? "#60a5fa" : alpha(stageColor, 0.6) }}
               />
-              <Typography variant="body2" fontWeight={500}>
+              <Typography variant="body2" fontWeight={500} color={isDark ? "#f8fafc" : "text.primary"}>
                 {new Date(lead.createdAt).toLocaleDateString()}
               </Typography>
             </Stack>
             <Stack direction="row" spacing={1} alignItems="center">
-              <Person sx={{ fontSize: 14, color: alpha(stageColor, 0.6) }} />
-              <Typography variant="body2" fontWeight={500}>
+              <Person sx={{ fontSize: 14, color: isDark ? "#60a5fa" : alpha(stageColor, 0.6) }} />
+              <Typography variant="body2" fontWeight={500} color={isDark ? "#f8fafc" : "text.primary"}>
                 {assignedTo}
               </Typography>
             </Stack>
@@ -792,7 +824,7 @@ const MobileLeadCard = ({ lead, stageColor, onView, index }) => {
               sx={{
                 mt: 2,
                 pt: 2,
-                borderTop: `1px solid ${alpha(stageColor, 0.1)}`,
+                borderTop: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${alpha(stageColor, 0.1)}`,
               }}
             >
               {/* Additional Info */}
@@ -801,12 +833,12 @@ const MobileLeadCard = ({ lead, stageColor, onView, index }) => {
                   <Grid item xs={12}>
                     <Typography
                       variant="caption"
-                      color="text.secondary"
+                      color={isDark ? "#94a3b8" : "text.secondary"}
                       display="block"
                     >
                       Location
                     </Typography>
-                    <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
+                    <Typography variant="body2" color={isDark ? "#f8fafc" : "text.primary"} sx={{ wordBreak: "break-word" }}>
                       {lead.city}
                     </Typography>
                   </Grid>
@@ -814,24 +846,24 @@ const MobileLeadCard = ({ lead, stageColor, onView, index }) => {
                 <Grid item xs={6}>
                   <Typography
                     variant="caption"
-                    color="text.secondary"
+                    color={isDark ? "#94a3b8" : "text.secondary"}
                     display="block"
                   >
                     Created
                   </Typography>
-                  <Typography variant="body2">
+                  <Typography variant="body2" color={isDark ? "#f8fafc" : "text.primary"}>
                     {new Date(lead.createdAt).toLocaleDateString()}
                   </Typography>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography
                     variant="caption"
-                    color="text.secondary"
+                    color={isDark ? "#94a3b8" : "text.secondary"}
                     display="block"
                   >
                     Last Updated
                   </Typography>
-                  <Typography variant="body2">
+                  <Typography variant="body2" color={isDark ? "#f8fafc" : "text.primary"}>
                     {lead.updatedAt ? new Date(lead.updatedAt).toLocaleDateString() : "N/A"}
                   </Typography>
                 </Grid>
@@ -897,52 +929,62 @@ const LoadingSkeleton = () => {
 };
 
 // ========== EMPTY STATE ==========
-const EmptyState = ({ stage, hasFilters, onClearFilters }) => (
-  <Box textAlign="center" py={8} px={2}>
-    <Box
-      sx={{
-        width: 120,
-        height: 120,
-        borderRadius: "50%",
-        bgcolor: alpha(PRIMARY_COLOR, 0.1),
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        mx: "auto",
-        mb: 3,
-      }}
-    >
-      {stage ? <Group sx={{ fontSize: 48, color: PRIMARY_COLOR }} /> : <Search sx={{ fontSize: 48, color: PRIMARY_COLOR }} />}
-    </Box>
-    <Typography variant="h6" fontWeight={600} gutterBottom>
-      {stage ? `No leads in ${stage}` : "No matching leads found"}
-    </Typography>
-    <Typography
-      variant="body2"
-      color="text.secondary"
-      sx={{ mb: 3, maxWidth: 400, mx: "auto" }}
-    >
-      {stage
-        ? "Leads will appear here as they progress through the pipeline."
-        : "Try adjusting your search criteria to find what you're looking for."}
-    </Typography>
-    {hasFilters && (
-      <Button
-        variant="contained"
-        onClick={onClearFilters}
-        startIcon={<Clear />}
-        sx={{ bgcolor: PRIMARY_COLOR, "&:hover": { bgcolor: ACTION_ORANGE } }}
+const EmptyState = ({ stage, hasFilters, onClearFilters }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
+  return (
+    <Box textAlign="center" py={8} px={2}>
+      <Box
+        sx={{
+          width: 120,
+          height: 120,
+          borderRadius: "50%",
+          bgcolor: isDark ? alpha("#60a5fa", 0.15) : alpha(PRIMARY_COLOR, 0.1),
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          mx: "auto",
+          mb: 3,
+        }}
       >
-        Clear Filters
-      </Button>
-    )}
-  </Box>
-);
+        {stage ? (
+          <Group sx={{ fontSize: 48, color: isDark ? "#60a5fa" : PRIMARY_COLOR }} />
+        ) : (
+          <Search sx={{ fontSize: 48, color: isDark ? "#60a5fa" : PRIMARY_COLOR }} />
+        )}
+      </Box>
+      <Typography variant="h6" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"} gutterBottom>
+        {stage ? `No leads in ${stage}` : "No matching leads found"}
+      </Typography>
+      <Typography
+        variant="body2"
+        color={isDark ? "#94a3b8" : "text.secondary"}
+        sx={{ mb: 3, maxWidth: 400, mx: "auto" }}
+      >
+        {stage
+          ? "Leads will appear here as they progress through the pipeline."
+          : "Try adjusting your search criteria to find what you're looking for."}
+      </Typography>
+      {hasFilters && (
+        <Button
+          variant="contained"
+          onClick={onClearFilters}
+          startIcon={<Clear />}
+          sx={{ bgcolor: PRIMARY_COLOR, "&:hover": { bgcolor: ACTION_ORANGE } }}
+        >
+          Clear Filters
+        </Button>
+      )}
+    </Box>
+  );
+};
 
 // ========== MAIN COMPONENT ==========
 export default function LeadFunnelDashboard() {
   const { fetchAPI } = useAuth();
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const navigate = useNavigate();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
@@ -1242,7 +1284,7 @@ export default function LeadFunnelDashboard() {
         p: { xs: 1.5, sm: 2, md: 3 },
         minHeight: "100vh",
         pb: { xs: 8, sm: 3 },
-        bgcolor: SURFACE_BG,
+        bgcolor: isDark ? "#070d19" : SURFACE_BG,
       }}
     >
       {/* Mobile Filter Drawer */}
@@ -1268,9 +1310,13 @@ export default function LeadFunnelDashboard() {
           p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
-          background: `linear-gradient(135deg, ${HEADER_DARK} 0%, ${HEADER_LIGHT} 100%)`,
+          background: isDark
+            ? "linear-gradient(135deg, #0d172a 0%, #1e3a8a 100%)"
+            : `linear-gradient(135deg, ${HEADER_DARK} 0%, ${HEADER_LIGHT} 100%)`,
           color: "#fff",
-          boxShadow: "0 24px 48px rgba(42,83,189,0.18)",
+          boxShadow: isDark
+            ? "0 12px 32px rgba(0,0,0,0.5)"
+            : "0 24px 48px rgba(42,83,189,0.18)",
         }}
       >
         <Stack
@@ -1424,8 +1470,10 @@ export default function LeadFunnelDashboard() {
             sx={{
               "& .MuiOutlinedInput-root": {
                 borderRadius: 3,
-                bgcolor: "#fff",
-                boxShadow: "0 10px 24px rgba(39,76,167,0.08)",
+                bgcolor: isDark ? "#121b2d" : "#fff",
+                color: isDark ? "#f8fafc" : "inherit",
+                boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 10px 24px rgba(39,76,167,0.08)",
+                "& fieldset": { borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : undefined },
               },
             }}
           />
@@ -1436,8 +1484,25 @@ export default function LeadFunnelDashboard() {
       <Grid container spacing={3}>
         {/* Left Column - Stage Pipeline */}
         <Grid item xs={12} lg={4}>
-          <Card sx={{ borderRadius: 3, overflow: "hidden", height: "100%", border: `1px solid ${CARD_BORDER}`, boxShadow: "0 18px 38px rgba(39,76,167,0.08)" }}>
-            <Box sx={{ p: 3, background: `linear-gradient(135deg, ${HEADER_DARK} 0%, ${HEADER_LIGHT} 100%)`, color: "white" }}>
+          <Card 
+            sx={{ 
+              borderRadius: 3, 
+              overflow: "hidden", 
+              height: "100%", 
+              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${CARD_BORDER}`, 
+              bgcolor: isDark ? "#0d1527" : "white",
+              boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.4)" : "0 18px 38px rgba(39,76,167,0.08)" 
+            }}
+          >
+            <Box 
+              sx={{ 
+                p: 3, 
+                background: isDark
+                  ? "linear-gradient(135deg, #0d172a 0%, #1e3a8a 100%)"
+                  : `linear-gradient(135deg, ${HEADER_DARK} 0%, ${HEADER_LIGHT} 100%)`, 
+                color: "white" 
+              }}
+            >
               <Typography variant="h6" fontWeight="bold">
                 Lead Pipeline
               </Typography>
@@ -1485,7 +1550,7 @@ export default function LeadFunnelDashboard() {
                           >
                             <Typography
                               variant="caption"
-                              color="text.secondary"
+                              color={isDark ? "#94a3b8" : "text.secondary"}
                             >
                               To {STAGE_ORDER[index + 1]}:
                             </Typography>
@@ -1493,7 +1558,9 @@ export default function LeadFunnelDashboard() {
                               variant="caption"
                               fontWeight={600}
                               color={
-                                conversion.value > 30 ? "#4caf50" : "#ff9800"
+                                conversion.value > 30 
+                                  ? (isDark ? "#4ade80" : "#4caf50")
+                                  : (isDark ? "#fbbf24" : "#ff9800")
                               }
                             >
                               {conversion.rate}
@@ -1505,10 +1572,12 @@ export default function LeadFunnelDashboard() {
                             sx={{
                               height: 4,
                               borderRadius: 2,
-                              bgcolor: "#e0e0e0",
+                              bgcolor: isDark ? "rgba(255,255,255,0.08)" : "#e0e0e0",
                               "& .MuiLinearProgress-bar": {
                                 bgcolor:
-                                  conversion.value > 30 ? "#4caf50" : "#ff9800",
+                                  conversion.value > 30 
+                                    ? (isDark ? "#4ade80" : "#4caf50")
+                                    : (isDark ? "#fbbf24" : "#ff9800"),
                                 borderRadius: 2,
                               },
                             }}
@@ -1520,7 +1589,7 @@ export default function LeadFunnelDashboard() {
                 })}
               </Stack>
 
-              <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: "divider" }}>
+              <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: isDark ? "rgba(255,255,255,0.08)" : "divider" }}>
                 <FormControlLabel
                   control={
                     <Switch
@@ -1530,7 +1599,11 @@ export default function LeadFunnelDashboard() {
                       size="small"
                     />
                   }
-                  label="Show conversion rates"
+                  label={
+                    <Typography variant="body2" color={isDark ? "#f8fafc" : "text.primary"}>
+                      Show conversion rates
+                    </Typography>
+                  }
                 />
               </Box>
             </Box>
@@ -1539,15 +1612,24 @@ export default function LeadFunnelDashboard() {
 
         {/* Right Column - Stage Details */}
         <Grid item xs={12} lg={8}>
-          <Card sx={{ borderRadius: 3, overflow: "hidden", height: "100%", border: `1px solid ${CARD_BORDER}`, boxShadow: "0 18px 38px rgba(39,76,167,0.08)" }}>
+          <Card 
+            sx={{ 
+              borderRadius: 3, 
+              overflow: "hidden", 
+              height: "100%", 
+              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${CARD_BORDER}`, 
+              bgcolor: isDark ? "#0d1527" : "white",
+              boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.4)" : "0 18px 38px rgba(39,76,167,0.08)" 
+            }}
+          >
             {/* Stage Header */}
             <Box
               sx={{
                 p: { xs: 2, sm: 3 },
-                bgcolor: alpha(stageConfig.color, 0.08),
+                bgcolor: isDark ? alpha(stageConfig.color, 0.16) : alpha(stageConfig.color, 0.08),
                 borderLeft: { xs: "none", sm: `4px solid ${stageConfig.color}` },
                 borderTop: { xs: `4px solid ${stageConfig.color}`, sm: "none" },
-                boxShadow: `inset 0 -1px 0 ${alpha(stageConfig.color, 0.08)}`,
+                boxShadow: `inset 0 -1px 0 ${isDark ? "rgba(255,255,255,0.06)" : alpha(stageConfig.color, 0.08)}`,
               }}
             >
               <Box
@@ -1563,10 +1645,10 @@ export default function LeadFunnelDashboard() {
                       {stageConfig.icon}
                     </Avatar>
                     <Box>
-                      <Typography variant={isMobile ? "h6" : "h5"} fontWeight="bold">
+                      <Typography variant={isMobile ? "h6" : "h5"} fontWeight="bold" color={isDark ? "#f8fafc" : "text.primary"}>
                         {selectedStage}
                       </Typography>
-                      <Typography color="text.secondary" variant="body2">
+                      <Typography color={isDark ? "#94a3b8" : "text.secondary"} variant="body2">
                         {stageConfig.description}
                       </Typography>
                     </Box>
@@ -1577,12 +1659,12 @@ export default function LeadFunnelDashboard() {
                       <Typography
                         variant="h4"
                         fontWeight="bold"
-                        color={stageConfig.color}
+                        color={isDark ? "#60a5fa" : stageConfig.color}
                         sx={{ fontSize: { xs: "1.5rem", sm: "2rem" } }}
                       >
                         {currentStageData.count}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>
                         Total Leads
                       </Typography>
                     </Box>
@@ -1590,12 +1672,12 @@ export default function LeadFunnelDashboard() {
                       <Typography
                         variant="h4"
                         fontWeight="bold"
-                        color="text.primary"
+                        color={isDark ? "#ffffff" : "text.primary"}
                         sx={{ fontSize: { xs: "1.5rem", sm: "2rem" } }}
                       >
                         {currentStageData.percentage}%
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>
                         of Pipeline
                       </Typography>
                     </Box>
@@ -1609,6 +1691,11 @@ export default function LeadFunnelDashboard() {
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
                         displayEmpty
+                        sx={{
+                          bgcolor: isDark ? "#121b2d" : "white",
+                          color: isDark ? "#f8fafc" : "inherit",
+                          "& fieldset": { borderColor: isDark ? "rgba(255,255,255,0.12)" : undefined },
+                        }}
                       >
                         <MenuItem value="-createdAt">Newest</MenuItem>
                         <MenuItem value="createdAt">Oldest</MenuItem>
@@ -1631,7 +1718,7 @@ export default function LeadFunnelDashboard() {
                   alignItems="center"
                   mb={2}
                 >
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color={isDark ? "#94a3b8" : "text.secondary"}>
                     Showing {paginatedLeads.length} of {filteredLeads.length} leads
                   </Typography>
                   <FormControl size="small" sx={{ minWidth: 100 }}>
@@ -1639,6 +1726,11 @@ export default function LeadFunnelDashboard() {
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value)}
                       displayEmpty
+                      sx={{
+                        bgcolor: isDark ? "#121b2d" : "white",
+                        color: isDark ? "#f8fafc" : "inherit",
+                        "& fieldset": { borderColor: isDark ? "rgba(255,255,255,0.12)" : undefined },
+                      }}
                     >
                       <MenuItem value="-createdAt">Newest</MenuItem>
                       <MenuItem value="createdAt">Oldest</MenuItem>
@@ -1663,11 +1755,20 @@ export default function LeadFunnelDashboard() {
                       placeholder="Search leads..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      sx={{ minWidth: 200, "& .MuiOutlinedInput-root": { borderRadius: 3, bgcolor: "white", boxShadow: "0 8px 20px rgba(39,76,167,0.06)" } }}
+                      sx={{ 
+                        minWidth: 200, 
+                        "& .MuiOutlinedInput-root": { 
+                          borderRadius: 3, 
+                          bgcolor: isDark ? "#121b2d" : "white", 
+                          color: isDark ? "#f8fafc" : "inherit",
+                          boxShadow: isDark ? "0 4px 12px rgba(0,0,0,0.2)" : "0 8px 20px rgba(39,76,167,0.06)",
+                          "& fieldset": { borderColor: isDark ? "rgba(255,255,255,0.12)" : undefined }
+                        } 
+                      }}
                       InputProps={{
                         startAdornment: (
                           <InputAdornment position="start">
-                            <Search fontSize="small" />
+                            <Search fontSize="small" sx={{ color: isDark ? "#94a3b8" : "inherit" }} />
                           </InputAdornment>
                         ),
                       }}
@@ -1679,15 +1780,13 @@ export default function LeadFunnelDashboard() {
                           size="small"
                           onClick={() => setViewMode("cards")}
                           sx={{
-                            bgcolor:
-                              viewMode === "cards"
-                                ? alpha(PRIMARY_COLOR, 0.12)
-                                : "white",
-                            color:
-                              viewMode === "cards"
-                                ? PRIMARY_COLOR
-                                : "text.secondary",
-                            border: `1px solid ${alpha(PRIMARY_COLOR, 0.12)}`,
+                            bgcolor: viewMode === "cards"
+                              ? (isDark ? alpha(stageConfig.color, 0.25) : alpha(PRIMARY_COLOR, 0.12))
+                              : (isDark ? "#121b2d" : "white"),
+                            color: viewMode === "cards"
+                              ? (isDark ? "#60a5fa" : PRIMARY_COLOR)
+                              : (isDark ? "#94a3b8" : "text.secondary"),
+                            border: isDark ? "1px solid rgba(255,255,255,0.1)" : `1px solid ${alpha(PRIMARY_COLOR, 0.12)}`,
                           }}
                         >
                           <GridView />
@@ -1698,15 +1797,13 @@ export default function LeadFunnelDashboard() {
                           size="small"
                           onClick={() => setViewMode("list")}
                           sx={{
-                            bgcolor:
-                              viewMode === "list"
-                                ? alpha(PRIMARY_COLOR, 0.12)
-                                : "white",
-                            color:
-                              viewMode === "list"
-                                ? PRIMARY_COLOR
-                                : "text.secondary",
-                            border: `1px solid ${alpha(PRIMARY_COLOR, 0.12)}`,
+                            bgcolor: viewMode === "list"
+                              ? (isDark ? alpha(stageConfig.color, 0.25) : alpha(PRIMARY_COLOR, 0.12))
+                              : (isDark ? "#121b2d" : "white"),
+                            color: viewMode === "list"
+                              ? (isDark ? "#60a5fa" : PRIMARY_COLOR)
+                              : (isDark ? "#94a3b8" : "text.secondary"),
+                            border: isDark ? "1px solid rgba(255,255,255,0.1)" : `1px solid ${alpha(PRIMARY_COLOR, 0.12)}`,
                           }}
                         >
                           <ViewList />
@@ -1717,15 +1814,13 @@ export default function LeadFunnelDashboard() {
                           size="small"
                           onClick={() => setViewMode("table")}
                           sx={{
-                            bgcolor:
-                              viewMode === "table"
-                                ? alpha(PRIMARY_COLOR, 0.12)
-                                : "white",
-                            color:
-                              viewMode === "table"
-                                ? PRIMARY_COLOR
-                                : "text.secondary",
-                            border: `1px solid ${alpha(PRIMARY_COLOR, 0.12)}`,
+                            bgcolor: viewMode === "table"
+                              ? (isDark ? alpha(stageConfig.color, 0.25) : alpha(PRIMARY_COLOR, 0.12))
+                              : (isDark ? "#121b2d" : "white"),
+                            color: viewMode === "table"
+                              ? (isDark ? "#60a5fa" : PRIMARY_COLOR)
+                              : (isDark ? "#94a3b8" : "text.secondary"),
+                            border: isDark ? "1px solid rgba(255,255,255,0.1)" : `1px solid ${alpha(PRIMARY_COLOR, 0.12)}`,
                           }}
                         >
                           <TableChart />
@@ -1734,7 +1829,7 @@ export default function LeadFunnelDashboard() {
                     </Box>
                   </Box>
 
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color={isDark ? "#94a3b8" : "text.secondary"}>
                     Showing {paginatedLeads.length} of {filteredLeads.length} leads
                   </Typography>
                 </Box>
@@ -1925,10 +2020,10 @@ export default function LeadFunnelDashboard() {
             right: 0,
             zIndex: 1000,
             borderRadius: 0,
-            borderTop: `1px solid ${alpha(PRIMARY_COLOR, 0.1)}`,
-            bgcolor: "rgba(255,255,255,0.96)",
+            borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : alpha(PRIMARY_COLOR, 0.1)}`,
+            bgcolor: isDark ? "rgba(13,21,39,0.96)" : "rgba(255,255,255,0.96)",
             backdropFilter: "blur(14px)",
-            boxShadow: "0 -10px 26px rgba(31,45,87,0.08)",
+            boxShadow: isDark ? "0 -10px 26px rgba(0,0,0,0.5)" : "0 -10px 26px rgba(31,45,87,0.08)",
           }}
           elevation={3}
         >
@@ -1936,9 +2031,10 @@ export default function LeadFunnelDashboard() {
             showLabels
             sx={{
               height: 64,
+              bgcolor: "transparent",
               "& .MuiBottomNavigationAction-root": {
-                color: "text.secondary",
-                "&.Mui-selected": { color: PRIMARY_COLOR },
+                color: isDark ? "#94a3b8" : "text.secondary",
+                "&.Mui-selected": { color: isDark ? "#60a5fa" : PRIMARY_COLOR },
               },
             }}
           >
@@ -1966,6 +2062,9 @@ export default function LeadFunnelDashboard() {
 
 // Component: Stage Item (Desktop)
 const StageItem = ({ stage, config, isSelected, onClick }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
   return (
     <Paper
       onClick={onClick}
@@ -1977,11 +2076,15 @@ const StageItem = ({ stage, config, isSelected, onClick }) => {
         alignItems: "center",
         gap: 2,
         transition: "all 0.2s",
-        border: `1px solid ${isSelected ? alpha(config.color, 0.28) : CARD_BORDER}`,
-        bgcolor: isSelected ? alpha(config.color, 0.08) : "white",
-        boxShadow: "0 10px 24px rgba(39,76,167,0.08)",
+        border: isDark
+          ? `1px solid ${isSelected ? alpha(config.color, 0.4) : "rgba(255, 255, 255, 0.08)"}`
+          : `1px solid ${isSelected ? alpha(config.color, 0.28) : CARD_BORDER}`,
+        bgcolor: isDark
+          ? (isSelected ? alpha(config.color, 0.15) : "#121b2d")
+          : (isSelected ? alpha(config.color, 0.08) : "white"),
+        boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 10px 24px rgba(39,76,167,0.08)",
         "&:hover": {
-          bgcolor: alpha(config.color, 0.05),
+          bgcolor: isDark ? alpha(config.color, 0.2) : alpha(config.color, 0.05),
           transform: "translateX(4px)",
         },
       }}
@@ -1992,20 +2095,23 @@ const StageItem = ({ stage, config, isSelected, onClick }) => {
         {config.icon}
       </Avatar>
       <Box sx={{ flex: 1 }}>
-        <Typography variant="subtitle1" fontWeight={600}>
+        <Typography variant="subtitle1" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"}>
           {stage.stage}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>
           {stage.count} leads | {stage.percentage}%
         </Typography>
       </Box>
-      <NavigateNext sx={{ color: "text.secondary" }} />
+      <NavigateNext sx={{ color: isDark ? "#94a3b8" : "text.secondary" }} />
     </Paper>
   );
 };
 
 // Component: Lead Cards (Grid View) - Desktop
 const LeadCards = ({ leads, stageColor, onView }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
   return (
     <Grid container spacing={3}>
       {leads.map((lead) => {
@@ -2020,12 +2126,15 @@ const LeadCards = ({ leads, stageColor, onView }) => {
             sx={{
               borderRadius: 3,
               height: "100%",
-              border: `1px solid ${alpha(stageColor, 0.12)}`,
-              boxShadow: "0 14px 30px rgba(39,76,167,0.08)",
+              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${alpha(stageColor, 0.12)}`,
+              bgcolor: isDark ? "#121b2d" : "white",
+              boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 14px 30px rgba(39,76,167,0.08)",
               transition: "all 0.3s",
               "&:hover": {
                 transform: "translateY(-4px)",
-                boxShadow: `0 20px 38px ${alpha(stageColor, 0.16)}`,
+                boxShadow: isDark 
+                  ? `0 12px 30px ${alpha(stageColor, 0.25)}` 
+                  : `0 20px 38px ${alpha(stageColor, 0.16)}`,
               },
             }}
           >
@@ -2035,10 +2144,10 @@ const LeadCards = ({ leads, stageColor, onView }) => {
                   {lead.firstName?.[0]}
                 </Avatar>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="subtitle1" fontWeight={600} noWrap>
+                  <Typography variant="subtitle1" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"} noWrap>
                     {lead.firstName} {lead.lastName}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>
+                  <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"} noWrap>
                     {lead.email}
                   </Typography>
                 </Box>
@@ -2047,25 +2156,25 @@ const LeadCards = ({ leads, stageColor, onView }) => {
               <Stack spacing={1.5} sx={{ mb: 3 }}>
                 {lead.phone && (
                   <Box display="flex" alignItems="center" gap={1}>
-                    <Phone fontSize="small" sx={{ color: "text.secondary" }} />
-                    <Typography variant="body2">{lead.phone}</Typography>
+                    <Phone fontSize="small" sx={{ color: isDark ? "#60a5fa" : "text.secondary" }} />
+                    <Typography variant="body2" color={isDark ? "#f8fafc" : "text.primary"}>{lead.phone}</Typography>
                   </Box>
                 )}
                 {lead.source && (
                   <Box display="flex" alignItems="center" gap={1}>
-                    <Business fontSize="small" sx={{ color: "text.secondary" }} />
-                    <Typography variant="body2">{lead.source}</Typography>
+                    <Business fontSize="small" sx={{ color: isDark ? "#60a5fa" : "text.secondary" }} />
+                    <Typography variant="body2" color={isDark ? "#f8fafc" : "text.primary"}>{lead.source}</Typography>
                   </Box>
                 )}
                 <Box display="flex" alignItems="center" gap={1}>
-                  <CalendarToday fontSize="small" sx={{ color: "text.secondary" }} />
-                  <Typography variant="caption" color="text.secondary">
+                  <CalendarToday fontSize="small" sx={{ color: isDark ? "#60a5fa" : "text.secondary" }} />
+                  <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>
                     Added {new Date(lead.createdAt).toLocaleDateString()}
                   </Typography>
                 </Box>
                 <Box display="flex" alignItems="center" gap={1}>
-                  <Person fontSize="small" sx={{ color: "text.secondary" }} />
-                  <Typography variant="body2">{assignedTo}</Typography>
+                  <Person fontSize="small" sx={{ color: isDark ? "#60a5fa" : "text.secondary" }} />
+                  <Typography variant="body2" color={isDark ? "#f8fafc" : "text.primary"}>{assignedTo}</Typography>
                 </Box>
               </Stack>
 
@@ -2097,6 +2206,9 @@ const LeadCards = ({ leads, stageColor, onView }) => {
 
 // Component: Lead List (List View) - Desktop
 const LeadList = ({ leads, stageColor, onView }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
   return (
     <Stack spacing={2}>
       {leads.map((lead) => {
@@ -2114,11 +2226,12 @@ const LeadList = ({ leads, stageColor, onView }) => {
             display: "flex",
             alignItems: "center",
             gap: 2,
-            border: `1px solid ${alpha(stageColor, 0.12)}`,
-            boxShadow: "0 10px 24px rgba(39,76,167,0.06)",
+            border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${alpha(stageColor, 0.12)}`,
+            bgcolor: isDark ? "#121b2d" : "white",
+            boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 10px 24px rgba(39,76,167,0.06)",
             transition: "all 0.2s",
             "&:hover": {
-              bgcolor: alpha(stageColor, 0.04),
+              bgcolor: isDark ? alpha(stageColor, 0.15) : alpha(stageColor, 0.04),
               transform: "translateX(4px)",
             },
           }}
@@ -2128,23 +2241,28 @@ const LeadList = ({ leads, stageColor, onView }) => {
           </Avatar>
 
           <Box sx={{ flex: 1 }}>
-            <Typography variant="subtitle1" fontWeight={600}>
+            <Typography variant="subtitle1" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"}>
               {lead.firstName} {lead.lastName}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color={isDark ? "#94a3b8" : "text.secondary"}>
               {lead.email} | {lead.phone}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color={isDark ? "#64748b" : "text.secondary"}>
               Assigned To: {assignedTo}
             </Typography>
           </Box>
 
           <Box display="flex" alignItems="center" gap={2}>
             {lead.source && (
-              <Chip label={lead.source} size="small" variant="outlined" />
+              <Chip 
+                label={lead.source} 
+                size="small" 
+                variant="outlined" 
+                sx={{ color: isDark ? "#60a5fa" : "inherit", borderColor: isDark ? "rgba(96,165,250,0.3)" : "inherit" }}
+              />
             )}
 
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>
               {new Date(lead.createdAt).toLocaleDateString()}
             </Typography>
 
@@ -2155,10 +2273,10 @@ const LeadList = ({ leads, stageColor, onView }) => {
               sx={{
                 borderRadius: 2,
                 borderColor: stageColor,
-                color: stageColor,
+                color: isDark ? "#60a5fa" : stageColor,
                 "&:hover": {
                   borderColor: stageColor,
-                  bgcolor: alpha(stageColor, 0.05),
+                  bgcolor: alpha(stageColor, 0.1),
                 },
               }}
             >
@@ -2174,16 +2292,27 @@ const LeadList = ({ leads, stageColor, onView }) => {
 
 // Component: Lead Table (Table View) - Desktop
 const LeadTable = ({ leads, stageColor, onView }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
   return (
-    <TableContainer component={Paper} sx={{ borderRadius: 2.5, border: `1px solid ${alpha(stageColor, 0.12)}`, boxShadow: "0 12px 28px rgba(39,76,167,0.06)" }}>
+    <TableContainer 
+      component={Paper} 
+      sx={{ 
+        borderRadius: 2.5, 
+        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${alpha(stageColor, 0.12)}`, 
+        bgcolor: isDark ? "#121b2d" : "white",
+        boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 12px 28px rgba(39,76,167,0.06)" 
+      }}
+    >
       <Table>
-        <TableHead sx={{ bgcolor: alpha(stageColor, 0.06) }}>
+        <TableHead sx={{ bgcolor: isDark ? "#0d1527" : alpha(stageColor, 0.06) }}>
           <TableRow>
-            <TableCell sx={{ fontWeight: 600 }}>Lead</TableCell>
-            <TableCell sx={{ fontWeight: 600 }}>Contact</TableCell>
-            <TableCell sx={{ fontWeight: 600 }}>Assigned To</TableCell>
-            <TableCell sx={{ fontWeight: 600 }}>Date Added</TableCell>
-            <TableCell sx={{ fontWeight: 600 }} align="right">
+            <TableCell sx={{ fontWeight: 600, color: isDark ? "#f8fafc" : "text.primary" }}>Lead</TableCell>
+            <TableCell sx={{ fontWeight: 600, color: isDark ? "#f8fafc" : "text.primary" }}>Contact</TableCell>
+            <TableCell sx={{ fontWeight: 600, color: isDark ? "#f8fafc" : "text.primary" }}>Assigned To</TableCell>
+            <TableCell sx={{ fontWeight: 600, color: isDark ? "#f8fafc" : "text.primary" }}>Date Added</TableCell>
+            <TableCell sx={{ fontWeight: 600, color: isDark ? "#f8fafc" : "text.primary" }} align="right">
               Actions
             </TableCell>
           </TableRow>
@@ -2193,9 +2322,9 @@ const LeadTable = ({ leads, stageColor, onView }) => {
             <TableRow
               key={lead._id}
               hover
-              sx={{ "&:hover": { bgcolor: alpha(stageColor, 0.02) } }}
+              sx={{ "&:hover": { bgcolor: isDark ? "rgba(255, 255, 255, 0.04)" : alpha(stageColor, 0.02) } }}
             >
-              <TableCell>
+              <TableCell sx={{ borderBottom: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : undefined }}>
                 <Box display="flex" alignItems="center" gap={2}>
                   <Avatar
                     sx={{
@@ -2208,28 +2337,28 @@ const LeadTable = ({ leads, stageColor, onView }) => {
                     {lead.firstName?.[0]}
                   </Avatar>
                   <Box>
-                    <Typography variant="body2" fontWeight={600}>
+                    <Typography variant="body2" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"}>
                       {lead.firstName} {lead.lastName}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>
                       {lead.email}
                     </Typography>
                   </Box>
                 </Box>
               </TableCell>
-              <TableCell>
-                <Typography variant="body2">{lead.phone}</Typography>
+              <TableCell sx={{ borderBottom: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : undefined }}>
+                <Typography variant="body2" color={isDark ? "#f8fafc" : "text.primary"}>{lead.phone}</Typography>
               </TableCell>
-              <TableCell>
+              <TableCell sx={{ borderBottom: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : undefined }}>
                 <Box>
-                  <Typography variant="body2" fontWeight={600}>
+                  <Typography variant="body2" fontWeight={600} color={isDark ? "#f8fafc" : "text.primary"}>
                     {lead.assignedUser
                       ? `${lead.assignedUser.firstName || ""} ${lead.assignedUser.lastName || ""}`.trim()
                       : lead.assignedManager
                         ? `${lead.assignedManager.firstName || ""} ${lead.assignedManager.lastName || ""}`.trim()
                         : "Unassigned"}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"}>
                     {lead.assignedUser
                       ? lead.assignedUser.role || "Assigned User"
                       : lead.assignedManager
@@ -2238,12 +2367,12 @@ const LeadTable = ({ leads, stageColor, onView }) => {
                   </Typography>
                 </Box>
               </TableCell>
-              <TableCell>
-                <Typography variant="body2">
+              <TableCell sx={{ borderBottom: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : undefined }}>
+                <Typography variant="body2" color={isDark ? "#94a3b8" : "text.primary"}>
                   {new Date(lead.createdAt).toLocaleDateString()}
                 </Typography>
               </TableCell>
-              <TableCell align="right">
+              <TableCell align="right" sx={{ borderBottom: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : undefined }}>
                 <Button
                   variant="outlined"
                   size="small"
@@ -2251,10 +2380,10 @@ const LeadTable = ({ leads, stageColor, onView }) => {
                   sx={{
                     borderRadius: 2,
                     borderColor: stageColor,
-                    color: stageColor,
+                    color: isDark ? "#60a5fa" : stageColor,
                     "&:hover": {
                       borderColor: stageColor,
-                      bgcolor: alpha(stageColor, 0.05),
+                      bgcolor: alpha(stageColor, 0.1),
                     },
                   }}
                 >
@@ -2283,6 +2412,9 @@ const LeadDetailDialog = ({
   onMoveNextStage,
   moveNextStageLoading,
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
   if (!lead) return null;
 
   const config = STAGE_CONFIG[stage] || STAGE_CONFIG.Visit;
@@ -2299,7 +2431,8 @@ const LeadDetailDialog = ({
         sx: { 
           borderRadius: isMobile ? 0 : 4,
           margin: isMobile ? 0 : 24,
-          boxShadow: "0 24px 56px rgba(31,45,87,0.18)",
+          bgcolor: isDark ? "#0d1527" : "white",
+          boxShadow: isDark ? "0 24px 56px rgba(0,0,0,0.6)" : "0 24px 56px rgba(31,45,87,0.18)",
         },
       }}
       TransitionComponent={isMobile ? Slide : Fade}
