@@ -4,10 +4,9 @@ export const API_ORIGIN = normalizeOrigin(
   process.env.REACT_APP_API_URL || "https://vanurtech-solar-backend-1.onrender.com"
 );
 
-export const LEGACY_API_ORIGINS = (process.env.REACT_APP_LEGACY_API_ORIGINS || "")
-  .split(",")
-  .map(normalizeOrigin)
-  .filter(Boolean);
+export const LEGACY_API_ORIGINS = [
+  "https://vanurtech-solar-backend-1.onrender.com",
+];
 
 export const KNOWN_API_HOSTS = new Set(
   [API_ORIGIN, ...LEGACY_API_ORIGINS]
