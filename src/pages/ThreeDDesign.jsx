@@ -64,7 +64,7 @@ import * as THREE from "../vendor/three.module.js";
 
 const GOOGLE_MAPS_KEY =
   process.env.REACT_APP_GOOGLE_MAPS_API_KEY ||
-  "AIzaSyAqn70bioCdQL50Jj9nXsUIq0yGumoV9E8";
+  "AIzaSyDQYrvUxQPWUrpqWIy-tLg4f3DGrr4GTlg";
 const PUBLIC_APP_URL = (process.env.REACT_APP_PUBLIC_APP_URL || "").replace(/\/+$/, "");
 
 const MAP_LIBRARIES = ["places"];

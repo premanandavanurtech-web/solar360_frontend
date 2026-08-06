@@ -202,13 +202,13 @@ const zsmPerms = {
 const inchargePerms = {
   view: true, edit: true, assign: true, delete: false, bulkActions: true,
   export: false, settings: false, color: PRIMARY_COLOR,
-  icon: <SupervisorAccount />, label: "Incharge", level: 3, canAssignTo: ["TEAM"],
+  icon: <Groups />, label: "Installer", level: 3, canAssignTo: ["TEAM"],
 };
 
 const teamPerms = {
   view: true, edit: true, assign: false, delete: false, bulkActions: false,
   export: false, settings: false, color: PRIMARY_COLOR,
-  icon: <Groups />, label: "Team Member", level: 4, canAssignTo: [],
+  icon: <Groups />, label: "Installer", level: 4, canAssignTo: [],
 };
 
 export const ROLE_PERMISSIONS = {

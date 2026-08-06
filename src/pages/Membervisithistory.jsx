@@ -93,6 +93,7 @@ const apiFetch = async (path, params = {}, options = {}) => {
     ...(options.method === "POST" ? { body: JSON.stringify(params) } : {}),
   });
   if (!res.ok) {
+    if (res.status === 404 && options.ignoreNotFound) return null;
     const e = await res.json().catch(() => ({}));
     if (res.status === 401) {
       localStorage.removeItem("token");
@@ -966,6 +967,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
   const [lastUpdated,      setLastUpdated]      = useState(null);
   const [locateTrigger,    setLocateTrigger]    = useState(0);
   const [locating,         setLocating]         = useState(false);
+  const [punchInPopupTrigger, setPunchInPopupTrigger] = useState(0);
   const [gpsDistance,      setGpsDistance]      = useState(null);
   const [mapDistance,      setMapDistance]      = useState(null);
   const [currentLocation,  setCurrentLocation]  = useState(null);
@@ -1062,7 +1064,37 @@ export default function MemberVisitHistory({ userId: propUserId }) {
   const handleLocateMe = () => {
     setLocating(true);
     setLocateTrigger(t => t + 1);
-    setTimeout(() => setLocating(false), 1800);
+
+    if (!navigator.geolocation) {
+      setLocating(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = pos.coords.accuracy;
+        setCurrentLocation({
+          lat,
+          lng,
+          accuracy,
+          time: new Date().toISOString(),
+        });
+        // Reset geocode cache so address refreshes for new coords
+        lastGeocodedRef.current = null;
+        setLocating(false);
+      },
+      () => {
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 }
+    );
+  };
+
+  // Pan map to punch-in location and open the info popup
+  const handlePunchInFocus = () => {
+    setPunchInPopupTrigger(t => t + 1);
   };
 
   useEffect(() => {
@@ -1312,7 +1344,8 @@ export default function MemberVisitHistory({ userId: propUserId }) {
   const fetchLatestBattery = useCallback(async () => {
     if (!targetUserId || !canLoadTargetUser) return;
     try {
-      const res = await apiFetch(`/battery/latest/${targetUserId}`);
+      const res = await apiFetch(`/battery/latest/${targetUserId}`, {}, { ignoreNotFound: true });
+      if (!res) return;
       const data = res?.data || res?.result || res;
       if (data?.percentage !== undefined) {
         const normalizedPercentage =
@@ -1664,10 +1697,13 @@ export default function MemberVisitHistory({ userId: propUserId }) {
     isOwner={!isAdminView}
     height="100%"
     locateTrigger={locateTrigger}
+    punchInPopupTrigger={punchInPopupTrigger}
     onDistanceChange={setMapDistance}
     onCurrentLocationChange={setCurrentLocation}
     punchInLocation={punchInLocation}
     punchOutLocation={punchOutLocation}
+    punchBatteryInfo={punchBatteryInfo}
+    resolvedAddress={resolvedAddress}
     visits={visibleVisits}
     selectedDate={selectedMapDate}
     preferVisitTrail={useVisitTrailOnly}
@@ -1947,19 +1983,42 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                 border: `1px solid ${dividerBorder}`,
               }}>
                 <Typography sx={{ fontSize: "0.88rem", fontWeight: 700, color: textTitle, lineHeight: 1.5, mb: 1 }}>
-                  📍 {resolvedAddress || currentLocation?.address || (typeof punchInLocation?.address === "string" ? punchInLocation.address : punchInLocation?.address?.full || punchInLocation?.address?.short) || visibleVisits[0]?.address || "Location coordinates active"}
+                  {currentLocation?.accuracy ? "📡" : "📍"} {resolvedAddress || currentLocation?.address || (typeof punchInLocation?.address === "string" ? punchInLocation.address : punchInLocation?.address?.full || punchInLocation?.address?.short) || visibleVisits[0]?.address || "Location coordinates active"}
                 </Typography>
 
                 <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}>
-                  <Typography sx={{ fontSize: "0.78rem", color: PRIMARY, fontFamily: "monospace", fontWeight: 700, bgcolor: alpha(PRIMARY, 0.08), px: 1.2, py: 0.3, borderRadius: "6px" }}>
-                    {Number(currentLocation?.lat || punchInLocation?.lat || visibleVisits[0]?.coordinates?.lat || 20.29044).toFixed(5)}, {Number(currentLocation?.lng || punchInLocation?.lng || visibleVisits[0]?.coordinates?.lng || 85.86197).toFixed(5)}
-                  </Typography>
-
-                  {(currentLocation?.time || currentLocation?.recordedAt || punchInLocation?.time) && (
-                    <Typography sx={{ fontSize: "0.75rem", color: textSub, fontWeight: 600 }}>
-                      Recorded {fmt(currentLocation?.time || currentLocation?.recordedAt || punchInLocation?.time)}
+                  {/* Coords + status row */}
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                    <Typography sx={{ fontSize: "0.78rem", color: PRIMARY, fontFamily: "monospace", fontWeight: 700, bgcolor: alpha(PRIMARY, 0.08), px: 1.2, py: 0.3, borderRadius: "6px" }}>
+                      {Number(currentLocation?.lat || punchInLocation?.lat || visibleVisits[0]?.coordinates?.lat || 20.29044).toFixed(5)},{" "}
+                      {Number(currentLocation?.lng || punchInLocation?.lng || visibleVisits[0]?.coordinates?.lng || 85.86197).toFixed(5)}
                     </Typography>
-                  )}
+
+                    {/* Show live badge when current location was freshly fetched */}
+                    {currentLocation?.accuracy ? (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                        <Box sx={{
+                          display: "inline-flex", alignItems: "center", gap: 0.5,
+                          bgcolor: alpha("#22c55e", 0.12), border: "1px solid",
+                          borderColor: alpha("#22c55e", 0.3), borderRadius: "6px",
+                          px: 0.9, py: 0.25,
+                        }}>
+                          <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: "#22c55e",
+                            animation: "livePulse 1.5s ease-in-out infinite",
+                            "@keyframes livePulse": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } },
+                          }} />
+                          <Typography sx={{ fontSize: "0.68rem", fontWeight: 800, color: "#16a34a" }}>Live · Now</Typography>
+                        </Box>
+                        <Typography sx={{ fontSize: "0.68rem", color: textSub, fontWeight: 600 }}>
+                          ±{Math.round(currentLocation.accuracy)}m
+                        </Typography>
+                      </Box>
+                    ) : (currentLocation?.time || currentLocation?.recordedAt || punchInLocation?.time) ? (
+                      <Typography sx={{ fontSize: "0.75rem", color: textSub, fontWeight: 600 }}>
+                        Recorded {fmt(currentLocation?.time || currentLocation?.recordedAt || punchInLocation?.time)}
+                      </Typography>
+                    ) : null}
+                  </Box>
 
                   <Button
                     component="a"
@@ -2064,7 +2123,10 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                   {isPunchedIn && !hasPunchedOut ? (
                     <Box sx={{ display: "flex", gap: 2 }}>
                       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
-                        <Box sx={{ width: 40, height: 40, borderRadius: "50%", bgcolor: SUCCESS, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 0 4px ${alpha(SUCCESS, 0.2)}`, animation: "pl 1.5s ease-in-out infinite", "@keyframes pl": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.6 } } }}>
+                        <Box
+                          onClick={handlePunchInFocus}
+                          sx={{ width: 40, height: 40, borderRadius: "50%", bgcolor: SUCCESS, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 0 4px ${alpha(SUCCESS, 0.2)}`, animation: "pl 1.5s ease-in-out infinite", "@keyframes pl": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.6 } }, cursor: "pointer", transition: "transform 0.15s", "&:hover": { transform: "scale(1.12)" } }}
+                        >
                           <MyLocation sx={{ fontSize: 18, color: "#fff" }} />
                         </Box>
                       </Box>
@@ -2082,14 +2144,15 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                             />
                           </Box>
                         )}
-                        {punchInLocation?.address && (
-                          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.4, mb: 0.5 }}>
-                            <LocationOn sx={{ fontSize: 12, color: "#94a3b8", mt: "2px", flexShrink: 0 }} />
-                            <Typography sx={{ fontSize: "0.75rem", color: "#64748b", lineHeight: 1.5 }}>
-                              {typeof punchInLocation.address === "string" ? punchInLocation.address : punchInLocation.address?.full || punchInLocation.address?.short || ""}
-                            </Typography>
-                          </Box>
-                        )}
+                        {/* Address (prefer resolved geocoded address, fallback to punchInLocation.address, then coords) */}
+                        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.4, mb: 0.5 }}>
+                          <LocationOn sx={{ fontSize: 12, color: "#94a3b8", mt: "2px", flexShrink: 0 }} />
+                          <Typography sx={{ fontSize: "0.75rem", color: "#64748b", lineHeight: 1.5 }}>
+                            {resolvedAddress ||
+                              (typeof punchInLocation?.address === "string" ? punchInLocation.address : punchInLocation?.address?.full || punchInLocation?.address?.short) ||
+                              (punchInLocation?.lat ? "Fetching address…" : "Location not available")}
+                          </Typography>
+                        </Box>
                         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.5 }}>
                           <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: SUCCESS, animation: "dp 1.5s ease-in-out infinite", "@keyframes dp": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } } }} />
                           <Typography sx={{ fontSize: "0.7rem", color: SUCCESS, fontWeight: 600 }}>On Duty · No visits yet today</Typography>
@@ -2114,7 +2177,10 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                     <Box sx={{ mb: 0 }}>
                       <Box sx={{ display: "flex", gap: 2 }}>
                         <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
-                          <Box sx={{ width: 40, height: 40, borderRadius: "50%", bgcolor: SUCCESS, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 2px 8px ${alpha(SUCCESS, 0.3)}` }}>
+                          <Box
+                            onClick={handlePunchInFocus}
+                            sx={{ width: 40, height: 40, borderRadius: "50%", bgcolor: SUCCESS, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 2px 8px ${alpha(SUCCESS, 0.3)}`, cursor: "pointer", transition: "transform 0.15s", "&:hover": { transform: "scale(1.12)" } }}
+                          >
                             <MyLocation sx={{ fontSize: 18, color: "#fff" }} />
                           </Box>
                         </Box>
@@ -2132,10 +2198,13 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                               />
                             </Box>
                           )}
+                          {/* Address (prefer resolved geocoded address, fallback to punchInLocation.address, then coords) */}
                           <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.4 }}>
                             <LocationOn sx={{ fontSize: 12, color: PRIMARY, mt: "2px", flexShrink: 0 }} />
                             <Typography sx={{ fontSize: "0.75rem", color: "#475569", lineHeight: 1.5 }}>
-                              {typeof punchInLocation.address === "string" ? punchInLocation.address : punchInLocation.address?.full || punchInLocation.address?.short || ""}
+                              {resolvedAddress ||
+                                (typeof punchInLocation.address === "string" ? punchInLocation.address : punchInLocation.address?.full || punchInLocation.address?.short) ||
+                                (punchInLocation?.lat ? "Fetching address…" : "")}
                             </Typography>
                           </Box>
                         </Box>

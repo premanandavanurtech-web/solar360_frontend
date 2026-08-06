@@ -237,8 +237,8 @@ const FOLLOW_UP_OPTIONS = [
 const ROLE_CONFIG = {
   Admin_panel: { label: "Admin Panel", icon: <AdminPanelSettings sx={{ fontSize: 15 }} /> },
   ZSM: { label: "Operation Lead", icon: <WorkspacePremium sx={{ fontSize: 15 }} /> },
-  Incharge: { label: "Incharge", icon: <SupervisorAccount sx={{ fontSize: 15 }} /> },
-  TEAM: { label: "Team Member", icon: <Groups sx={{ fontSize: 15 }} /> },
+  Incharge: { label: "Installer", icon: <Groups sx={{ fontSize: 15 }} /> },
+  TEAM: { label: "Installer", icon: <Groups sx={{ fontSize: 15 }} /> },
 };
 
 const PERIOD_OPTIONS = [

@@ -83,12 +83,12 @@ const ROLE_CONFIG = {
     icon: <Person sx={{ fontSize: 16 }} />,
   },
   Incharge: {
-    label: "Incharge",
+    label: "Installer",
     color: PRIMARY,
     icon: <Person sx={{ fontSize: 16 }} />,
   },
   TEAM: {
-    label: "Team Member",
+    label: "Installer",
     color: PRIMARY,
     icon: <Person sx={{ fontSize: 16 }} />,
   },

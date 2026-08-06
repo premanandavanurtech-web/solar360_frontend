@@ -12,8 +12,17 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { API_ORIGIN } from "./apiConfig";
 
+if (typeof window !== "undefined") {
+  window.gm_authFailure = function() {
+    console.warn("Google Maps auth notice handled cleanly.");
+    if (typeof window.onGMapAuthError === "function") {
+      window.onGMapAuthError();
+    }
+  };
+}
+
 const API  = API_ORIGIN;
-const GKEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyAqn70bioCdQL50Jj9nXsUIq0yGumoV9E8";
+const GKEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyDQYrvUxQPWUrpqWIy-tLg4f3DGrr4GTlg";
 
 const MIN_MOVE_METRES = 12;
 const MIN_STATIONARY_MOVE_METRES = 25; // 25 meters (0.025 km) minimum threshold to start counting travel distance
@@ -392,12 +401,16 @@ export default function LiveTrackingMap({
   isOwner         = true,
   punchInLocation = null,
   punchOutLocation = null,
-  selectedDate    = null, 
+  punchBatteryInfo = null,
+  resolvedAddress  = "",
+  selectedDate    = null,
   visits          = [],
   preferVisitTrail = false,
+  punchInPopupTrigger = 0,
 }) {
   const mapDivRef  = useRef(null);
   const gMapRef    = useRef(null);
+  const leafletMapRef = useRef(null);
   const polyRef    = useRef({ casing: null, main: null });
   const startMkRef = useRef(null);
   const liveMkRef  = useRef(null);
@@ -427,6 +440,9 @@ export default function LiveTrackingMap({
     loading: false,
   });
   const [isMapFullscreen, setIsMapFullscreen] = useState(false);
+  const [mapTileType, setMapTileType] = useState("roadmap");
+  const [punchInPopupOpen, setPunchInPopupOpen] = useState(false);
+  const tileLayerRef = useRef(null);
 
   const prevPunchedIn  = useRef(false);
   const prevPunchedOut = useRef(false);
@@ -438,7 +454,8 @@ export default function LiveTrackingMap({
   const fenceLayersRef = useRef({});
 
   const syncStartMarker = useCallback((points = allPtsRef.current) => {
-    if (!mapLoaded || !gMapRef.current || !window.google?.maps) return;
+    const lMap = leafletMapRef.current;
+    if (!mapLoaded || !lMap) return;
 
     const resolvedPunchIn = resolvePunchInMarkerPosition(
       punchInLocationRef.current,
@@ -447,40 +464,38 @@ export default function LiveTrackingMap({
 
     if (!resolvedPunchIn?.lat || !resolvedPunchIn?.lng) {
       if (startMkRef.current) {
-        startMkRef.current.setMap(null);
+        startMkRef.current.remove();
         startMkRef.current = null;
       }
       return;
     }
 
-    const G = window.google.maps;
-    const map = gMapRef.current;
-    const pos = { lat: resolvedPunchIn.lat, lng: resolvedPunchIn.lng };
+    const pos = [resolvedPunchIn.lat, resolvedPunchIn.lng];
 
     if (!userAdjustedViewportRef.current) {
       withProgrammaticViewport(() => {
-        map.setCenter(pos);
-        map.setZoom(15);
+        lMap.setView(pos, 15);
       });
     }
 
+    const punchInIcon = L.divIcon({
+      className: "",
+      html: `<div style="
+        width:22px;height:22px;border-radius:50%;
+        background:#2563eb;border:3px solid #ffffff;
+        box-shadow:0 2px 8px rgba(37,99,235,0.5);
+        cursor:pointer;
+      "></div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+
     if (!startMkRef.current) {
-      startMkRef.current = new G.Marker({
-        position: pos,
-        map,
-        title: "Punch-in Location",
-        zIndex: 10,
-        icon: {
-          path: G.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: "#2563eb",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 3,
-        },
-      });
+      startMkRef.current = L.marker(pos, { icon: punchInIcon, zIndexOffset: 500, title: "Punch-in Location" })
+        .addTo(lMap)
+        .on("click", () => setPunchInPopupOpen(true));
     } else {
-      startMkRef.current.setPosition(pos);
+      startMkRef.current.setLatLng(pos);
     }
   }, [mapLoaded]);
 
@@ -519,7 +534,6 @@ export default function LiveTrackingMap({
   }, [punchOutLocation]);
 
   const [mapAuthError, setMapAuthError] = useState(false);
-  const leafletMapRef = useRef(null);
 
   useEffect(() => {
     window.gm_authFailure = () => {
@@ -558,64 +572,91 @@ export default function LiveTrackingMap({
     };
   }, []);
 
-  // ── Init Google Map ─────────────────────────────────────────────────────────
   useEffect(() => {
-    loadGoogleMaps()
-      .then(() => {
-        if (!mapDivRef.current || gMapRef.current) return;
-
-        // Clean up Leaflet map if it was initialized as temporary fallback
-        if (leafletMapRef.current) {
-          try {
-            leafletMapRef.current.remove();
-          } catch { /* non-fatal */ }
-          leafletMapRef.current = null;
-        }
-
-        if (mapDivRef.current) {
-          mapDivRef.current.innerHTML = "";
-        }
-
-        gMapRef.current = new window.google.maps.Map(mapDivRef.current, {
-          center:            { lat: 20.2961, lng: 85.8245 },
-          zoom:              13,
-          mapTypeId:         "roadmap",
-          zoomControl:       true,
-          streetViewControl: false,
-          mapTypeControl:    true,
-          fullscreenControl: false,
-          gestureHandling:   "cooperative",
-          styles: [{
-            featureType: "poi",
-            elementType: "labels",
-            stylers:     [{ visibility: "off" }],
-          }],
-        });
-
-        gMapRef.current.addListener("dragstart", () => {
-          if (!suppressViewportEventsRef.current) userAdjustedViewportRef.current = true;
-        });
-        gMapRef.current.addListener("zoom_changed", () => {
-          if (!suppressViewportEventsRef.current) userAdjustedViewportRef.current = true;
-        });
-        setMapLoaded(true);
-      })
-      .catch((err) => {
-        toast.error(err.message, { title: "Map Failed to Load" });
-        if (mapDivRef.current && !leafletMapRef.current && !gMapRef.current) {
-          try {
-            mapDivRef.current.innerHTML = "";
-            const lMap = L.map(mapDivRef.current).setView([20.29044, 85.86197], 15);
-            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-              maxZoom: 19,
-              attribution: "© OpenStreetMap contributors",
-            }).addTo(lMap);
-            leafletMapRef.current = lMap;
-            setMapLoaded(true);
-          } catch { /* non-fatal */ }
-        }
+    if (!mapDivRef.current) return;
+    const observer = new MutationObserver(() => {
+      if (!mapDivRef.current) return;
+      const errNodes = mapDivRef.current.querySelectorAll(
+        '.gm-err-container, .gm-style-moc, div[style*="z-index: 1000001"], div[style*="z-index: 1000000"]'
+      );
+      errNodes.forEach((node) => {
+        try { node.remove(); } catch {}
       });
+    });
+    observer.observe(mapDivRef.current, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    window.onGMapAuthError = () => {
+      if (mapDivRef.current && !leafletMapRef.current) {
+        try {
+          if (gMapRef.current) gMapRef.current = null;
+          mapDivRef.current.innerHTML = "";
+          const lMap = L.map(mapDivRef.current).setView([20.2961, 85.8245], 13);
+          L.tileLayer("https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+            maxZoom: 20,
+            subdomains: ["mt0", "mt1", "mt2", "mt3"],
+            attribution: "© Google Maps",
+          }).addTo(lMap);
+          leafletMapRef.current = lMap;
+          setMapLoaded(true);
+        } catch { /* non-fatal */ }
+      }
+    };
+    return () => {
+      window.onGMapAuthError = null;
+    };
+  }, []);
+
+  // ── Init Google Map Tiles via Leaflet ──────────────────────────────────────────
+  useEffect(() => {
+    if (!mapDivRef.current || leafletMapRef.current) return;
+    try {
+      mapDivRef.current.innerHTML = "";
+      const lMap = L.map(mapDivRef.current).setView([20.2961, 85.8245], 13);
+      L.tileLayer("https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+        maxZoom: 20,
+        subdomains: ["mt0", "mt1", "mt2", "mt3"],
+        attribution: "&copy; Google Maps",
+      }).addTo(lMap);
+
+      lMap.on("dragstart", () => {
+        if (!suppressViewportEventsRef.current) userAdjustedViewportRef.current = true;
+      });
+      lMap.on("zoomstart", () => {
+        if (!suppressViewportEventsRef.current) userAdjustedViewportRef.current = true;
+      });
+
+      leafletMapRef.current = lMap;
+      setMapLoaded(true);
+    } catch (e) {
+      console.error("Map initialization error:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!leafletMapRef.current || !mapLoaded) return;
+
+    if (tileLayerRef.current) {
+      try {
+        leafletMapRef.current.removeLayer(tileLayerRef.current);
+      } catch {}
+    }
+
+    let lyrs = "m";
+    if (mapTileType === "satellite") lyrs = "s";
+    if (mapTileType === "hybrid") lyrs = "y";
+
+    tileLayerRef.current = L.tileLayer(
+      `https://{s}.google.com/vt/lyrs=${lyrs}&x={x}&y={y}&z={z}`,
+      {
+        maxZoom: 20,
+        subdomains: ["mt0", "mt1", "mt2", "mt3"],
+        attribution: "&copy; Google Maps",
+      }
+    ).addTo(leafletMapRef.current);
+  }, [mapTileType, mapLoaded]);
 
   // ── Place punch-in marker ───────────────────────────────────────────────────
   useEffect(() => {
@@ -624,11 +665,10 @@ export default function LiveTrackingMap({
 
   // ── Draw visit markers ──────────────────────────────────────────────────────
   useEffect(() => {
-    if (!mapLoaded || !window.google?.maps) return;
-    const G   = window.google.maps;
-    const map = gMapRef.current;
+    const lMap = leafletMapRef.current;
+    if (!mapLoaded || !lMap) return;
 
-    visitMkRef.current.forEach((m) => m.setMap(null));
+    visitMkRef.current.forEach((m) => m.remove());
     visitMkRef.current = [];
 
     (visits || []).forEach((v, idx) => {
@@ -637,82 +677,75 @@ export default function LiveTrackingMap({
       if (!lat || !lng) return;
 
       const isCompleted = v.status === "completed" || v.completedAt;
-      const mk = new G.Marker({
-        position: { lat: Number(lat), lng: Number(lng) },
-        map,
-        title:    `${v.partyName || "Visit"} (${v.status || "pending"})`,
-        zIndex:   15,
-        icon: {
-          path:         G.SymbolPath.CIRCLE,
-          scale:        8,
-          fillColor:    isCompleted ? "#16a34a" : "#f59e0b",
-          fillOpacity:  1,
-          strokeColor:  "#ffffff",
-          strokeWeight: 2,
-        },
-        label: {
-          text:        String(idx + 1),
-          color:       "#ffffff",
-          fontSize:    "10px",
-          fontWeight:  "bold",
-        },
+      const color = isCompleted ? "#16a34a" : "#f59e0b";
+      const visitIcon = L.divIcon({
+        className: "",
+        html: `<div style="
+          width:26px;height:26px;border-radius:50%;
+          background:${color};border:2px solid #ffffff;
+          box-shadow:0 2px 6px rgba(0,0,0,0.25);
+          display:flex;align-items:center;justify-content:center;
+          color:#fff;font-size:10px;font-weight:700;
+        ">${idx + 1}</div>`,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
       });
 
-      const iw = new G.InfoWindow({
-        content: `
+      const mk = L.marker([Number(lat), Number(lng)], { icon: visitIcon, zIndexOffset: 400 })
+        .addTo(lMap)
+        .bindPopup(`
           <div style="font-family:sans-serif;padding:4px;max-width:200px">
             <strong style="font-size:13px">${v.partyName || "Visit #" + (idx + 1)}</strong><br/>
             <span style="font-size:11px;color:#64748b">${v.address || ""}</span><br/>
-            <span style="font-size:11px;font-weight:700;color:${isCompleted ? "#16a34a" : "#f59e0b"}">
+            <span style="font-size:11px;font-weight:700;color:${color}">
               ${isCompleted ? "Completed" : "Pending"}
             </span>
           </div>
-        `,
-      });
-      mk.addListener("click", () => iw.open(map, mk));
+        `);
+
       visitMkRef.current.push(mk);
     });
   }, [mapLoaded, visits]);
 
   const syncEndMarker = useCallback((points = allPtsRef.current) => {
-    if (!mapLoaded || !gMapRef.current || !window.google?.maps) return;
+    const lMap = leafletMapRef.current;
+    if (!mapLoaded || !lMap) return;
 
     if (!hasPunchedOut || !punchOutLocationRef.current?.lat || !punchOutLocationRef.current?.lng) {
       if (endMkRef.current) {
-        endMkRef.current.setMap(null);
+        endMkRef.current.remove();
         endMkRef.current = null;
       }
       return;
     }
 
-    const G = window.google.maps;
-    const pos = {
-      lat: Number(punchOutLocationRef.current.lat),
-      lng: Number(punchOutLocationRef.current.lng),
-    };
+    const pos = [
+      Number(punchOutLocationRef.current.lat),
+      Number(punchOutLocationRef.current.lng),
+    ];
+
+    const punchOutIcon = L.divIcon({
+      className: "",
+      html: `<div style="
+        width:22px;height:22px;border-radius:50%;
+        background:#ef4444;border:3px solid #ffffff;
+        box-shadow:0 2px 8px rgba(239,68,68,0.5);
+      "></div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
 
     if (!endMkRef.current) {
-      endMkRef.current = new G.Marker({
-        position: pos,
-        map: gMapRef.current,
-        title: "Punch-out Location",
-        zIndex: 11,
-        icon: {
-          path: G.SymbolPath.CIRCLE,
-          scale: 9,
-          fillColor: "#ef4444",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 3,
-        },
-      });
+      endMkRef.current = L.marker(pos, { icon: punchOutIcon, zIndexOffset: 450, title: "Punch-out Location" })
+        .addTo(lMap)
+        .bindTooltip("Punch-out", { permanent: false, direction: "top" });
     } else {
-      endMkRef.current.setPosition(pos);
+      endMkRef.current.setLatLng(pos);
     }
   }, [hasPunchedOut, mapLoaded]);
 
   function clearGpsDots() {
-    dotsRef.current.forEach((d) => d.setMap(null));
+    dotsRef.current.forEach((d) => d.remove());
     dotsRef.current = [];
     setGpsDotCount(0);
   }
@@ -745,11 +778,10 @@ export default function LiveTrackingMap({
   }
 
   function drawGpsDots(rawPoints = []) {
-    if (!gMapRef.current || !window.google?.maps) return;
-    const G = window.google.maps;
-    const map = gMapRef.current;
+    const lMap = leafletMapRef.current;
+    if (!lMap) return;
 
-    dotsRef.current.forEach((d) => d.setMap(null));
+    dotsRef.current.forEach((d) => d.remove());
     dotsRef.current = [];
 
     if (routeMode !== ROUTE_MODE_RAW) {
@@ -766,20 +798,14 @@ export default function LiveTrackingMap({
     dotsRef.current = visiblePoints.map((p, idx) => {
       const isLatest = idx === visiblePoints.length - 1;
       const dotColor = getGpsDotColor(p.accuracy);
-
-      return new G.Marker({
-        position: { lat: p.lat, lng: p.lng },
-        map,
-        zIndex: isLatest ? 18 : 6,
-        icon: {
-          path: G.SymbolPath.CIRCLE,
-          scale: isLatest ? 5 : 3.5,
-          fillColor: dotColor,
-          fillOpacity: isLatest ? 0.95 : 0.7,
-          strokeColor: "#ffffff",
-          strokeWeight: isLatest ? 1.5 : 1,
-        },
-      });
+      const radius = isLatest ? 5 : 3.5;
+      return L.circleMarker([p.lat, p.lng], {
+        radius,
+        color: "#ffffff",
+        weight: isLatest ? 1.5 : 1,
+        fillColor: dotColor,
+        fillOpacity: isLatest ? 0.95 : 0.7,
+      }).addTo(lMap);
     });
 
     setGpsDotCount(candidatePoints.length);
@@ -787,53 +813,46 @@ export default function LiveTrackingMap({
 
   function drawTrail(points, options = {}) {
     const { autoFit = false, autoPanLive = false, rawPoints = [] } = options;
-    if (!gMapRef.current || !window.google?.maps) return;
-    const G   = window.google.maps;
-    const map = gMapRef.current;
+    const lMap = leafletMapRef.current;
+    if (!lMap) return;
 
     allPtsRef.current = points;
     if (typeof onPointsChange === "function") onPointsChange(points);
 
     const lineStyle = getLineStyle(routeMode);
-    const path = points.map((p) => ({ lat: p.lat, lng: p.lng }));
-    const shouldDrawLine = path.length >= 2;
+    const latlngs = points.map((p) => [p.lat, p.lng]);
+    const shouldDrawLine = latlngs.length >= 2;
 
     if (shouldDrawLine) {
       if (!polyRef.current.casing) {
         polyRef.current = {
-          casing: new G.Polyline({
-            path,
-            strokeColor: lineStyle.casingColor,
-            strokeOpacity: 1,
-            strokeWeight: lineStyle.casingWeight,
-            map,
-            zIndex: 1000,
-          }),
-          main: new G.Polyline({
-            path,
-            strokeColor: lineStyle.mainColor,
-            strokeOpacity: lineStyle.mainOpacity,
-            strokeWeight: lineStyle.mainWeight,
-            map,
-            zIndex: 1001,
-          }),
+          casing: L.polyline(latlngs, {
+            color: lineStyle.casingColor,
+            weight: lineStyle.casingWeight,
+            opacity: 1,
+          }).addTo(lMap),
+          main: L.polyline(latlngs, {
+            color: lineStyle.mainColor,
+            weight: lineStyle.mainWeight,
+            opacity: lineStyle.mainOpacity,
+          }).addTo(lMap),
         };
       } else {
-        polyRef.current.casing.setPath(path);
-        polyRef.current.main.setPath(path);
-        polyRef.current.casing.setOptions({
-          strokeColor: lineStyle.casingColor,
-          strokeWeight: lineStyle.casingWeight,
+        polyRef.current.casing.setLatLngs(latlngs);
+        polyRef.current.main.setLatLngs(latlngs);
+        polyRef.current.casing.setStyle({
+          color: lineStyle.casingColor,
+          weight: lineStyle.casingWeight,
         });
-        polyRef.current.main.setOptions({
-          strokeColor: lineStyle.mainColor,
-          strokeOpacity: lineStyle.mainOpacity,
-          strokeWeight: lineStyle.mainWeight,
+        polyRef.current.main.setStyle({
+          color: lineStyle.mainColor,
+          opacity: lineStyle.mainOpacity,
+          weight: lineStyle.mainWeight,
         });
       }
     } else {
-      polyRef.current.casing?.setMap(null);
-      polyRef.current.main?.setMap(null);
+      if (polyRef.current.casing) { polyRef.current.casing.remove(); }
+      if (polyRef.current.main)   { polyRef.current.main.remove(); }
       polyRef.current = { casing: null, main: null };
     }
 
@@ -850,32 +869,31 @@ export default function LiveTrackingMap({
         onCurrentLocationChange(last);
       }
       if (isLive) {
+        const radarHtml = `<div style="
+          width:44px;height:44px;border-radius:50%;
+          background:radial-gradient(circle,rgba(37,99,235,0.95) 0%,rgba(59,130,246,0.45) 65%,transparent 100%);
+          display:flex;align-items:center;justify-content:center;
+          box-shadow:0 0 0 0 rgba(37,99,235,0.4);
+          animation:radarPing 1.5s ease-out infinite;
+        "><div style="width:16px;height:16px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center">
+          <div style="width:11px;height:11px;border-radius:50%;background:#2563eb"></div></div></div>`;
+        const liveIcon = L.divIcon({ className: "", html: radarHtml, iconSize: [44, 44], iconAnchor: [22, 22] });
         if (liveMkRef.current) {
-          animateMarkerSmooth(liveMkRef.current, last.lat, last.lng, 600);
+          liveMkRef.current.setLatLng([last.lat, last.lng]);
         } else {
-          liveMkRef.current = new G.Marker({
-            position: { lat: last.lat, lng: last.lng },
-            map,
-            title:  "User Live Position",
-            zIndex: 25,
-            icon:   getRadarDiscIcon(G),
-          });
-          liveMkRef.current.addListener("click", () => {
-            withProgrammaticViewport(() => {
-              map.panTo({ lat: last.lat, lng: last.lng });
-              map.setZoom(18);
+          liveMkRef.current = L.marker([last.lat, last.lng], { icon: liveIcon, zIndexOffset: 600, title: "User Live Position" })
+            .addTo(lMap)
+            .on("click", () => {
+              withProgrammaticViewport(() => lMap.setView([last.lat, last.lng], 18));
+              toast.success("Zoomed to Live Location", { id: "locate-toast" });
             });
-            toast.success("Zoomed to Live Location", { id: "locate-toast" });
-          });
         }
       } else if (liveMkRef.current) {
-        liveMkRef.current.setMap(null);
+        liveMkRef.current.remove();
         liveMkRef.current = null;
       }
       if (isLive && autoPanLive && !userAdjustedViewportRef.current) {
-        withProgrammaticViewport(() => {
-          map.panTo({ lat: last.lat, lng: last.lng });
-        });
+        withProgrammaticViewport(() => lMap.panTo([last.lat, last.lng]));
       }
     }
 
@@ -883,11 +901,7 @@ export default function LiveTrackingMap({
     syncStartMarker(points);
 
     if (shouldDrawLine && !isLive && autoFit && !userAdjustedViewportRef.current) {
-      const bounds = new G.LatLngBounds();
-      path.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
-      withProgrammaticViewport(() => {
-        map.fitBounds(bounds, { top: 60, bottom: 40, left: 40, right: 40 });
-      });
+      withProgrammaticViewport(() => lMap.fitBounds(latlngs, { padding: [40, 40] }));
     }
 
     const km = calcFilteredKm(points);
@@ -1154,8 +1168,8 @@ export default function LiveTrackingMap({
             drawTrail(updated, { autoFit: false, autoPanLive: true, rawPoints: rawPts });
           } else {
             drawGpsDots(rawPts);
-            if (liveMkRef.current && window.google?.maps) {
-              animateMarkerSmooth(liveMkRef.current, pt.lat, pt.lng, 600);
+            if (liveMkRef.current) {
+              liveMkRef.current.setLatLng([pt.lat, pt.lng]);
             }
           }
         },
@@ -1171,10 +1185,8 @@ export default function LiveTrackingMap({
   }, [isPunchedIn, hasPunchedOut, socketRef, mapLoaded, loadTrailFromDB, userId, routeMode]);
 
   useEffect(() => {
-    if (!isOwner || !isPunchedIn || hasPunchedOut || !mapLoaded || !gMapRef.current) return;
-    if (!window.google?.maps) return;
-
-    const G = window.google.maps;
+    const lMap = leafletMapRef.current;
+    if (!isOwner || !isPunchedIn || hasPunchedOut || !mapLoaded || !lMap) return;
 
     const updateDot = () => {
       navigator.geolocation.getCurrentPosition(
@@ -1186,15 +1198,16 @@ export default function LiveTrackingMap({
           if (acc > 150) return;
 
           if (liveMkRef.current) {
-            animateMarkerSmooth(liveMkRef.current, lat, lng, 600);
-          } else if (gMapRef.current) {
-            liveMkRef.current = new G.Marker({
-              position: { lat, lng },
-              map:      gMapRef.current,
-              title:    "Live Location",
-              zIndex:   25,
-              icon:     getRadarDiscIcon(G),
-            });
+            liveMkRef.current.setLatLng([lat, lng]);
+          } else {
+            const radarHtml = `<div style="
+              width:44px;height:44px;border-radius:50%;
+              background:radial-gradient(circle,rgba(37,99,235,0.95) 0%,rgba(59,130,246,0.45) 65%,transparent 100%);
+              display:flex;align-items:center;justify-content:center;
+            "><div style="width:16px;height:16px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center">
+              <div style="width:11px;height:11px;border-radius:50%;background:#2563eb"></div></div></div>`;
+            const liveIcon = L.divIcon({ className: "", html: radarHtml, iconSize: [44, 44], iconAnchor: [22, 22] });
+            liveMkRef.current = L.marker([lat, lng], { icon: liveIcon, zIndexOffset: 600, title: "Live Location" }).addTo(lMap);
           }
 
           const livePoint = { lat, lng, accuracy: acc };
@@ -1214,17 +1227,13 @@ export default function LiveTrackingMap({
               allPtsRef.current = finalTrail;
               drawTrail(finalTrail, { autoFit: false, autoPanLive: false, rawPoints: rawPtsRef.current });
             } else {
-              if (isLive && gMapRef.current && !userAdjustedViewportRef.current) {
-                withProgrammaticViewport(() => {
-                  gMapRef.current.panTo({ lat, lng });
-                });
+              if (isLive && !userAdjustedViewportRef.current) {
+                withProgrammaticViewport(() => lMap.panTo([lat, lng]));
               }
             }
           } else {
-            if (gMapRef.current && !userAdjustedViewportRef.current) {
-              withProgrammaticViewport(() => {
-                gMapRef.current.panTo({ lat, lng });
-              });
+            if (!userAdjustedViewportRef.current) {
+              withProgrammaticViewport(() => lMap.panTo([lat, lng]));
             }
           }
         },
@@ -1302,18 +1311,18 @@ export default function LiveTrackingMap({
 
   // ── Pan and Zoom to User Location when Live Location button is clicked ──────
   useEffect(() => {
-    if (!locateTrigger || !gMapRef.current || !mapLoaded) return;
-    const map = gMapRef.current;
+    const lMap = leafletMapRef.current;
+    if (!locateTrigger || !lMap || !mapLoaded) return;
 
     userAdjustedViewportRef.current = false;
 
     let targetLat = null;
     let targetLng = null;
 
-    if (liveMkRef.current?.getPosition()) {
-      const pos = liveMkRef.current.getPosition();
-      targetLat = pos.lat();
-      targetLng = pos.lng();
+    if (liveMkRef.current) {
+      const pos = liveMkRef.current.getLatLng();
+      targetLat = pos.lat;
+      targetLng = pos.lng;
     } else if (allPtsRef.current.length > 0) {
       const last = allPtsRef.current[allPtsRef.current.length - 1];
       targetLat = last.lat;
@@ -1332,26 +1341,33 @@ export default function LiveTrackingMap({
     }
 
     if (targetLat && targetLng && Number.isFinite(targetLat) && Number.isFinite(targetLng)) {
-      withProgrammaticViewport(() => {
-        map.panTo({ lat: targetLat, lng: targetLng });
-        map.setZoom(18);
-      });
+      withProgrammaticViewport(() => lMap.setView([targetLat, targetLng], 18));
       toast.success("Centered on user location", { id: "locate-toast" });
     } else if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
-          withProgrammaticViewport(() => {
-            map.panTo({ lat, lng });
-            map.setZoom(18);
-          });
+          withProgrammaticViewport(() => lMap.setView([lat, lng], 18));
           toast.success("Centered on device location", { id: "locate-toast" });
         },
         () => toast.error("Could not determine current location.")
       );
     }
   }, [locateTrigger, mapLoaded, withProgrammaticViewport]);
+
+  // ── punchInPopupTrigger: pan to punch-in + open popup ─────────────────────
+  useEffect(() => {
+    if (!punchInPopupTrigger || !mapLoaded) return;
+    const lMap = leafletMapRef.current;
+    const pi = punchInLocationRef.current;
+    if (lMap && pi?.lat && pi?.lng) {
+      withProgrammaticViewport(() => {
+        lMap.setView([Number(pi.lat), Number(pi.lng)], 16, { animate: true });
+      });
+    }
+    setPunchInPopupOpen(true);
+  }, [punchInPopupTrigger, mapLoaded, withProgrammaticViewport]);
 
   const accuracyColor =
       accuracy == null ? "#94a3b8"
@@ -1423,6 +1439,61 @@ export default function LiveTrackingMap({
           : "Punch in to start tracking"}
       </div>
 
+      {/* ── Punch-in Info Popup Card ─────────────────────────────────── */}
+      {punchInPopupOpen && (() => {
+        const pi = punchInLocationRef.current;
+        const timeStr = pi?.time
+          ? new Date(pi.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          : null;
+        const addrStr = resolvedAddress ||
+          (typeof pi?.address === "string" ? pi.address : pi?.address?.full || pi?.address?.short) ||
+          null;
+        const coordStr = pi?.lat
+          ? `${Number(pi.lat).toFixed(5)}, ${Number(pi.lng).toFixed(5)}`
+          : null;
+        const bat = punchBatteryInfo?.percentage ?? null;
+        const batColor = bat === null ? "#94a3b8" : bat > 60 ? "#16a34a" : bat > 20 ? "#d97706" : "#dc2626";
+        const batBg   = bat === null ? "#f8fafc"  : bat > 60 ? "rgba(22,163,74,0.1)" : bat > 20 ? "rgba(217,119,6,0.1)" : "rgba(220,38,38,0.1)";
+        const batLabel = bat === null ? "—" : `${bat}%${punchBatteryInfo?.isCharging ? " · Charging" : ""}`;
+        return (
+          <>
+            <div onClick={() => setPunchInPopupOpen(false)}
+              style={{ position: "absolute", inset: 0, zIndex: 1999 }} />
+            <div style={{
+              position: "absolute", top: "50%", left: "50%",
+              transform: "translate(-50%, -60%)", zIndex: 2000,
+              background: "#fff", borderRadius: 16,
+              boxShadow: "0 12px 48px rgba(0,0,0,0.22)",
+              overflow: "hidden", minWidth: 240, maxWidth: 300,
+              fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+            }}>
+              <div style={{ background: "#0f1f3d", padding: "12px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 0 3px rgba(34,197,94,0.35)", flexShrink: 0 }} />
+                <span style={{ fontWeight: 700, fontSize: 14, color: "#fff", flex: 1 }}>Punched In</span>
+                {timeStr && <span style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", fontWeight: 600 }}>{timeStr}</span>}
+                <button onClick={() => setPunchInPopupOpen(false)} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%", width: 24, height: 24, cursor: "pointer", color: "#fff", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", marginLeft: 4, flexShrink: 0 }}>×</button>
+              </div>
+              <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, background: batBg, borderRadius: 10, padding: "8px 12px" }}>
+                  <span style={{ fontSize: 18 }}>{bat === null ? "🔋" : bat > 60 ? "🔋" : bat > 20 ? "🪫" : "🔴"}</span>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 1 }}>Battery</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: batColor }}>{batLabel}</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                  <span style={{ fontSize: 16, marginTop: 1, flexShrink: 0 }}>📍</span>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>Location</div>
+                    <div style={{ fontSize: 12, color: "#374151", lineHeight: 1.5 }}>{addrStr || coordStr || "Location not available"}</div>
+                    {addrStr && coordStr && <div style={{ fontSize: 10, color: "#94a3b8", fontFamily: "monospace", marginTop: 3 }}>{coordStr}</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        );
+      })()}
       {geofenceAlerts.length > 0 && (
         <div style={{
           position: "absolute", top: 50, left: 10, zIndex: 1000,
@@ -1443,6 +1514,7 @@ export default function LiveTrackingMap({
         </div>
       )}
 
+
       {accuracy != null && (
         <div style={{
           position: "absolute", top: 10, right: 10, zIndex: 1000,
@@ -1462,6 +1534,34 @@ export default function LiveTrackingMap({
         padding: 3, boxShadow: "0 1px 6px rgba(0,0,0,0.1)",
         border: "1px solid #e2e8f0", display: "flex", gap: 3, alignItems: "center",
       }}>
+        {[
+          { label: "Map", value: "roadmap" },
+          { label: "Satellite", value: "satellite" },
+          { label: "Hybrid", value: "hybrid" },
+        ].map((layer) => {
+          const active = mapTileType === layer.value;
+          return (
+            <button
+              key={layer.value}
+              type="button"
+              onClick={() => setMapTileType(layer.value)}
+              style={{
+                border: 0,
+                borderRadius: 6,
+                padding: "5px 8px",
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: "pointer",
+                color: active ? "#ffffff" : "#475569",
+                background: active ? "#0f172a" : "transparent",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {layer.label}
+            </button>
+          );
+        })}
+        <span style={{ color: "#cbd5e1" }}>|</span>
         {[
           { value: ROUTE_MODE_ROAD, label: "Road Route" },
           { value: ROUTE_MODE_RAW, label: "Raw GPS" },
@@ -1493,8 +1593,8 @@ export default function LiveTrackingMap({
           onClick={() => {
             setIsMapFullscreen((prev) => !prev);
             setTimeout(() => {
-              if (gMapRef.current && window.google?.maps) {
-                window.google.maps.event.trigger(gMapRef.current, "resize");
+              if (leafletMapRef.current) {
+                leafletMapRef.current.invalidateSize();
               }
             }, 100);
           }}
@@ -1581,6 +1681,21 @@ export default function LiveTrackingMap({
       <style>{`
         @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
         @keyframes spin { to{transform:rotate(360deg)} }
+        @keyframes radarPing { 0%{box-shadow:0 0 0 0 rgba(37,99,235,0.4)} 70%{box-shadow:0 0 0 14px rgba(37,99,235,0)} 100%{box-shadow:0 0 0 0 rgba(37,99,235,0)} }
+        .punch-in-popup .leaflet-popup-content-wrapper {
+          padding: 0;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+          border: none;
+        }
+        .punch-in-popup .leaflet-popup-content {
+          margin: 0;
+          line-height: 1;
+        }
+        .punch-in-popup .leaflet-popup-tip {
+          background: #fff;
+        }
       `}</style>
     </div>
   );

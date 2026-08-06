@@ -1,7 +1,7 @@
 const normalizeOrigin = (value) => (value || "").trim().replace(/\/+$/, "");
 
 export const API_ORIGIN = normalizeOrigin(
-  process.env.REACT_APP_API_URL || "https://solar-backend-6vaa.onrender.com"
+  process.env.REACT_APP_API_URL || "https://vanurtech-solar-backend-1.onrender.com"
 );
 
 export const LEGACY_API_ORIGINS = (process.env.REACT_APP_LEGACY_API_ORIGINS || "")

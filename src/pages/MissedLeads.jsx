@@ -243,12 +243,12 @@ const ROLE_CONFIG = {
     icon: <WorkspacePremium sx={{ fontSize: 16 }} />,
   },
   Incharge: {
-    label: "Incharge",
+    label: "Installer",
     color: PRIMARY_COLOR,
-    icon: <SupervisorAccount sx={{ fontSize: 16 }} />,
+    icon: <Groups sx={{ fontSize: 16 }} />,
   },
   TEAM: {
-    label: "Team Member",
+    label: "Installer",
     color: PRIMARY_COLOR,
     icon: <Groups sx={{ fontSize: 16 }} />,
   },

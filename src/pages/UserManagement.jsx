@@ -127,16 +127,16 @@ const ROLE_CONFIG = {
   Incharge: {
     color: PRIMARY_COLOR,
     bg: alpha(PRIMARY_COLOR, 0.08),
-    icon: <SupervisorAccount fontSize="small" />,
-    label: "Incharge",
+    icon: <Group fontSize="small" />,
+    label: "Supervisor",
     level: 3,
   },
   TEAM: {
     color: PRIMARY_COLOR,
     bg: alpha(PRIMARY_COLOR, 0.08),
     icon: <Group fontSize="small" />,
-    label: "Team Member",
-    level: 4,
+    label: "Installer",
+    level: 5,
   },
 };
 
@@ -2344,7 +2344,7 @@ const AssignManagerDialog = ({
                     No active managers found
                   </Typography>
                   <Typography variant="caption" color="text.disabled">
-                    Ensure there are active Operation Lead or Incharge users
+                    Ensure there are active Operation Lead or Installer users
                   </Typography>
                 </Box>
               ) : (
@@ -3403,7 +3403,7 @@ const UserManagement = () => {
                           !user.supervisor;
                         const canView = true;
                         const canDelete = canDeleteUsers && !isAdminRole(user.role);
-                        const displayRoleLabel = user.role === "PROJECT_HEAD" ? "Project Head" : user.role === "SUPERVISOR" ? "Supervisor" : user.role === "INSTALLER" ? "Installer" : user.role;
+                        const displayRoleLabel = user.role === "PROJECT_HEAD" || user.role === "ZSM" ? "Manager" : user.role === "SUPERVISOR" || user.role === "Incharge" ? "Supervisor" : user.role === "INSTALLER" || user.role === "TEAM" ? "Installer" : user.role === "Admin_panel" || user.role === "ADMIN" ? "Admin" : user.role;
 
                         return (
                           <TableRow

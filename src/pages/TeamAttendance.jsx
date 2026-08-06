@@ -9,6 +9,7 @@ import {
   Box, Typography, Avatar, Chip, TextField, InputAdornment, Button,
   IconButton, Tooltip, LinearProgress, Divider, CircularProgress,
   Dialog, DialogContent, DialogTitle, DialogActions, MenuItem, useTheme,
+  Switch, FormControlLabel,
 } from "@mui/material";
 import {
   Search, Refresh, AccessTime, CheckCircle, Cancel, LocationOn, Person,
@@ -674,8 +675,8 @@ const TeamAttendance = () => {
         ...result,
         officePunchInTime: normalizeClockValue(result.officePunchInTime || prev.officePunchInTime),
         officePunchOutTime: normalizeClockValue(result.officePunchOutTime || prev.officePunchOutTime),
-        blockEarlyPunchIn: true,
-        autoPunchOutEnabled: true,
+        blockEarlyPunchIn: result.blockEarlyPunchIn !== undefined ? Boolean(result.blockEarlyPunchIn) : prev.blockEarlyPunchIn,
+        autoPunchOutEnabled: result.autoPunchOutEnabled !== undefined ? Boolean(result.autoPunchOutEnabled) : prev.autoPunchOutEnabled,
       }));
     } catch (error) {
       console.error("Attendance settings fetch error:", error.message);
@@ -872,8 +873,8 @@ const TeamAttendance = () => {
           ...attendanceSettings,
           officePunchInTime: normalizeClockValue(attendanceSettings.officePunchInTime),
           officePunchOutTime: normalizeClockValue(attendanceSettings.officePunchOutTime),
-          blockEarlyPunchIn: true,
-          autoPunchOutEnabled: true,
+          blockEarlyPunchIn: Boolean(attendanceSettings.blockEarlyPunchIn),
+          autoPunchOutEnabled: Boolean(attendanceSettings.autoPunchOutEnabled),
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -883,8 +884,8 @@ const TeamAttendance = () => {
         ...result,
         officePunchInTime: normalizeClockValue(result.officePunchInTime || prev.officePunchInTime),
         officePunchOutTime: normalizeClockValue(result.officePunchOutTime || prev.officePunchOutTime),
-        blockEarlyPunchIn: true,
-        autoPunchOutEnabled: true,
+        blockEarlyPunchIn: result.blockEarlyPunchIn !== undefined ? Boolean(result.blockEarlyPunchIn) : prev.blockEarlyPunchIn,
+        autoPunchOutEnabled: result.autoPunchOutEnabled !== undefined ? Boolean(result.autoPunchOutEnabled) : prev.autoPunchOutEnabled,
       }));
       setActionMessage({ type: "success", text: "Attendance settings saved." });
       setSettingsOpen(false);
@@ -1319,6 +1320,62 @@ const TeamAttendance = () => {
                     ...prev,
                     officePunchOutTime: value,
                   }))
+                }
+              />
+
+              <Divider sx={{ my: 0.5 }} />
+
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={!attendanceSettings.blockEarlyPunchIn}
+                    onChange={(e) =>
+                      setAttendanceSettings((prev) => ({
+                        ...prev,
+                        blockEarlyPunchIn: !e.target.checked,
+                      }))
+                    }
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, fontSize: "0.85rem" }}>
+                      Allow Punch In Anytime
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: "text.secondary", display: "block", fontSize: "0.72rem" }}>
+                      {!attendanceSettings.blockEarlyPunchIn
+                        ? "Users can punch in 24/7 at any time"
+                        : `Punch in blocked before ${formatClockToAmPm(attendanceSettings.officePunchInTime)}`}
+                    </Typography>
+                  </Box>
+                }
+              />
+
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={Boolean(attendanceSettings.autoPunchOutEnabled)}
+                    onChange={(e) =>
+                      setAttendanceSettings((prev) => ({
+                        ...prev,
+                        autoPunchOutEnabled: e.target.checked,
+                      }))
+                    }
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, fontSize: "0.85rem" }}>
+                      Auto Punch Out
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: "text.secondary", display: "block", fontSize: "0.72rem" }}>
+                      {attendanceSettings.autoPunchOutEnabled
+                        ? `Auto punches out at ${formatClockToAmPm(attendanceSettings.officePunchOutTime)}`
+                        : "Auto punch-out is disabled"}
+                    </Typography>
+                  </Box>
                 }
               />
             </Box>

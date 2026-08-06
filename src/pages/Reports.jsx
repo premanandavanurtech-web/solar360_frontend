@@ -175,15 +175,15 @@ const ROLE_ACCESS = {
   },
   Incharge: {
     level: 3,
-    label: "Incharge",
-    icon: <SupervisorAccount />,
+    label: "Installer",
+    icon: <Groups />,
     canAccess: ["leads", "installation", "expenses", "attendance"],
     visibility: "team",
     description: "View own and team members' data",
   },
   TEAM: {
     level: 4,
-    label: "Team Member",
+    label: "Installer",
     icon: <Groups />,
     canAccess: ["leads", "installation", "expenses", "attendance"],
     visibility: "own",

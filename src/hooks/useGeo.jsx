@@ -6,7 +6,7 @@ import { useState, useCallback, useRef } from "react";
 const GOOGLE_API_KEY =
   (typeof process !== "undefined" && process.env?.REACT_APP_GOOGLE_MAPS_API_KEY) ||
   (typeof process !== "undefined" && process.env?.VITE_GOOGLE_MAPS_API_KEY) ||
-  "AIzaSyAqn70bioCdQL50Jj9nXsUIq0yGumoV9E8";
+  "AIzaSyDQYrvUxQPWUrpqWIy-tLg4f3DGrr4GTlg";
 
 export const useGeo = () => {
   const [state, setState] = useState({
