@@ -94,7 +94,6 @@ const emptyItem = {
   tracking: { expiryDate: "" },
   dimensions: { length: "", width: "", height: "", unit: "cm" },
   weight: { value: "", unit: "kg" },
-  purchaseInfo: { vendorName: "" },
   warehouseStock: [],
   image: null,
   reorderLevel: 10,
@@ -290,7 +289,6 @@ function InventoryERP() {
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 });
   const [warehouses, setWarehouses] = useState([]);
-  const [vendors, setVendors] = useState([]);
   const [summary, setSummary] = useState({});
   const [categoryForm, setCategoryForm] = useState(emptyCategory);
   const [itemForm, setItemForm] = useState(emptyItem);
@@ -400,6 +398,65 @@ function InventoryERP() {
     link.click();
     document.body.removeChild(link);
     showToast("Downloaded sample format CSV");
+  };
+
+  const exportCsvValue = (value) => {
+    const text = String(value ?? "");
+    return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+
+  const handleExportItems = () => {
+    const rows = visibleItems.map((item) => {
+      const stock = getAvailableStock(item);
+      return [
+        item.itemName,
+        item.sku,
+        item.category,
+        item.subcategory,
+        item.pricing?.sellingPrice ?? 0,
+        item.pricing?.purchaseCost ?? 0,
+        item.discountType || "Rs",
+        item.discount ?? 0,
+        item.hsnSacCode,
+        item.unit || "pcs",
+        stock,
+        item.reorderLevel ?? 0,
+        item.maxStockLevel ?? item.warehouseStock?.[0]?.maxStockLevel ?? "",
+        stock <= 0 ? "Out of Stock" : "Active",
+        item.description,
+      ].map(exportCsvValue).join(",");
+    });
+
+    const headers = [
+      "Item Name",
+      "SKU",
+      "Category",
+      "Subcategory",
+      "Selling Price (Rs)",
+      "Cost Price (Rs)",
+      "Discount Type",
+      "Discount",
+      "HSN/SAC Code",
+      "Unit",
+      "Available Stock",
+      "Low Stock Alert",
+      "High Stock Limit",
+      "Status",
+      "Description",
+    ].join(",");
+
+    const csv = [headers, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const date = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.setAttribute("download", `inventory_items_${date}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${rows.length} inventory items`);
   };
 
   const parseCSVText = (text) => {
@@ -834,7 +891,6 @@ function InventoryERP() {
     append("tracking", JSON.stringify(itemForm.tracking));
     append("dimensions", JSON.stringify(itemForm.dimensions));
     append("weight", JSON.stringify(itemForm.weight));
-    append("purchaseInfo", JSON.stringify(itemForm.purchaseInfo));
     if (itemForm.image) formData.append("image", itemForm.image);
     return formData;
   };
@@ -842,10 +898,6 @@ function InventoryERP() {
   const saveItem = async () => {
     if (!itemForm.itemName.trim()) {
       showToast("Item Name is required", "error");
-      return;
-    }
-    if (!itemForm.sku.trim()) {
-      showToast("SKU Code is required", "error");
       return;
     }
     if (!itemForm.category) {
@@ -872,8 +924,9 @@ function InventoryERP() {
   };
 
   const startEditItem = (item) => {
-    const purchaseInfo = item.purchaseInfo || {};
-    const vendorId = typeof purchaseInfo.vendor === "object" ? purchaseInfo.vendor?._id : purchaseInfo.vendor;
+    const stockRows = item.warehouseStock || [];
+    const primaryStock = stockRows[0] || {};
+    const currentStock = Number(item.openingStock ?? primaryStock.availableQty ?? getAvailableStock(item) ?? 0);
     setItemForm({
       ...emptyItem,
       ...item,
@@ -885,9 +938,9 @@ function InventoryERP() {
       },
       dimensions: { ...emptyItem.dimensions, ...(item.dimensions || {}) },
       weight: { ...emptyItem.weight, ...(item.weight || {}) },
-      purchaseInfo: { ...emptyItem.purchaseInfo, ...purchaseInfo, vendor: vendorId || "", vendorName: purchaseInfo.vendorName || purchaseInfo.vendor?.name || "" },
       image: item.image || null,
-      openingStock: "",
+      openingStock: Number.isFinite(currentStock) ? currentStock : "",
+      maxStockLevel: item.maxStockLevel ?? primaryStock.maxStockLevel ?? "",
     });
     setMode("create-item");
   };
@@ -1499,7 +1552,7 @@ function InventoryERP() {
                       <Field isDark={isDark} label="Item Name *" placeholder="e.g. Apple iPhone 15" value={itemForm.itemName} onChange={(value) => updateItem("itemName", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Field isDark={isDark} label="SKU / Item Code" placeholder="e.g. APL-IPH15-BLK" value={itemForm.sku} onChange={(value) => updateItem("sku", value)} />
+                      <Field isDark={isDark} label="SKU / Item Code (Optional)" placeholder="Auto-generated if blank" value={itemForm.sku} onChange={(value) => updateItem("sku", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <Field isDark={isDark} label="HSN / SAC Code" placeholder="e.g. 8471" value={itemForm.hsnSacCode} onChange={(value) => updateItem("hsnSacCode", value)} />
@@ -1797,13 +1850,13 @@ function InventoryERP() {
                   </Box>
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
-                      <Field isDark={isDark} label="Opening Stock" placeholder="e.g. 100" type="number" value={itemForm.openingStock || ""} onChange={(value) => updateItem("openingStock", value)} />
+                      <Field isDark={isDark} label="Opening Stock" placeholder="e.g. 100" type="number" value={itemForm.openingStock ?? ""} onChange={(value) => updateItem("openingStock", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <Field isDark={isDark} label="Low Stock Alert" placeholder="e.g. 10" type="number" value={itemForm.reorderLevel} onChange={(value) => updateItem("reorderLevel", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Field isDark={isDark} label="High Stock Limit" placeholder="e.g. 1000" type="number" value={itemForm.maxStockLevel || ""} onChange={(value) => updateItem("maxStockLevel", value)} />
+                      <Field isDark={isDark} label="High Stock Limit" placeholder="e.g. 1000" type="number" value={itemForm.maxStockLevel ?? ""} onChange={(value) => updateItem("maxStockLevel", value)} />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <Field isDark={isDark} label="Expiry Date" type="date" value={itemForm.tracking.expiryDate} onChange={(value) => updateItem("tracking.expiryDate", value)} InputLabelProps={{ shrink: true }} />
@@ -2127,6 +2180,15 @@ function InventoryERP() {
                 sx={{ borderColor: isDark ? "rgba(255, 255, 255, 0.15)" : "#cbd5e1", color: isDark ? "#f8fafc" : "#1e293b", fontWeight: 800 }}
               >
                 Download Format
+              </Button>
+              <Button
+                startIcon={<DownloadOutlined />}
+                variant="outlined"
+                onClick={handleExportItems}
+                disabled={!visibleItems.length}
+                sx={{ borderColor: isDark ? "rgba(34, 197, 94, 0.45)" : alpha(SUCCESS, 0.45), color: isDark ? "#4ade80" : SUCCESS, fontWeight: 800 }}
+              >
+                Export Items
               </Button>
               <Button
                 startIcon={<FileUploadOutlined />}
