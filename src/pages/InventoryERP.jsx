@@ -99,7 +99,6 @@ const emptyItem = {
   image: null,
   reorderLevel: 10,
   openingStock: "",
-  openingWarehouse: "",
   maxStockLevel: "",
 };
 
@@ -297,6 +296,8 @@ function InventoryERP() {
   const [itemForm, setItemForm] = useState(emptyItem);
   const [categoryMenuAnchor, setCategoryMenuAnchor] = useState(null);
   const [categoryMenuRow, setCategoryMenuRow] = useState(null);
+  const [viewItem, setViewItem] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({ open: false, title: "", message: "", confirmLabel: "Delete", onConfirm: null });
   const [selectedCategoryForSub, setSelectedCategoryForSub] = useState(null);
   const [subcategorySearch, setSubcategorySearch] = useState("");
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
@@ -471,15 +472,10 @@ function InventoryERP() {
     setImportingBulk(true);
     let successCount = 0;
 
-    const isValidObjectId = (id) => typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
-    let validWarehouseId = warehouses.find((w) => isValidObjectId(w?._id))?._id || "";
-
     try {
       for (const [idx, item] of parsedImportItems.entries()) {
         try {
           const finalSku = item.sku?.trim() || `SKU-${Date.now().toString().slice(-5)}-${idx + 1}`;
-          const hasValidWarehouse = isValidObjectId(item.openingWarehouse) || isValidObjectId(validWarehouseId);
-          const targetWarehouse = isValidObjectId(item.openingWarehouse) ? item.openingWarehouse : (validWarehouseId || undefined);
 
           const formData = new FormData();
           formData.append("itemName", item.itemName);
@@ -490,11 +486,7 @@ function InventoryERP() {
           formData.append("unit", item.unit || "pcs");
           formData.append("pricing", JSON.stringify(item.pricing || { sellingPrice: 0, purchaseCost: 0, taxPercent: 0 }));
           formData.append("reorderLevel", item.reorderLevel || 10);
-
-          if (hasValidWarehouse && targetWarehouse) {
-            formData.append("openingStock", item.openingStock || 0);
-            formData.append("openingWarehouse", targetWarehouse);
-          }
+          formData.append("openingStock", item.openingStock || 0);
 
           await axiosInstance.post("/inventory/items", formData, {
             headers: { "Content-Type": "multipart/form-data" },
@@ -503,8 +495,6 @@ function InventoryERP() {
         } catch (err) {
           try {
             const finalSku = item.sku?.trim() || `SKU-${Date.now().toString().slice(-5)}-${idx + 1}`;
-            const hasValidWarehouse = isValidObjectId(item.openingWarehouse) || isValidObjectId(validWarehouseId);
-            const targetWarehouse = isValidObjectId(item.openingWarehouse) ? item.openingWarehouse : (validWarehouseId || undefined);
 
             const jsonPayload = {
               itemName: item.itemName,
@@ -515,12 +505,8 @@ function InventoryERP() {
               unit: item.unit || "pcs",
               pricing: item.pricing || { sellingPrice: 0, purchaseCost: 0, taxPercent: 0 },
               reorderLevel: item.reorderLevel || 10,
+              openingStock: item.openingStock || 0,
             };
-
-            if (hasValidWarehouse && targetWarehouse) {
-              jsonPayload.openingStock = item.openingStock || 0;
-              jsonPayload.openingWarehouse = targetWarehouse;
-            }
 
             await axiosInstance.post("/inventory/items", jsonPayload);
             successCount++;
@@ -550,6 +536,20 @@ function InventoryERP() {
   const showToast = useCallback((message, severity = "success") => {
     setToast({ open: true, message, severity });
   }, []);
+
+  const openConfirmDialog = ({ title, message, confirmLabel = "Delete", onConfirm }) => {
+    setConfirmDialog({ open: true, title, message, confirmLabel, onConfirm });
+  };
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((prev) => ({ ...prev, open: false, onConfirm: null }));
+  };
+
+  const handleConfirmAction = async () => {
+    const action = confirmDialog.onConfirm;
+    closeConfirmDialog();
+    if (action) await action();
+  };
 
   const handleOpenAddCategoryModal = () => {
     setModalCategoryForm(emptyCategory);
@@ -745,14 +745,19 @@ function InventoryERP() {
 
   const deleteCategory = async (entry) => {
     closeCategoryMenu();
-    if (!window.confirm(`Delete category "${entry.category}"?`)) return;
-    try {
-      await axiosInstance.delete(`/inventory/categories/${entry._id}`);
-      showToast("Category deleted");
-      fetchAll();
-    } catch (error) {
-      showToast(error?.response?.data?.message || "Failed to delete category", "error");
-    }
+    openConfirmDialog({
+      title: "Delete Category",
+      message: `Delete category "${entry.category}"? This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await axiosInstance.delete(`/inventory/categories/${entry._id}`);
+          showToast("Category deleted");
+          fetchAll();
+        } catch (error) {
+          showToast(error?.response?.data?.message || "Failed to delete category", "error");
+        }
+      },
+    });
   };
 
   const updateCategorySubcategories = async (category, nextSubcategories) => {
@@ -798,8 +803,14 @@ function InventoryERP() {
   };
 
   const deleteSubcategory = (name) => {
-    if (!selectedCategoryForSub || !window.confirm(`Delete subcategory "${name}"?`)) return;
-    updateCategorySubcategories(selectedCategoryForSub, (selectedCategoryForSub.subcategories || []).filter((entry) => entry !== name));
+    if (!selectedCategoryForSub) return;
+    openConfirmDialog({
+      title: "Delete Subcategory",
+      message: `Delete subcategory "${name}"?`,
+      onConfirm: async () => {
+        await updateCategorySubcategories(selectedCategoryForSub, (selectedCategoryForSub.subcategories || []).filter((entry) => entry !== name));
+      },
+    });
   };
 
   const buildItemPayload = () => {
@@ -815,7 +826,6 @@ function InventoryERP() {
     append("unit", itemForm.unit);
     append("description", itemForm.description);
     append("openingStock", itemForm.openingStock);
-    append("openingWarehouse", itemForm.openingWarehouse);
     append("reorderLevel", itemForm.reorderLevel);
     append("maxStockLevel", itemForm.maxStockLevel);
     append("discountType", itemForm.discountType);
@@ -842,10 +852,6 @@ function InventoryERP() {
       showToast("Item Category is required", "error");
       return;
     }
-    if (Number(itemForm.openingStock) > 0 && !itemForm.openingWarehouse) {
-      showToast("Select a warehouse for opening stock", "error");
-      return;
-    }
     setSaving(true);
     try {
       if (itemForm._id) {
@@ -858,7 +864,8 @@ function InventoryERP() {
       showToast(itemForm._id ? "Inventory item updated" : "Inventory item created");
       fetchAll();
     } catch (error) {
-      showToast(error?.response?.data?.message || "Failed to create item", "error");
+      const message = error?.response?.data?.message || error?.response?.data?.error || error?.message || "Failed to create item";
+      showToast(message, "error");
     } finally {
       setSaving(false);
     }
@@ -881,20 +888,28 @@ function InventoryERP() {
       purchaseInfo: { ...emptyItem.purchaseInfo, ...purchaseInfo, vendor: vendorId || "", vendorName: purchaseInfo.vendorName || purchaseInfo.vendor?.name || "" },
       image: item.image || null,
       openingStock: "",
-      openingWarehouse: "",
     });
     setMode("create-item");
   };
 
+  const openItemView = (item) => {
+    setViewItem(item);
+  };
+
   const deleteItem = async (item) => {
-    if (!window.confirm(`Delete item "${item.itemName}"?`)) return;
-    try {
-      await axiosInstance.delete(`/inventory/items/${item._id}`);
-      showToast("Inventory item deleted");
-      fetchAll();
-    } catch (error) {
-      showToast(error?.response?.data?.message || "Failed to delete item", "error");
-    }
+    openConfirmDialog({
+      title: "Delete Item",
+      message: `Delete item "${item.itemName}"? This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await axiosInstance.delete(`/inventory/items/${item._id}`);
+          showToast("Inventory item deleted");
+          fetchAll();
+        } catch (error) {
+          showToast(error?.response?.data?.message || "Failed to delete item", "error");
+        }
+      },
+    });
   };
 
   const realSummaryStats = useMemo(() => {
@@ -1238,6 +1253,131 @@ function InventoryERP() {
           sx={{ bgcolor: INDIGO, fontWeight: 900, px: 3 }}
         >
           {importingBulk ? "Importing..." : `Import ${parsedImportItems.length || 0} Items`}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
+  const viewItemImageUrl = toBackendAssetUrl(viewItem?.imageUrl);
+  const viewItemStock = viewItem ? getAvailableStock(viewItem) : 0;
+  const itemViewModalNode = (
+    <Dialog
+      open={Boolean(viewItem)}
+      onClose={() => setViewItem(null)}
+      maxWidth="md"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          bgcolor: isDark ? "#0b101c" : "#ffffff",
+          color: isDark ? "#f8fafc" : "#0f172a",
+          backgroundImage: "none",
+          border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e5e7eb",
+        },
+      }}
+    >
+      <DialogTitle sx={{ m: 0, p: 2.5, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Box sx={{ width: 36, height: 36, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: alpha(BLUE, isDark ? 0.2 : 0.08), color: isDark ? "#60a5fa" : BLUE }}>
+            <VisibilityOutlined fontSize="small" />
+          </Box>
+          <Box>
+            <Typography variant="h6" fontWeight={900}>{viewItem?.itemName || "Inventory Item"}</Typography>
+            <Typography variant="caption" color={isDark ? "#94a3b8" : MUTED}>SKU: {viewItem?.sku || "-"}</Typography>
+          </Box>
+        </Stack>
+        <IconButton onClick={() => setViewItem(null)} size="small" sx={{ color: isDark ? "#94a3b8" : "inherit" }}>
+          <Close />
+        </IconButton>
+      </DialogTitle>
+      <Divider sx={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }} />
+      <DialogContent sx={{ p: 3 }}>
+        {viewItem && (
+          <Grid container spacing={2.5}>
+            <Grid item xs={12} md={4}>
+              <Box sx={{ height: 190, borderRadius: 2, overflow: "hidden", bgcolor: isDark ? "rgba(255,255,255,0.05)" : "#f8fafc", display: "grid", placeItems: "center" }}>
+                {viewItemImageUrl ? (
+                  <img src={viewItemImageUrl} alt={viewItem.itemName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <ImageOutlined sx={{ fontSize: 56, color: isDark ? "#475569" : "#cbd5e1" }} />
+                )}
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={8}>
+              <Grid container spacing={1.5}>
+                {[
+                  ["Category", viewItem.category || "-"],
+                  ["Subcategory", viewItem.subcategory || "-"],
+                  ["HSN / SAC", viewItem.hsnSacCode || "-"],
+                  ["Unit", viewItem.unit || "pcs"],
+                  ["Stock", `${viewItemStock} ${viewItem.unit || "pcs"}`],
+                  ["Low Stock Alert", viewItem.reorderLevel ?? "-"],
+                  ["Selling Price", formatCurrency(viewItem.pricing?.sellingPrice)],
+                  ["Cost Price", formatCurrency(viewItem.pricing?.purchaseCost)],
+                ].map(([label, value]) => (
+                  <Grid item xs={12} sm={6} key={label}>
+                    <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: isDark ? "rgba(255,255,255,0.04)" : "#f8fafc", border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #e5e7eb" }}>
+                      <Typography variant="caption" color={isDark ? "#94a3b8" : MUTED} fontWeight={800}>{label}</Typography>
+                      <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a", wordBreak: "break-word" }}>{value}</Typography>
+                    </Box>
+                  </Grid>
+                ))}
+              </Grid>
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="caption" color={isDark ? "#94a3b8" : MUTED} fontWeight={800}>Description</Typography>
+              <Typography sx={{ mt: 0.5, color: isDark ? "#e2e8f0" : "#334155" }}>{viewItem.description || "-"}</Typography>
+            </Grid>
+          </Grid>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5, pt: 1 }}>
+        <Button variant="outlined" onClick={() => setViewItem(null)} sx={{ borderColor: isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : "#000", fontWeight: 800 }}>
+          Close
+        </Button>
+        {viewItem && (
+          <Button variant="contained" startIcon={<EditOutlined />} onClick={() => { const item = viewItem; setViewItem(null); startEditItem(item); }} sx={{ bgcolor: INDIGO, fontWeight: 900 }}>
+            Edit Item
+          </Button>
+        )}
+      </DialogActions>
+    </Dialog>
+  );
+
+  const confirmDialogNode = (
+    <Dialog
+      open={confirmDialog.open}
+      onClose={closeConfirmDialog}
+      maxWidth="xs"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          bgcolor: isDark ? "#0b101c" : "#ffffff",
+          color: isDark ? "#f8fafc" : "#0f172a",
+          backgroundImage: "none",
+          border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e5e7eb",
+          boxShadow: isDark ? "0 24px 70px rgba(0,0,0,0.75)" : "0 24px 70px rgba(15,23,42,0.22)",
+        },
+      }}
+    >
+      <DialogTitle sx={{ m: 0, p: 2.5, display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box sx={{ width: 38, height: 38, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: alpha(DANGER, isDark ? 0.22 : 0.1), color: DANGER }}>
+          <DeleteOutline fontSize="small" />
+        </Box>
+        <Typography variant="h6" fontWeight={900}>{confirmDialog.title}</Typography>
+      </DialogTitle>
+      <DialogContent sx={{ px: 2.5, pt: 0, pb: 1 }}>
+        <Typography color={isDark ? "#cbd5e1" : "#475569"} sx={{ lineHeight: 1.6 }}>
+          {confirmDialog.message}
+        </Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 2.5, pb: 2.5, pt: 1 }}>
+        <Button variant="outlined" onClick={closeConfirmDialog} sx={{ borderColor: isDark ? "rgba(255,255,255,0.15)" : "#e5e7eb", color: isDark ? "#f8fafc" : "#0f172a", fontWeight: 800 }}>
+          Cancel
+        </Button>
+        <Button variant="contained" startIcon={<DeleteOutline />} onClick={handleConfirmAction} sx={{ bgcolor: DANGER, fontWeight: 900, "&:hover": { bgcolor: "#dc2626" } }}>
+          {confirmDialog.confirmLabel}
         </Button>
       </DialogActions>
     </Dialog>
@@ -2242,6 +2382,11 @@ function InventoryERP() {
                             </Typography>
                           </Box>
                           <Stack direction="row" spacing={0.5}>
+                            <Tooltip title="View">
+                              <IconButton size="small" onClick={() => openItemView(item)} sx={{ color: isDark ? "#60a5fa" : BLUE }}>
+                                <VisibilityOutlined fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
                             <Tooltip title="Edit">
                               <IconButton size="small" onClick={() => startEditItem(item)} sx={{ color: isDark ? "#60a5fa" : BLUE }}>
                                 <EditOutlined fontSize="small" />
@@ -2264,23 +2409,34 @@ function InventoryERP() {
             <TableCard
               isDark={isDark}
               columns={["", "Item", "Category", "Price", "HSN/SAC", "Unit", "Stock", "Status", "Actions"]}
+              columnSx={[
+                { width: 44, textAlign: "center", px: 1 },
+                { width: "20%" },
+                { width: "24%" },
+                { width: "11%" },
+                { width: "9%" },
+                { width: "7%" },
+                { width: "8%" },
+                { width: "8%" },
+                { width: "13%", textAlign: "right", pr: 1.5 },
+              ]}
               rows={visibleItems.map((item) => {
                 const stock = getAvailableStock(item);
                 const imageUrl = toBackendAssetUrl(item.imageUrl);
                 return [
-                  <Checkbox size="small" sx={{ color: isDark ? "#64748b" : undefined }} />,
-                  <Stack direction="row" spacing={1.5} alignItems="center">
-                    <Box sx={{ width: 50, height: 42, borderRadius: 1.5, bgcolor: isDark ? "rgba(255,255,255,0.05)" : "#f8fafc", display: "grid", placeItems: "center", color: isDark ? "#64748b" : "#94a3b8" }}>
+                  <Checkbox size="small" sx={{ p: 0, color: isDark ? "#64748b" : undefined }} />,
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+                    <Box sx={{ width: 46, height: 42, flex: "0 0 auto", borderRadius: 1.5, bgcolor: isDark ? "rgba(255,255,255,0.05)" : "#f8fafc", display: "grid", placeItems: "center", color: isDark ? "#64748b" : "#94a3b8", overflow: "hidden" }}>
                       {imageUrl ? <img src={imageUrl} alt={item.itemName} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} /> : <ImageOutlined />}
                     </Box>
-                    <Box>
-                      <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{item.itemName}</Typography>
-                      <Typography variant="body2" color={isDark ? "#94a3b8" : MUTED}>{item.description || item.sku}</Typography>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography fontWeight={900} noWrap sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{item.itemName}</Typography>
+                      <Typography variant="body2" noWrap color={isDark ? "#94a3b8" : MUTED}>{item.description || item.sku}</Typography>
                     </Box>
                   </Stack>,
-                  <Stack direction="row" spacing={0.7}>
-                    <Chip size="small" label={item.category || "-"} sx={{ bgcolor: alpha(BLUE, isDark ? 0.25 : 0.12), color: isDark ? "#60a5fa" : BLUE }} />
-                    {item.subcategory && <Chip size="small" label={item.subcategory} sx={{ bgcolor: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9", color: isDark ? "#cbd5e1" : "inherit" }} />}
+                  <Stack direction="row" spacing={0.7} alignItems="center" sx={{ minWidth: 0, maxWidth: "100%" }}>
+                    <Chip size="small" label={item.category || "-"} sx={{ maxWidth: "54%", bgcolor: alpha(BLUE, isDark ? 0.25 : 0.12), color: isDark ? "#60a5fa" : BLUE, "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" } }} />
+                    {item.subcategory && <Chip size="small" label={item.subcategory} sx={{ maxWidth: "44%", bgcolor: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9", color: isDark ? "#cbd5e1" : "inherit", "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" } }} />}
                   </Stack>,
                   <Box>
                     <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{formatCurrency(item.pricing?.sellingPrice)}</Typography>
@@ -2288,12 +2444,12 @@ function InventoryERP() {
                   </Box>,
                   <Typography variant="body2" sx={{ color: isDark ? "#e2e8f0" : "inherit" }}>{item.hsnSacCode || "-"}</Typography>,
                   <Typography variant="body2" sx={{ color: isDark ? "#e2e8f0" : "inherit" }}>{item.unit || "pcs"}</Typography>,
-                  <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>{stock} {item.unit || "pcs"}</Typography>,
+                  <Typography fontWeight={900} sx={{ color: isDark ? "#f8fafc" : "#0f172a", whiteSpace: "nowrap" }}>{stock} {item.unit || "pcs"}</Typography>,
                   <Chip size="small" label={stock <= 0 ? "Out" : "Active"} sx={{ bgcolor: alpha(stock <= 0 ? DANGER : SUCCESS, isDark ? 0.25 : 0.12), color: stock <= 0 ? DANGER : isDark ? "#4ade80" : SUCCESS, fontWeight: 800 }} />,
-                  <Stack direction="row" spacing={0.5}>
-                    <Tooltip title="View"><IconButton size="small" sx={{ color: isDark ? "#60a5fa" : BLUE }}><VisibilityOutlined fontSize="small" /></IconButton></Tooltip>
-                    <Tooltip title="Edit"><IconButton size="small" onClick={() => startEditItem(item)} sx={{ color: isDark ? "#60a5fa" : BLUE }}><EditOutlined fontSize="small" /></IconButton></Tooltip>
-                    <Tooltip title="Delete"><IconButton size="small" onClick={() => deleteItem(item)} sx={{ color: DANGER }}><DeleteOutline fontSize="small" /></IconButton></Tooltip>
+                  <Stack direction="row" spacing={0.25} justifyContent="flex-end" alignItems="center">
+                    <Tooltip title="View"><IconButton size="small" onClick={() => openItemView(item)} sx={{ color: isDark ? "#60a5fa" : BLUE, p: 0.75 }}><VisibilityOutlined fontSize="small" /></IconButton></Tooltip>
+                    <Tooltip title="Edit"><IconButton size="small" onClick={() => startEditItem(item)} sx={{ color: isDark ? "#60a5fa" : BLUE, p: 0.75 }}><EditOutlined fontSize="small" /></IconButton></Tooltip>
+                    <Tooltip title="Delete"><IconButton size="small" onClick={() => deleteItem(item)} sx={{ color: DANGER, p: 0.75 }}><DeleteOutline fontSize="small" /></IconButton></Tooltip>
                   </Stack>,
                 ];
               })}
@@ -2369,18 +2525,20 @@ function InventoryERP() {
       {categoryModalNode}
       {subCategoryModalNode}
       {importModalNode}
+      {itemViewModalNode}
+      {confirmDialogNode}
       {toastSnackbarNode}
     </Box>
   );
 }
 
-const TableCard = ({ columns, rows, empty, isDark = false }) => (
+const TableCard = ({ columns, rows, empty, isDark = false, columnSx = [] }) => (
   <TableContainer component={Paper} sx={{ ...getSoftCard(isDark), overflow: "hidden" }}>
-    <Table>
+    <Table sx={{ tableLayout: "fixed", width: "100%" }}>
       <TableHead sx={{ bgcolor: isDark ? "#121929" : "#f8f8f9" }}>
         <TableRow>
-          {columns.map((column) => (
-            <TableCell key={column} sx={{ py: 2, color: isDark ? "#cbd5e1" : "#596275", fontWeight: 900, textTransform: "uppercase", fontSize: 12, borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined }}>
+          {columns.map((column, index) => (
+            <TableCell key={column} sx={{ py: 2, px: 1.25, color: isDark ? "#cbd5e1" : "#596275", fontWeight: 900, textTransform: "uppercase", fontSize: 12, borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : undefined, verticalAlign: "middle", ...columnSx[index] }}>
               {column}
             </TableCell>
           ))}
@@ -2395,9 +2553,9 @@ const TableCard = ({ columns, rows, empty, isDark = false }) => (
           </TableRow>
         ) : (
           rows.map((row, index) => (
-            <TableRow key={index} hover sx={{ "&:hover": { bgcolor: isDark ? "rgba(255,255,255,0.03) !important" : undefined } }}>
+            <TableRow key={index} hover sx={{ height: 76, "&:hover": { bgcolor: isDark ? "rgba(255,255,255,0.03) !important" : undefined } }}>
               {row.map((cell, cellIndex) => (
-                <TableCell key={`${index}-${cellIndex}`} sx={{ py: 2.2, borderBottom: isDark ? "1px solid rgba(255,255,255,0.05)" : undefined, color: isDark ? "#e2e8f0" : undefined }}>
+                <TableCell key={`${index}-${cellIndex}`} sx={{ py: 1.5, px: 1.25, borderBottom: isDark ? "1px solid rgba(255,255,255,0.05)" : undefined, color: isDark ? "#e2e8f0" : undefined, verticalAlign: "middle", overflow: "hidden", ...columnSx[cellIndex] }}>
                   {cell}
                 </TableCell>
               ))}
