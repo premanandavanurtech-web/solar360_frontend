@@ -102,6 +102,7 @@ export const buildQuotationRecord = ({
   sectionsToShow = [],
   installationSteps = [],
   termsGroups = [],
+  testimonials = [],
 }) => {
   const quotations = loadQuotationLibrary();
   const now = new Date().toISOString();
@@ -109,7 +110,7 @@ export const buildQuotationRecord = ({
   const issueDate = new Date(createdAt);
   const quotationYear = Number.isNaN(issueDate.getTime()) ? new Date().getFullYear() : issueDate.getFullYear();
   const nextSequence = getQuotationSequenceForYear(quotations, quotationYear) + 1;
-  const leadName = resolveLeadName(lead || existingQuotation?.lead, quotationTitle);
+  const leadName = form?.customerName || resolveLeadName(lead || existingQuotation?.lead, quotationTitle);
 
   return {
     ...existingQuotation,
@@ -117,7 +118,7 @@ export const buildQuotationRecord = ({
     quotationNumber:
       existingQuotation?.quotationNumber ||
       `QT-${String(nextSequence).padStart(4, "0")}/${quotationYear}`,
-    quotationTitle: quotationTitle || existingQuotation?.quotationTitle || leadName,
+    quotationTitle: form?.customerName || quotationTitle || existingQuotation?.quotationTitle || leadName,
     lead: lead || existingQuotation?.lead || null,
     leadId: lead?._id || existingQuotation?.leadId || existingQuotation?.lead?._id || "",
     leadName,
@@ -126,10 +127,11 @@ export const buildQuotationRecord = ({
     sectionsToShow,
     installationSteps,
     termsGroups,
+    testimonials,
     totalCost: toFiniteNumber(form?.totalCost),
     systemSize: toFiniteNumber(form?.systemSize),
     status: existingQuotation?.status || "draft",
-    validityDays: existingQuotation?.validityDays || QUOTATION_VALIDITY_DAYS,
+    validityDays: toFiniteNumber(form?.validityDays) || existingQuotation?.validityDays || QUOTATION_VALIDITY_DAYS,
     createdAt,
     savedAt: now,
   };

@@ -18,6 +18,7 @@ import {
   TextField,
   Typography,
   alpha,
+  useTheme,
 } from "@mui/material";
 import {
   CheckCircle,
@@ -188,6 +189,8 @@ const getUserName = (user) => {
 };
 
 export default function LeaveManagement() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const { fetchAPI, user } = useAuth();
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -452,13 +455,18 @@ export default function LeaveManagement() {
                             sx={{
                               width: 170,
                               "& .MuiOutlinedInput-root": {
-                                bgcolor: "#080c16",
-                                color: COLOR.text,
+                                bgcolor: isDark ? "rgba(255, 255, 255, 0.05)" : "#f8fafc",
+                                color: isDark ? "#f8fafc" : "#0f172a",
                                 borderRadius: "8px",
                                 fontSize: "0.78rem",
                                 height: 32,
-                                "& fieldset": { borderColor: "rgba(255, 255, 255, 0.12)" },
-                                "&:hover fieldset": { borderColor: "rgba(255, 255, 255, 0.2)" },
+                                "& fieldset": { borderColor: isDark ? "rgba(255, 255, 255, 0.15)" : "#cbd5e1" },
+                                "&:hover fieldset": { borderColor: isDark ? "rgba(255, 255, 255, 0.3)" : "#94a3b8" },
+                                "&.Mui-focused fieldset": { borderColor: "#3b82f6" },
+                                "& input::placeholder": {
+                                  color: isDark ? "#64748b" : "#94a3b8",
+                                  opacity: 1,
+                                },
                               },
                             }}
                           />

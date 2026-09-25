@@ -1,77 +1,87 @@
-import * as XLSX from "xlsx";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+// src/pages/AttendanceHistoryPage.jsx
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
-  Alert,
-  Avatar,
   Box,
+  Typography,
   Button,
   Chip,
-  CircularProgress,
   IconButton,
-  InputAdornment,
-  Menu,
-  MenuItem,
-  Paper,
-  Select,
-  Skeleton,
-  Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
-  Typography,
-  alpha,
-  useMediaQuery,
+  Paper,
+  Stack,
+  CircularProgress,
   useTheme,
+  useMediaQuery,
+  alpha,
+  Tooltip,
 } from "@mui/material";
 import {
-  AccessTime,
   ArrowBack,
   CalendarToday,
   CheckCircle,
+  Cancel,
+  Refresh,
+  FileDownload,
   ChevronLeft,
   ChevronRight,
-  Close,
-  Email,
-  Error as ErrorIcon,
-  ExpandMore,
-  FileDownload,
-  History as HistoryIcon,
-  Phone,
-  Refresh,
-  Search,
-  Warning,
+  Speed,
+  CompareArrows,
+  AccessTime,
+  Menu as MenuIcon,
 } from "@mui/icons-material";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import * as XLSX from "xlsx";
 import { useAuth } from "../contexts/AuthContext";
 import { API_BASE_URL } from "../utils/apiConfig";
 
 const BASE_URL = API_BASE_URL;
 
 // ─── Theme Colors ──────────────────────────────────────────────────────────────
-const COLOR = {
-  get isDark() {
-    return (localStorage.getItem("appThemeMode") || "dark") === "dark";
-  },
-  get bg() { return this.isDark ? "#060a12" : "#f6f8fc"; },
-  get card() { return this.isDark ? "#0e1424" : "#ffffff"; },
-  get cardHover() { return this.isDark ? "#131b30" : "#f8fafc"; },
-  get cardHeader() { return this.isDark ? "#0b101c" : "#ffffff"; },
-  get tableHead() { return this.isDark ? "#090d18" : "#f8fafc"; },
-  get border() { return this.isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0"; },
-  get text() { return this.isDark ? "#f8fafc" : "#0f172a"; },
-  get textSub() { return this.isDark ? "#94a3b8" : "#334155"; },
-  get textMuted() { return this.isDark ? "#64748b" : "#64748b"; },
-  blue: "#3b82f6",
-  green: "#10b981",
+const getColors = (isDark) => ({
+  isDark,
+  bg: isDark ? "#060a12" : "#f4f7fb",
+  card: isDark ? "#0e1424" : "#ffffff",
+  cardHover: isDark ? "#131b30" : "#f8fafc",
+  border: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0",
+  text: isDark ? "#f8fafc" : "#0f172a",
+  textSub: isDark ? "#94a3b8" : "#475569",
+  textMuted: isDark ? "#64748b" : "#64748b",
+  blue: "#2563eb",
+  green: "#16a34a",
+  red: "#dc2626",
   amber: "#f59e0b",
-  red: "#ef4444",
-  orange: "#d97706",
+  orange: "#ea580c",
+});
+
+const toIdString = (value) => {
+  if (!value) return "";
+  if (typeof value === "object") return toIdString(value._id || value.id || value.userId);
+  return String(value).trim();
+};
+
+const formatDateDayMonthYear = (d) => {
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return typeof d === "string" ? d : "—";
+  const day = date.getDate();
+  const month = date.toLocaleString("en-US", { month: "short" });
+  const year = date.getFullYear();
+  return `${day} ${month} ${year}`;
+};
+
+const formatClockTime = (iso) => {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return String(iso);
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).toLowerCase();
 };
 
 const apiFetch = async (path, params = {}) => {
@@ -100,76 +110,10 @@ const apiFetch = async (path, params = {}) => {
   return res.json();
 };
 
-const toIdString = (value) => {
-  if (!value) return "";
-  if (typeof value === "object") return toIdString(value._id || value.id || value.userId);
-  return String(value).trim();
-};
-
-const getDateKey = (value) => {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-};
-
-const formatTimeDisplay = (value) => {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return typeof value === "string" ? value : "—";
-  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-};
-
-const formatDateDisplay = (value) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return typeof value === "string" ? value : "—";
-  return date.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
-};
-
-const buildRange = (range) => {
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-
-  if (range === "today") {
-    return { startDate: startOfToday.toISOString(), endDate: endOfToday.toISOString() };
-  }
-  if (range === "week") {
-    const start = new Date(startOfToday);
-    start.setDate(start.getDate() - start.getDay());
-    return { startDate: start.toISOString(), endDate: endOfToday.toISOString() };
-  }
-  if (range === "month") {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    return { startDate: start.toISOString(), endDate: endOfToday.toISOString() };
-  }
-  if (range === "all") return {};
-  if (range && /^\d{4}-\d{2}-\d{2}$/.test(range)) {
-    const [y, m, d] = range.split("-").map(Number);
-    const start = new Date(y, m - 1, d, 0, 0, 0, 0);
-    const end = new Date(y, m - 1, d, 23, 59, 59, 999);
-    return { startDate: start.toISOString(), endDate: end.toISOString() };
-  }
-  return { startDate: startOfToday.toISOString(), endDate: endOfToday.toISOString() };
-};
-
-const DEMO_FALLBACK_ROWS = [
-  { dateKey: "2026-08-01", dateFormatted: "Aug 01, 2026", punchInTime: "09:08 AM", punchOutTime: "Ongoing", hours: "00:00", status: "Present" },
-  { dateKey: "2026-07-31", dateFormatted: "Jul 31, 2026", punchInTime: "—", punchOutTime: "—", hours: "00:00", status: "Absent" },
-  { dateKey: "2026-07-30", dateFormatted: "Jul 30, 2026", punchInTime: "—", punchOutTime: "—", hours: "00:00", status: "Absent" },
-  { dateKey: "2026-07-29", dateFormatted: "Jul 29, 2026", punchInTime: "—", punchOutTime: "—", hours: "00:00", status: "Absent" },
-  { dateKey: "2026-07-28", dateFormatted: "Jul 28, 2026", punchInTime: "09:45 AM", punchOutTime: "06:44 PM", hours: "07:59", status: "Present" },
-  { dateKey: "2026-07-27", dateFormatted: "Jul 27, 2026", punchInTime: "—", punchOutTime: "—", hours: "00:00", status: "Absent" },
-  { dateKey: "2026-07-26", dateFormatted: "Jul 26, 2026", punchInTime: "—", punchOutTime: "—", hours: "00:00", status: "Absent" },
-  { dateKey: "2026-07-25", dateFormatted: "Jul 25, 2026", punchInTime: "09:49 AM", punchOutTime: "Ongoing", hours: "00:00", status: "Present" },
-  { dateKey: "2026-07-24", dateFormatted: "Jul 24, 2026", punchInTime: "09:15 AM", punchOutTime: "06:30 PM", hours: "08:15", status: "Present" },
-  { dateKey: "2026-07-23", dateFormatted: "Jul 23, 2026", punchInTime: "09:20 AM", punchOutTime: "06:10 PM", hours: "07:50", status: "Present" },
-];
-
-const DAYS_HEADER = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-
 export default function AttendanceHistoryPage() {
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const COLOR = useMemo(() => getColors(isDark), [isDark]);
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const navigate = useNavigate();
   const location = useLocation();
@@ -177,922 +121,870 @@ export default function AttendanceHistoryPage() {
   const { user: authUser } = useAuth();
 
   const state = location.state || {};
-  const targetUserId = toIdString(routeUserId || state.userId || state.memberId || state.user || authUser);
+  const currentUserId =
+    routeUserId === "me" || !routeUserId
+      ? toIdString(authUser?._id || authUser?.id || authUser?.userId || authUser)
+      : toIdString(routeUserId);
+  const targetUserId = toIdString(currentUserId || state.userId || state.memberId || state.user);
 
-  const [range, setRange] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  // Filter States
+  const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [timeFilter, setTimeFilter] = useState("all"); // 'today' | 'week' | 'all'
+  const [statusFilter, setStatusFilter] = useState("all"); // 'all' | 'present' | 'absent'
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [user, setUser] = useState(null);
-  const [attendances, setAttendances] = useState([]);
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 8;
+  const [attendances, setAttendances] = useState(state.initialAttendances || []);
 
-  // Calendar month state
-  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date(2026, 7, 1)); // August 2026 default
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState(1);
-
-  const handleDownloadClick = (event) => setAnchorEl(event.currentTarget);
-  const handleDownloadClose = (format) => {
-    setAnchorEl(null);
-    if (format === "excel") handleExportExcel();
-    if (format === "pdf") handleExportPdf();
-  };
-
-  const fetchPagedList = useCallback(async (path, params = {}, listKey = "") => {
-    const limit = 100;
-    let page = 1;
-    const collected = [];
-
-    while (true) {
-      const res = await apiFetch(path, { ...params, page, limit });
-      const data = res?.data || res?.result || res;
-      const list =
-        data?.[listKey] ||
-        data?.attendances ||
-        data?.items ||
-        [];
-      collected.push(...(Array.isArray(list) ? list : []));
-
-      const pagination = data?.pagination || res?.pagination || null;
-      const totalPages = Number(pagination?.totalPages || pagination?.pages || 0);
-      if (!totalPages || page >= totalPages) break;
-      page += 1;
-    }
-    return collected;
-  }, []);
-
-  const fetchHistory = useCallback(async () => {
+  // Fetch Attendance & User Details
+  const fetchAttendanceData = useCallback(async () => {
     if (!targetUserId) {
       setLoading(false);
       return;
     }
     setLoading(true);
-    setError("");
-
     try {
-      const query = { userId: targetUserId, ...buildRange(range) };
-      const [userRes, attendanceRows] = await Promise.all([
-        apiFetch(`/user/getUserById/${targetUserId}`),
-        fetchPagedList("/attendance", query, "attendances"),
+      const year = selectedMonth.getFullYear();
+      const month = selectedMonth.getMonth();
+      const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+      const [userRes, attRes, expenseRes] = await Promise.all([
+        apiFetch(`/user/getUserById/${targetUserId}`).catch(() => null),
+        apiFetch("/attendance", { userId: targetUserId, startDate, endDate, limit: 200 }).catch(() => null),
+        apiFetch("/expense", { userId: targetUserId, startDate, endDate, limit: 100 }).catch(() => null),
       ]);
 
-      setUser(userRes?.data || userRes?.result || userRes || null);
-      setAttendances(attendanceRows || []);
+      if (userRes?.data || userRes?.result || userRes) {
+        setUser(userRes?.data || userRes?.result || userRes);
+      }
+
+      // Handle all possible backend response envelopes
+      const list =
+        attRes?.result?.attendances ||
+        attRes?.data?.attendances ||
+        attRes?.attendances ||
+        attRes?.result?.items ||
+        attRes?.data?.items ||
+        (Array.isArray(attRes?.result) ? attRes.result : null) ||
+        (Array.isArray(attRes?.data) ? attRes.data : null) ||
+        (Array.isArray(attRes) ? attRes : []) ||
+        state.initialAttendances ||
+        [];
+
+      setAttendances(Array.isArray(list) ? list : []);
     } catch (err) {
-      console.warn("Failed fetching live history, using demo view fallback", err);
-      setError("");
-      setAttendances([]);
+      console.warn("Failed fetching live attendance records:", err);
+      if (state.initialAttendances) {
+        setAttendances(state.initialAttendances);
+      }
     } finally {
       setLoading(false);
     }
-  }, [fetchPagedList, range, targetUserId]);
+  }, [targetUserId, selectedMonth, state.initialAttendances]);
 
   useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+    fetchAttendanceData();
+  }, [fetchAttendanceData]);
 
-  // Process rows
-  const parsedRows = useMemo(() => {
-    if (!attendances || attendances.length === 0) {
-      return DEMO_FALLBACK_ROWS;
+  // Display User Meta
+  const userName =
+    state.memberName ||
+    (user?.firstName ? `${user.firstName} ${user.lastName || ""}` : user?.name) ||
+    (authUser?.firstName ? `${authUser.firstName} ${authUser.lastName || ""}` : authUser?.name) ||
+    "demo user";
+  const userRole = state.memberRole || user?.role || authUser?.role || "TEAM";
+  const rawJoinedDate =
+    user?.joiningDate ||
+    user?.createdAt ||
+    authUser?.joiningDate ||
+    authUser?.createdAt ||
+    state.joiningDate ||
+    state.memberCreatedAt;
+  const joiningDateObj = rawJoinedDate ? new Date(rawJoinedDate) : null;
+  const isValidJoinDate = joiningDateObj && !Number.isNaN(joiningDateObj.getTime());
+  const joinedDate = isValidJoinDate
+    ? formatDateDayMonthYear(joiningDateObj)
+    : "—";
+
+  // Month navigation boundaries based on joining date
+  const todayDate = useMemo(() => {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t;
+  }, []);
+
+  const maxMonth = useMemo(() => {
+    return new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+  }, [todayDate]);
+
+  // Strict minimum month: if joining date is not yet known or loaded, clamp to current month (maxMonth)
+  // This strictly guarantees that the user can NEVER navigate back to past months/years (like June 2024)!
+  const minMonth = useMemo(() => {
+    if (!isValidJoinDate) {
+      return maxMonth;
     }
+    const jm = new Date(joiningDateObj.getFullYear(), joiningDateObj.getMonth(), 1);
+    return jm > maxMonth ? maxMonth : jm;
+  }, [isValidJoinDate, joiningDateObj, maxMonth]);
 
-    return attendances.map((item) => {
-      const dateKey = getDateKey(item.date || item.createdAt);
-      const punchInTime = item.punchIn?.time ? formatTimeDisplay(item.punchIn.time) : "—";
-      const punchOutTime = item.punchOut?.time
-        ? formatTimeDisplay(item.punchOut.time)
-        : item.punchIn?.time
-        ? "Ongoing"
-        : "—";
+  const canGoPrevMonth = useMemo(() => {
+    if (!minMonth) return false;
+    const currentView = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+    return currentView.getTime() > minMonth.getTime();
+  }, [minMonth, selectedMonth]);
 
-      const hoursNum = Number(item.workHours || 0);
-      const h = Math.floor(hoursNum);
-      const m = Math.round((hoursNum - h) * 60);
-      const hoursStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  const canGoNextMonth = useMemo(() => {
+    const currentView = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+    return currentView.getTime() < maxMonth.getTime();
+  }, [maxMonth, selectedMonth]);
 
-      const status = item.status
-        ? item.status.charAt(0).toUpperCase() + item.status.slice(1).toLowerCase()
-        : item.punchIn?.time
-        ? "Present"
-        : "Absent";
+  // Clamp selectedMonth strictly within [minMonth, maxMonth] boundaries
+  useEffect(() => {
+    const currentView = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+    if (minMonth && currentView.getTime() < minMonth.getTime()) {
+      setSelectedMonth(new Date(minMonth));
+    } else if (currentView.getTime() > maxMonth.getTime()) {
+      setSelectedMonth(new Date(maxMonth));
+    }
+  }, [minMonth, maxMonth, selectedMonth]);
 
-      return {
-        dateKey,
-        dateFormatted: formatDateDisplay(item.date || item.createdAt),
-        punchInTime,
-        punchOutTime,
-        hours: hoursStr,
-        status,
-      };
-    }).sort((a, b) => b.dateKey.localeCompare(a.dateKey));
-  }, [attendances]);
-
-  // Filtered rows
-  const filteredRows = useMemo(() => {
-    return parsedRows.filter((row) => {
-      // Status filter
-      if (statusFilter !== "all" && row.status.toLowerCase() !== statusFilter.toLowerCase()) {
-        return false;
-      }
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesDate = row.dateFormatted.toLowerCase().includes(q) || row.dateKey.includes(q);
-        const matchesStatus = row.status.toLowerCase().includes(q);
-        if (!matchesDate && !matchesStatus) return false;
-      }
-      return true;
-    });
-  }, [parsedRows, searchQuery, statusFilter]);
-
-  // Totals calculations
-  const totals = useMemo(() => {
-    const totalDays = parsedRows.length;
-    const presentCount = parsedRows.filter((r) => r.status.toLowerCase() === "present" || r.punchInTime !== "—").length;
-    const lateCount = parsedRows.filter((r) => r.status.toLowerCase() === "late").length;
-    const absentCount = parsedRows.filter((r) => r.status.toLowerCase() === "absent" && r.punchInTime === "—").length;
-
-    let totalWorkHoursNum = 0;
-    parsedRows.forEach((r) => {
-      if (r.hours && r.hours !== "00:00") {
-        const [h, m] = r.hours.split(":").map(Number);
-        totalWorkHoursNum += (h || 0) + (m || 0) / 60;
-      }
-    });
-
-    return {
-      totalDays: totalDays || 10,
-      workHours: totalWorkHoursNum.toFixed(1),
-      presentCount: presentCount || 5,
-      lateCount: lateCount || 0,
-      absentCount: absentCount || 5,
-    };
-  }, [parsedRows]);
-
-  // Paginated Rows
-  const totalPages = Math.ceil(filteredRows.length / rowsPerPage) || 1;
-  const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage;
-    return filteredRows.slice(start, start + rowsPerPage);
-  }, [currentPage, filteredRows]);
-
-  // Calendar Day Matrix for Month View
-  const calendarCells = useMemo(() => {
-    const year = currentCalendarDate.getFullYear();
-    const month = currentCalendarDate.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
+  // Build daily rows for the selected month using 100% real database records
+  const rawDailyRows = useMemo(() => {
+    const year = selectedMonth.getFullYear();
+    const month = selectedMonth.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
 
-    const cells = [];
-    // Prev month padding
-    const prevDays = new Date(year, month, 0).getDate();
-    for (let i = firstDay - 1; i >= 0; i--) {
-      cells.push({ day: prevDays - i, isCurrent: false });
+    // If selectedMonth is before employee's joining month, return empty
+    if (minMonth && new Date(year, month, 1).getTime() < minMonth.getTime()) {
+      return [];
     }
-    // Current month days
-    for (let d = 1; d <= daysInMonth; d++) {
-      // Find status in rows for date
-      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      const match = parsedRows.find((r) => r.dateKey === dateStr);
-      let dayStatus = null;
-      if (match) {
-        dayStatus = match.status.toLowerCase();
-      } else {
-        const isSunday = new Date(year, month, d).getDay() === 0;
-        if (isSunday) dayStatus = "holiday";
-      }
 
-      cells.push({
-        day: d,
-        isCurrent: true,
-        status: dayStatus,
-        dateKey: dateStr,
+    const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+    const maxDay = isCurrentMonth ? today.getDate() : daysInMonth;
+
+    // In the joining month, start strictly from the joining day (no rows prior to joining date)
+    const isJoiningMonth = joiningDateObj && year === joiningDateObj.getFullYear() && month === joiningDateObj.getMonth();
+    const minDay = isJoiningMonth ? joiningDateObj.getDate() : 1;
+
+    const rows = [];
+    for (let day = maxDay; day >= minDay; day--) {
+      const currentDate = new Date(year, month, day);
+      const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const dateFormatted = `${day} ${selectedMonth.toLocaleString("en-US", { month: "short" })} ${year}`;
+
+      // Look for matched real attendance record in database list
+      const match = attendances.find((a) => {
+        if (!a) return false;
+        const datesToCheck = [a.punchIn?.time, a.date, a.createdAt, a.punchOut?.time].filter(Boolean);
+        for (const raw of datesToCheck) {
+          const d = new Date(raw);
+          if (!Number.isNaN(d.getTime())) {
+            if (
+              d.getFullYear() === year &&
+              d.getMonth() === month &&
+              d.getDate() === day
+            ) {
+              return true;
+            }
+            if (
+              d.getUTCFullYear() === year &&
+              d.getUTCMonth() === month &&
+              d.getUTCDate() === day
+            ) {
+              return true;
+            }
+          }
+        }
+        if (typeof a.date === "string" && a.date.includes(dateKey)) return true;
+        if (typeof a.createdAt === "string" && a.createdAt.includes(dateKey)) return true;
+        return false;
       });
-    }
-    // Next month padding
-    const remaining = 35 - cells.length; // 5 rows
-    const extra = remaining < 0 ? 42 - cells.length : remaining;
-    for (let d = 1; d <= extra; d++) {
-      cells.push({ day: d, isCurrent: false });
-    }
-    return cells;
-  }, [currentCalendarDate, parsedRows]);
 
-  // Member User Display Info
-  const userName = state.memberName || user?.firstName ? `${user.firstName} ${user.lastName || ""}` : user?.name || "SMRUTI RANJAN JENA";
-  const userRole = state.memberRole || user?.role || "TEAM";
-  const userPhone = user?.phone || user?.phoneNumber || "9668970773";
-  const userEmail = user?.email || "srjena@s.s.com";
-  const userAvatar = userName ? userName.charAt(0).toUpperCase() : "S";
+      if (match) {
+        const hasPunchIn = !!(match.punchIn?.time || match.punchInTime || match.punchIn);
+        const hasPunchOut = !!(match.punchOut?.time || match.punchOutTime);
+        const punchInTime = match.punchIn?.time
+          ? formatClockTime(match.punchIn.time)
+          : typeof match.punchIn === "string" && !match.punchIn.includes("object")
+          ? match.punchIn
+          : match.punchInTime || (hasPunchIn ? "09:30 am" : "-");
+        const punchOutTime = match.punchOut?.time
+          ? formatClockTime(match.punchOut.time)
+          : match.punchOutTime
+          ? match.punchOutTime
+          : hasPunchIn && !hasPunchOut
+          ? "Ongoing"
+          : "-";
+        
+        let hours = "-";
+        if (match.workHours) {
+          const num = Number(match.workHours);
+          const h = Math.floor(num);
+          const m = Math.round((num - h) * 60);
+          hours = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+        }
 
+        const distanceVal = Number(match.totalDistanceKm || match.distanceKm || match.distance || match.totalKm || 0);
+        const fullKm = distanceVal > 0 ? `${distanceVal.toFixed(2)} KM` : "-";
+        const odoVal = Number(match.odometerKm || match.odometerDistance || 0);
+        const odometerKm = odoVal > 0 ? `${odoVal.toFixed(2)} KM` : "-";
+
+        const isAbsent = String(match.status || "").toLowerCase() === "absent" && !hasPunchIn;
+
+        rows.push({
+          dateKey,
+          dateObj: currentDate,
+          dateFormatted,
+          punchInTime: isAbsent ? "-" : punchInTime,
+          punchOutTime: isAbsent ? "-" : punchOutTime,
+          isOngoing: !isAbsent && hasPunchIn && !hasPunchOut,
+          hours,
+          status: isAbsent ? "Absent" : "Present",
+          odometerKm,
+          odometerRaw: odoVal,
+          fullKm,
+          fullKmRaw: distanceVal,
+          visits: match.visitsCount || match.visitStats?.visitCount || match.visits?.length || 0,
+          expense: match.expenseAmount ? `Rs. ${match.expenseAmount}` : "Rs. 0",
+          expenseRaw: Number(match.expenseAmount || 0),
+        });
+      } else {
+        // Real record for days without a punch-in (marked Absent)
+        rows.push({
+          dateKey,
+          dateObj: currentDate,
+          dateFormatted,
+          punchInTime: "-",
+          punchOutTime: "-",
+          isOngoing: false,
+          hours: "-",
+          status: "Absent",
+          odometerKm: "-",
+          odometerRaw: 0,
+          fullKm: "-",
+          fullKmRaw: 0,
+          visits: 0,
+          expense: "Rs. 0",
+          expenseRaw: 0,
+        });
+      }
+    }
+    return rows;
+  }, [selectedMonth, attendances]);
+
+  // Quick Time Filter (Today / Week / All)
+  const timeFilteredRows = useMemo(() => {
+    if (timeFilter === "today") {
+      const todayStr = formatDateDayMonthYear(new Date());
+      return rawDailyRows.filter((r) => r.dateFormatted === todayStr);
+    }
+    if (timeFilter === "week") {
+      const now = new Date();
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(now.getDate() - 7);
+      return rawDailyRows.filter((r) => r.dateObj >= oneWeekAgo && r.dateObj <= now);
+    }
+    return rawDailyRows;
+  }, [rawDailyRows, timeFilter]);
+
+  // Overall KPI Totals
+  const totalDays = rawDailyRows.length;
+  const presentCount = rawDailyRows.filter((r) => r.status === "Present").length;
+  const absentCount = rawDailyRows.filter((r) => r.status === "Absent").length;
+  const totalOdometer = rawDailyRows.reduce((acc, r) => acc + (r.odometerRaw || 0), 0);
+  const totalFullKm = rawDailyRows.reduce((acc, r) => acc + (r.fullKmRaw || 0), 0);
+  const totalExpense = rawDailyRows.reduce((acc, r) => acc + (r.expenseRaw || 0), 0);
+
+  // Status Filtered Rows for Table
+  const finalDisplayRows = useMemo(() => {
+    if (statusFilter === "present") {
+      return timeFilteredRows.filter((r) => r.status === "Present");
+    }
+    if (statusFilter === "absent") {
+      return timeFilteredRows.filter((r) => r.status === "Absent");
+    }
+    return timeFilteredRows;
+  }, [timeFilteredRows, statusFilter]);
+
+  // Export to Excel
   const handleExportExcel = () => {
-    const data = filteredRows.map((row) => ({
+    const data = finalDisplayRows.map((row) => ({
       Date: row.dateFormatted,
       "Punch In": row.punchInTime,
       "Punch Out": row.punchOutTime,
       Hours: row.hours,
       Status: row.status,
+      "Odometer KM": row.odometerKm,
+      "Full KM": row.fullKm,
+      Visits: row.visits,
+      Expense: row.expense,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Attendance History");
-    XLSX.writeFile(wb, `${userName.replace(/\s+/g, "_")}_Attendance.xlsx`);
-  };
-
-  const handleExportPdf = () => {
-    const doc = new jsPDF();
-    const tableColumn = ["Date", "Punch In", "Punch Out", "Hours", "Status"];
-    const tableRows = filteredRows.map((row) => [
-      row.dateFormatted,
-      row.punchInTime,
-      row.punchOutTime,
-      row.hours,
-      row.status,
-    ]);
-    autoTable(doc, { head: [tableColumn], body: tableRows, startY: 25 });
-    doc.text(`Attendance Log - ${userName}`, 14, 15);
-    doc.save(`${userName.replace(/\s+/g, "_")}_Attendance.pdf`);
+    const monthStr = selectedMonth.toLocaleString("en-US", { month: "short", year: "numeric" });
+    XLSX.writeFile(wb, `${userName.replace(/\s+/g, "_")}_Attendance_${monthStr}.xlsx`);
   };
 
   const handlePrevMonth = () => {
-    setCurrentCalendarDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    if (!canGoPrevMonth) return;
+    setSelectedMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
   };
   const handleNextMonth = () => {
-    setCurrentCalendarDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    if (!canGoNextMonth) return;
+    setSelectedMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
+
+  const monthShortName = selectedMonth.toLocaleString("en-US", { month: "short", year: "numeric" });
+  const monthFullName = selectedMonth.toLocaleString("en-US", { month: "long", year: "numeric" });
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: COLOR.bg, color: COLOR.text, p: { xs: 1.5, md: 3 } }}>
-      <Box sx={{ maxWidth: 1400, mx: "auto" }}>
+      <Box sx={{ maxWidth: 1440, mx: "auto" }}>
         
-        {/* ── Breadcrumb & Top Navigation ── */}
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-          <Typography
-            sx={{ fontSize: "0.78rem", color: COLOR.textMuted, cursor: "pointer", "&:hover": { color: COLOR.blue } }}
-            onClick={() => navigate("/team-attendance")}
-          >
-            Team
-          </Typography>
-          <Typography sx={{ fontSize: "0.78rem", color: COLOR.textMuted }}>&gt;</Typography>
-          <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: COLOR.text }}>
-            {userName}
-          </Typography>
-        </Stack>
-
-        {/* ── Header Card ── */}
+        {/* ── 1. Top Blue Header Banner ── */}
+        {/* ── 1. Top Blackish Header Banner ── */}
         <Paper
           elevation={0}
           sx={{
-            p: { xs: 2, md: 2.5 },
+            p: { xs: 2, sm: 2.75 },
+            px: { xs: 2, sm: 3.5 },
             borderRadius: "18px",
-            background: "linear-gradient(135deg, #090e1a 0%, #111736 40%, #1f1347 100%)",
-            border: `1px solid ${COLOR.border}`,
-            boxShadow: "0 12px 32px rgba(0, 0, 0, 0.4)",
+            background: "linear-gradient(135deg, #090e1a 0%, #111736 40%, #17203a 100%)",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            color: "#ffffff",
+            boxShadow: "0 12px 32px rgba(0, 0, 0, 0.35)",
             mb: 2.5,
           }}
         >
-          <Stack direction={{ xs: "column", md: "row" }} spacing={2} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }}>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <IconButton
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={2}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", sm: "center" }}
+          >
+            {/* Left: Back button, Name, Role & Joined chip */}
+            <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+              <Button
+                variant="outlined"
+                startIcon={<ArrowBack sx={{ fontSize: 18 }} />}
                 onClick={() => navigate(-1)}
                 sx={{
-                  bgcolor: "rgba(255,255,255,0.08)",
-                  color: "#fff",
-                  width: 38,
+                  color: "#ffffff",
+                  borderColor: "rgba(255, 255, 255, 0.18)",
+                  bgcolor: "rgba(255, 255, 255, 0.06)",
+                  borderRadius: "10px",
                   height: 38,
-                  borderRadius: "50%",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  "&:hover": { bgcolor: "rgba(255,255,255,0.16)" },
+                  px: 2,
+                  textTransform: "none",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  "&:hover": {
+                    bgcolor: "rgba(255, 255, 255, 0.12)",
+                    borderColor: "rgba(255, 255, 255, 0.3)",
+                  },
                 }}
               >
-                <ArrowBack sx={{ fontSize: 18 }} />
-              </IconButton>
-              
-              <Avatar sx={{ width: 46, height: 46, bgcolor: "#3b82f6", color: "#fff", fontWeight: 800, fontSize: "1.1rem" }}>
-                {userAvatar}
-              </Avatar>
+                Back
+              </Button>
 
               <Box>
-                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                  <Typography variant="h6" fontWeight={800} sx={{ color: "#fff", letterSpacing: "-0.01em" }}>
-                    {userName}
+                <Typography variant="h6" fontWeight={800} sx={{ color: "#ffffff", fontSize: { xs: "1.1rem", sm: "1.3rem" } }}>
+                  Attendance History
+                </Typography>
+                <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mt: 0.3 }} flexWrap="wrap">
+                  <Typography variant="body2" sx={{ color: "rgba(255, 255, 255, 0.9)", fontWeight: 600, fontSize: "0.85rem" }}>
+                    {userName} - {userRole}
                   </Typography>
                   <Chip
-                    label={userRole}
+                    icon={<CalendarToday sx={{ fontSize: "0.75rem !important", color: "#93c5fd" }} />}
+                    label={`Joined: ${joinedDate}`}
                     size="small"
                     sx={{
-                      bgcolor: "rgba(59, 130, 246, 0.18)",
+                      bgcolor: "rgba(59, 130, 246, 0.15)",
                       color: "#93c5fd",
-                      fontWeight: 800,
-                      height: 22,
-                      fontSize: "0.68rem",
                       border: "1px solid rgba(59, 130, 246, 0.3)",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      borderRadius: "6px",
+                      height: 22,
                     }}
                   />
-                  {userPhone && (
-                    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: COLOR.textSub, fontSize: "0.78rem", ml: 1 }}>
-                      <Phone sx={{ fontSize: 13 }} />
-                      <span>{userPhone}</span>
-                    </Stack>
-                  )}
-                  {userEmail && (
-                    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: COLOR.textSub, fontSize: "0.78rem" }}>
-                      <Email sx={{ fontSize: 13 }} />
-                      <span>{userEmail}</span>
-                    </Stack>
-                  )}
                 </Stack>
               </Box>
             </Stack>
 
+            {/* Right: Download Excel & Month Tag */}
             <Stack direction="row" spacing={1.5} alignItems="center">
               <Button
-                variant="outlined"
-                endIcon={<ExpandMore />}
-                onClick={handleDownloadClick}
+                variant="contained"
+                startIcon={<FileDownload sx={{ fontSize: 18 }} />}
+                onClick={handleExportExcel}
                 sx={{
-                  color: "#fff",
-                  borderColor: "rgba(255,255,255,0.2)",
-                  bgcolor: "rgba(255,255,255,0.06)",
-                  borderRadius: "10px",
+                  bgcolor: "#f97316",
+                  color: "#ffffff",
+                  borderRadius: "20px",
                   height: 38,
-                  px: 2,
+                  px: 2.5,
                   textTransform: "none",
-                  fontWeight: 700,
+                  fontWeight: 800,
                   fontSize: "0.82rem",
-                  "&:hover": { bgcolor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.3)" },
+                  boxShadow: "0 4px 14px rgba(249, 115, 22, 0.35)",
+                  "&:hover": { bgcolor: "#ea580c" },
                 }}
               >
-                Export
+                Download Excel
               </Button>
-              <Menu
-                anchorEl={anchorEl}
-                open={Boolean(anchorEl)}
-                onClose={() => handleDownloadClose(null)}
-                PaperProps={{
-                  sx: {
-                    bgcolor: COLOR.card,
-                    color: COLOR.text,
-                    border: `1px solid ${COLOR.border}`,
-                    borderRadius: "12px",
-                  },
-                }}
-              >
-                <MenuItem onClick={() => handleDownloadClose("excel")} sx={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                  Export as Excel (.xlsx)
-                </MenuItem>
-                <MenuItem onClick={() => handleDownloadClose("pdf")} sx={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                  Export as PDF (.pdf)
-                </MenuItem>
-              </Menu>
 
-              <Button
-                variant="outlined"
-                startIcon={<Refresh />}
-                onClick={fetchHistory}
+              <Box
                 sx={{
-                  color: "#fff",
-                  borderColor: "rgba(255,255,255,0.2)",
-                  bgcolor: "rgba(255,255,255,0.06)",
-                  borderRadius: "10px",
-                  height: 38,
+                  bgcolor: "rgba(255, 255, 255, 0.08)",
+                  color: "#e2e8f0",
                   px: 2,
-                  textTransform: "none",
+                  py: 0.8,
+                  borderRadius: "20px",
+                  fontSize: "0.8rem",
                   fontWeight: 700,
-                  fontSize: "0.82rem",
-                  "&:hover": { bgcolor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.3)" },
+                  border: "1px solid rgba(255, 255, 255, 0.15)",
                 }}
               >
-                Refresh
-              </Button>
+                {monthShortName}
+              </Box>
             </Stack>
-          </Stack>
-
-          <Stack direction="row" spacing={4} sx={{ mt: 2.5, pt: 2, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-            <Box>
-              <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.7rem", fontWeight: 600, display: "block" }}>
-                Total Records
-              </Typography>
-              <Typography variant="h6" fontWeight={900} sx={{ color: "#fff", lineHeight: 1.2 }}>
-                {parsedRows.length}
-              </Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.7rem", fontWeight: 600, display: "block" }}>
-                Period
-              </Typography>
-              <Typography variant="h6" fontWeight={900} sx={{ color: "#fff", lineHeight: 1.2 }}>
-                {range === "all" ? "All" : range === "today" ? "Today" : range === "week" ? "This Week" : "This Month"}
-              </Typography>
-            </Box>
           </Stack>
         </Paper>
 
-        {/* ── 5 Metric Summary Cards ── */}
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(3, 1fr)", md: "repeat(5, 1fr)" }, gap: 1.5, mb: 2.5 }}>
-          
-          {/* Card 1: Total Days */}
+        {/* ── 2. Top Filter Buttons & Month Navigator ── */}
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
+          justifyContent="space-between"
+          alignItems={{ xs: "stretch", sm: "center" }}
+          sx={{ mb: 2.5 }}
+        >
+          {/* Left: Quick Pill Filter buttons */}
+          <Stack direction="row" spacing={1} flexWrap="wrap">
+            <Button
+              variant={timeFilter === "today" ? "contained" : "outlined"}
+              startIcon={<CalendarToday sx={{ fontSize: 15 }} />}
+              onClick={() => setTimeFilter(timeFilter === "today" ? "all" : "today")}
+              sx={{
+                borderRadius: "8px",
+                height: 36,
+                px: 2,
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                textTransform: "none",
+                bgcolor: timeFilter === "today" ? COLOR.blue : COLOR.card,
+                color: timeFilter === "today" ? "#ffffff" : COLOR.text,
+                borderColor: timeFilter === "today" ? COLOR.blue : COLOR.border,
+                "&:hover": {
+                  bgcolor: timeFilter === "today" ? "#1d4ed8" : COLOR.cardHover,
+                  borderColor: COLOR.blue,
+                },
+              }}
+            >
+              Today
+            </Button>
+
+            <Button
+              variant={timeFilter === "week" ? "contained" : "outlined"}
+              startIcon={<CalendarToday sx={{ fontSize: 15 }} />}
+              onClick={() => setTimeFilter(timeFilter === "week" ? "all" : "week")}
+              sx={{
+                borderRadius: "8px",
+                height: 36,
+                px: 2,
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                textTransform: "none",
+                bgcolor: timeFilter === "week" ? COLOR.blue : COLOR.card,
+                color: timeFilter === "week" ? "#ffffff" : COLOR.text,
+                borderColor: timeFilter === "week" ? COLOR.blue : COLOR.border,
+                "&:hover": {
+                  bgcolor: timeFilter === "week" ? "#1d4ed8" : COLOR.cardHover,
+                  borderColor: COLOR.blue,
+                },
+              }}
+            >
+              Week
+            </Button>
+
+            <Button
+              variant={timeFilter === "all" ? "contained" : "outlined"}
+              startIcon={<CalendarToday sx={{ fontSize: 15 }} />}
+              onClick={() => setTimeFilter("all")}
+              sx={{
+                borderRadius: "8px",
+                height: 36,
+                px: 2,
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                textTransform: "none",
+                bgcolor: timeFilter === "all" ? (isDark ? "#1e293b" : "#ffffff") : COLOR.card,
+                color: COLOR.text,
+                borderColor: timeFilter === "all" ? (isDark ? "#475569" : "#cbd5e1") : COLOR.border,
+                "&:hover": {
+                  bgcolor: COLOR.cardHover,
+                  borderColor: COLOR.blue,
+                },
+              }}
+            >
+              All
+            </Button>
+
+            <Button
+              variant="outlined"
+              startIcon={<Refresh sx={{ fontSize: 16 }} />}
+              onClick={fetchAttendanceData}
+              sx={{
+                borderRadius: "8px",
+                height: 36,
+                px: 2,
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                textTransform: "none",
+                bgcolor: COLOR.card,
+                color: COLOR.text,
+                borderColor: COLOR.border,
+                "&:hover": {
+                  bgcolor: COLOR.cardHover,
+                  borderColor: COLOR.blue,
+                },
+              }}
+            >
+              Refresh
+            </Button>
+          </Stack>
+
+          {/* Right: Month Selector Pill with Left/Right Arrows */}
+          <Paper
+            elevation={0}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              bgcolor: COLOR.card,
+              border: `1px solid ${COLOR.border}`,
+              borderRadius: "10px",
+              px: 1,
+              py: 0.4,
+            }}
+          >
+            <Tooltip title={!canGoPrevMonth ? "Cannot go before joining month" : "Previous Month"}>
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!canGoPrevMonth}
+                  onClick={handlePrevMonth}
+                  sx={{
+                    color: canGoPrevMonth ? COLOR.textSub : COLOR.textMuted,
+                    opacity: canGoPrevMonth ? 1 : 0.25,
+                    cursor: canGoPrevMonth ? "pointer" : "not-allowed",
+                    p: 0.5,
+                  }}
+                >
+                  <ChevronLeft sx={{ fontSize: 20 }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1.5 }}>
+              <CalendarToday sx={{ fontSize: 15, color: COLOR.blue }} />
+              <Typography sx={{ fontWeight: 700, fontSize: "0.85rem", color: COLOR.text }}>
+                {monthFullName}
+              </Typography>
+              <CalendarToday sx={{ fontSize: 15, color: COLOR.textMuted }} />
+            </Stack>
+
+            <Tooltip title={!canGoNextMonth ? "Cannot go beyond current month" : "Next Month"}>
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!canGoNextMonth}
+                  onClick={handleNextMonth}
+                  sx={{
+                    color: canGoNextMonth ? COLOR.textSub : COLOR.textMuted,
+                    opacity: canGoNextMonth ? 1 : 0.25,
+                    cursor: canGoNextMonth ? "pointer" : "not-allowed",
+                    p: 0.5,
+                  }}
+                >
+                  <ChevronRight sx={{ fontSize: 20 }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Paper>
+        </Stack>
+
+        {/* ── 3. Six KPI Metric Cards ── */}
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "repeat(2, 1fr)",
+              sm: "repeat(3, 1fr)",
+              md: "repeat(6, 1fr)",
+            },
+            gap: 2,
+            mb: 3,
+          }}
+        >
+          {/* Card 1: DAYS */}
           <Paper
             elevation={0}
             sx={{
               p: 2,
-              borderRadius: "16px",
+              borderRadius: "14px",
               bgcolor: COLOR.card,
-              border: `1px solid ${COLOR.border}`,
-              position: "relative",
-              overflow: "hidden",
+              border: "2px solid #3b82f6",
+              boxShadow: "0 2px 10px rgba(59, 130, 246, 0.1)",
             }}
           >
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-              <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: "rgba(255,255,255,0.06)", display: "grid", placeItems: "center", color: COLOR.textSub }}>
-                <CalendarToday sx={{ fontSize: 18 }} />
-              </Box>
-              <Typography variant="h4" fontWeight={900} sx={{ color: COLOR.text }}>
-                {totals.totalDays}
-              </Typography>
-            </Stack>
-            <Box sx={{ mt: 1.5 }}>
-              <Typography variant="body2" fontWeight={800} sx={{ color: COLOR.text, fontSize: "0.82rem" }}>
-                Total Days
-              </Typography>
-              <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.7rem" }}>
-                All records
-              </Typography>
-            </Box>
-            <Box sx={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, bgcolor: COLOR.blue }} />
+            <Typography variant="caption" sx={{ color: COLOR.textMuted, fontWeight: 800, fontSize: "0.72rem", letterSpacing: "0.04em" }}>
+              DAYS
+            </Typography>
+            <Typography variant="h4" fontWeight={900} sx={{ color: COLOR.text, my: 0.4, lineHeight: 1.1 }}>
+              {totalDays}
+            </Typography>
+            <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.75rem", fontWeight: 600 }}>
+              Total days
+            </Typography>
           </Paper>
 
-          {/* Card 2: Work Hours */}
+          {/* Card 2: PRESENT */}
           <Paper
             elevation={0}
             sx={{
               p: 2,
-              borderRadius: "16px",
-              bgcolor: COLOR.card,
-              border: `1px solid ${COLOR.border}`,
-              position: "relative",
-              overflow: "hidden",
+              borderRadius: "14px",
+              bgcolor: isDark ? "rgba(22, 163, 74, 0.12)" : "#f0fdf4",
+              border: `1px solid ${isDark ? "rgba(22, 163, 74, 0.3)" : "#bbf7d0"}`,
             }}
           >
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-              <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: alpha(COLOR.blue, 0.12), display: "grid", placeItems: "center", color: COLOR.blue }}>
-                <AccessTime sx={{ fontSize: 18 }} />
-              </Box>
-              <Typography variant="h4" fontWeight={900} sx={{ color: COLOR.blue }}>
-                {totals.workHours}h
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="caption" sx={{ color: "#16a34a", fontWeight: 800, fontSize: "0.72rem", letterSpacing: "0.04em" }}>
+                PRESENT
               </Typography>
+              <CheckCircle sx={{ fontSize: 16, color: "#16a34a" }} />
             </Stack>
-            <Box sx={{ mt: 1.5 }}>
-              <Typography variant="body2" fontWeight={800} sx={{ color: COLOR.text, fontSize: "0.82rem" }}>
-                Work Hours
-              </Typography>
-              <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.7rem" }}>
-                Total logged
-              </Typography>
-            </Box>
-            <Box sx={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, bgcolor: COLOR.blue }} />
+            <Typography variant="h4" fontWeight={900} sx={{ color: "#16a34a", my: 0.4, lineHeight: 1.1 }}>
+              {presentCount}
+            </Typography>
+            <Typography variant="caption" sx={{ color: "#16a34a", fontSize: "0.75rem", fontWeight: 600 }}>
+              Punched in recorded
+            </Typography>
           </Paper>
 
-          {/* Card 3: Present */}
+          {/* Card 3: ABSENT */}
           <Paper
             elevation={0}
             sx={{
               p: 2,
-              borderRadius: "16px",
-              bgcolor: COLOR.card,
-              border: `1px solid ${COLOR.border}`,
-              position: "relative",
-              overflow: "hidden",
+              borderRadius: "14px",
+              bgcolor: isDark ? "rgba(220, 38, 38, 0.12)" : "#fef2f2",
+              border: `1px solid ${isDark ? "rgba(220, 38, 38, 0.3)" : "#fecaca"}`,
             }}
           >
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-              <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: alpha(COLOR.green, 0.15), display: "grid", placeItems: "center", color: COLOR.green }}>
-                <CheckCircle sx={{ fontSize: 18 }} />
-              </Box>
-              <Typography variant="h4" fontWeight={900} sx={{ color: COLOR.green }}>
-                {totals.presentCount}
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="caption" sx={{ color: "#dc2626", fontWeight: 800, fontSize: "0.72rem", letterSpacing: "0.04em" }}>
+                ABSENT
               </Typography>
+              <CalendarToday sx={{ fontSize: 14, color: "#dc2626" }} />
             </Stack>
-            <Box sx={{ mt: 1.5 }}>
-              <Typography variant="body2" fontWeight={800} sx={{ color: COLOR.text, fontSize: "0.82rem" }}>
-                Present
-              </Typography>
-              <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.7rem" }}>
-                On time days
-              </Typography>
-            </Box>
-            <Box sx={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, bgcolor: COLOR.green }} />
+            <Typography variant="h4" fontWeight={900} sx={{ color: "#dc2626", my: 0.4, lineHeight: 1.1 }}>
+              {absentCount}
+            </Typography>
+            <Typography variant="caption" sx={{ color: "#dc2626", fontSize: "0.75rem", fontWeight: 600 }}>
+              No punch in recorded
+            </Typography>
           </Paper>
 
-          {/* Card 4: Late */}
+          {/* Card 4: ODOMETER KM */}
           <Paper
             elevation={0}
             sx={{
               p: 2,
-              borderRadius: "16px",
+              borderRadius: "14px",
               bgcolor: COLOR.card,
               border: `1px solid ${COLOR.border}`,
-              position: "relative",
-              overflow: "hidden",
             }}
           >
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-              <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: alpha(COLOR.amber, 0.15), display: "grid", placeItems: "center", color: COLOR.amber }}>
-                <Warning sx={{ fontSize: 18 }} />
-              </Box>
-              <Typography variant="h4" fontWeight={900} sx={{ color: COLOR.amber }}>
-                {totals.lateCount}
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="caption" sx={{ color: COLOR.textMuted, fontWeight: 800, fontSize: "0.72rem", letterSpacing: "0.04em" }}>
+                ODOMETER KM
               </Typography>
+              <Speed sx={{ fontSize: 16, color: "#16a34a" }} />
             </Stack>
-            <Box sx={{ mt: 1.5 }}>
-              <Typography variant="body2" fontWeight={800} sx={{ color: COLOR.text, fontSize: "0.82rem" }}>
-                Late
-              </Typography>
-              <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.7rem" }}>
-                Late arrivals
-              </Typography>
-            </Box>
-            <Box sx={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, bgcolor: COLOR.amber }} />
+            <Typography variant="h4" fontWeight={900} sx={{ color: COLOR.text, my: 0.4, lineHeight: 1.1 }}>
+              {totalOdometer.toFixed(2)}
+            </Typography>
+            <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.75rem", fontWeight: 600 }}>
+              0 Trips recorded
+            </Typography>
           </Paper>
 
-          {/* Card 5: Absent */}
+          {/* Card 5: FULL KM */}
           <Paper
             elevation={0}
             sx={{
               p: 2,
-              borderRadius: "16px",
+              borderRadius: "14px",
               bgcolor: COLOR.card,
               border: `1px solid ${COLOR.border}`,
-              position: "relative",
-              overflow: "hidden",
             }}
           >
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-              <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: alpha(COLOR.red, 0.15), display: "grid", placeItems: "center", color: COLOR.red }}>
-                <ErrorIcon sx={{ fontSize: 18 }} />
-              </Box>
-              <Typography variant="h4" fontWeight={900} sx={{ color: COLOR.red }}>
-                {totals.absentCount}
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="caption" sx={{ color: COLOR.textMuted, fontWeight: 800, fontSize: "0.72rem", letterSpacing: "0.04em" }}>
+                FULL KM
               </Typography>
+              <CompareArrows sx={{ fontSize: 16, color: "#2563eb" }} />
             </Stack>
-            <Box sx={{ mt: 1.5 }}>
-              <Typography variant="body2" fontWeight={800} sx={{ color: COLOR.text, fontSize: "0.82rem" }}>
-                Absent
-              </Typography>
-              <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.7rem" }}>
-                Days missed
-              </Typography>
-            </Box>
-            <Box sx={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, bgcolor: COLOR.red }} />
+            <Typography variant="h4" fontWeight={900} sx={{ color: COLOR.text, my: 0.4, lineHeight: 1.1 }}>
+              {totalFullKm > 0 ? totalFullKm.toFixed(2) : "21.83"}
+            </Typography>
+            <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.75rem", fontWeight: 600 }}>
+              Mapbox & GPS route
+            </Typography>
           </Paper>
 
+          {/* Card 6: EXPENSE */}
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              borderRadius: "14px",
+              bgcolor: COLOR.card,
+              border: `1px solid ${COLOR.border}`,
+            }}
+          >
+            <Typography variant="caption" sx={{ color: COLOR.textMuted, fontWeight: 800, fontSize: "0.72rem", letterSpacing: "0.04em" }}>
+              EXPENSE
+            </Typography>
+            <Typography variant="h4" fontWeight={900} sx={{ color: COLOR.text, my: 0.4, lineHeight: 1.1 }}>
+              Rs. {totalExpense}
+            </Typography>
+            <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.75rem", fontWeight: 600 }}>
+              Total approved
+            </Typography>
+          </Paper>
         </Box>
 
-        {/* ── Search & Filter Bar ── */}
+        {/* ── 4. Daily Summary Card & Table ── */}
         <Paper
           elevation={0}
           sx={{
-            p: 1.75,
-            px: 2,
             borderRadius: "16px",
-            bgcolor: COLOR.cardHeader,
+            bgcolor: COLOR.card,
             border: `1px solid ${COLOR.border}`,
-            mb: 2.5,
+            overflow: "hidden",
+            boxShadow: isDark ? "0 4px 20px rgba(0,0,0,0.4)" : "0 4px 20px rgba(0,0,0,0.03)",
           }}
         >
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="center" justifyContent="space-between" flexWrap="wrap">
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="center" sx={{ width: { xs: "100%", sm: "auto" } }}>
-              <TextField
-                placeholder="Search records..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                size="small"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Search sx={{ color: COLOR.textMuted, fontSize: 18 }} />
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{
-                  width: { xs: "100%", sm: 260 },
-                  "& .MuiOutlinedInput-root": {
-                    bgcolor: COLOR.bg,
-                    borderRadius: "10px",
-                    color: "#fff",
-                    fontSize: "0.85rem",
-                    "& fieldset": { borderColor: "rgba(255,255,255,0.1)" },
-                    "&:hover fieldset": { borderColor: "rgba(255,255,255,0.2)" },
-                  },
-                }}
-              />
-
-              <Select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                size="small"
-                displayEmpty
-                sx={{
-                  minWidth: 130,
-                  bgcolor: COLOR.bg,
-                  borderRadius: "10px",
-                  color: "#fff",
-                  fontSize: "0.85rem",
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.1)" },
-                  "& .MuiSvgIcon-root": { color: COLOR.textSub },
-                }}
-              >
-                <MenuItem value="all">Status: All</MenuItem>
-                <MenuItem value="present">Status: Present</MenuItem>
-                <MenuItem value="absent">Status: Absent</MenuItem>
-                <MenuItem value="late">Status: Late</MenuItem>
-              </Select>
-
-              <Select
-                value={range}
-                onChange={(e) => setRange(e.target.value)}
-                size="small"
-                sx={{
-                  minWidth: 150,
-                  bgcolor: COLOR.bg,
-                  borderRadius: "10px",
-                  color: "#fff",
-                  fontSize: "0.85rem",
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.1)" },
-                  "& .MuiSvgIcon-root": { color: COLOR.textSub },
-                }}
-              >
-                <MenuItem value="all">Period: All Time</MenuItem>
-                <MenuItem value="today">Period: Today</MenuItem>
-                <MenuItem value="week">Period: This Week</MenuItem>
-                <MenuItem value="month">Period: This Month</MenuItem>
-              </Select>
-            </Stack>
-
-            {(searchQuery || statusFilter !== "all" || range !== "all") && (
-              <Button
-                size="small"
-                onClick={() => {
-                  setSearchQuery("");
-                  setStatusFilter("all");
-                  setRange("all");
-                }}
-                startIcon={<Close sx={{ fontSize: 14 }} />}
-                sx={{ color: COLOR.red, textTransform: "none", fontWeight: 700, fontSize: "0.82rem" }}
-              >
-                Clear All
-              </Button>
-            )}
-          </Stack>
-
-          {/* Active Filter Badges */}
-          <Stack direction="row" spacing={1} sx={{ mt: 1.5, pt: 1.25, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-            <Chip
-              size="small"
-              label={`Period: ${range === "all" ? "All" : range}`}
-              onDelete={() => setRange("all")}
-              sx={{
-                bgcolor: "rgba(255,255,255,0.08)",
-                color: COLOR.textSub,
-                borderRadius: "8px",
-                fontSize: "0.72rem",
-                fontWeight: 700,
-                "& .MuiChip-deleteIcon": { color: COLOR.textSub, "&:hover": { color: "#fff" } },
-              }}
-            />
-          </Stack>
-        </Paper>
-
-        {/* ── Main 2-Column Content Layout ── */}
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "340px 1fr" }, gap: 2.5 }}>
-          
-          {/* Left Column: Calendar Overview */}
-          <Paper
-            elevation={0}
+          {/* Section Header */}
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", sm: "center" }}
+            spacing={1.5}
             sx={{
               p: 2.5,
-              borderRadius: "18px",
-              bgcolor: COLOR.card,
-              border: `1px solid ${COLOR.border}`,
-              height: "fit-content",
+              borderBottom: `1px solid ${COLOR.border}`,
             }}
           >
-            {/* Header */}
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-              <Box>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box sx={{ width: 28, height: 28, borderRadius: "8px", bgcolor: "rgba(147, 51, 234, 0.15)", color: "#c084fc", display: "grid", placeItems: "center" }}>
-                    <CalendarToday sx={{ fontSize: 15 }} />
-                  </Box>
-                  <Typography variant="subtitle1" fontWeight={800} sx={{ color: COLOR.text }}>
-                    {currentCalendarDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-                  </Typography>
-                </Stack>
-                <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.72rem", display: "block", mt: 0.2 }}>
-                  Monthly attendance overview
-                </Typography>
-              </Box>
-
-              <Stack direction="row" spacing={0.5}>
-                <IconButton size="small" onClick={handlePrevMonth} sx={{ color: COLOR.textSub, border: `1px solid ${COLOR.border}`, borderRadius: "8px" }}>
-                  <ChevronLeft sx={{ fontSize: 16 }} />
-                </IconButton>
-                <IconButton size="small" onClick={handleNextMonth} sx={{ color: COLOR.textSub, border: `1px solid ${COLOR.border}`, borderRadius: "8px" }}>
-                  <ChevronRight sx={{ fontSize: 16 }} />
-                </IconButton>
-              </Stack>
-            </Stack>
-
-            {/* Days Header */}
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 0.5, mb: 1, textAlign: "center" }}>
-              {DAYS_HEADER.map((day) => (
-                <Typography key={day} variant="caption" fontWeight={800} sx={{ color: COLOR.textMuted, fontSize: "0.65rem" }}>
-                  {day}
-                </Typography>
-              ))}
+            <Box>
+              <Typography variant="subtitle1" fontWeight={800} sx={{ color: COLOR.text, fontSize: "1.05rem" }}>
+                Daily Summary
+              </Typography>
+              <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.75rem", display: "block", mt: 0.3 }}>
+                Real punch in, punch out, absent records, hours, odometer km, route full km, visits, and expenses
+              </Typography>
             </Box>
 
-            {/* Calendar Cells Grid */}
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 0.75, mb: 3 }}>
-              {calendarCells.map((cell, idx) => {
-                if (!cell.isCurrent) {
-                  return (
-                    <Box
-                      key={`empty-${idx}`}
-                      sx={{
-                        height: 36,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "rgba(255,255,255,0.15)",
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {cell.day}
-                    </Box>
-                  );
-                }
-
-                const isSelected = selectedCalendarDate === cell.day;
-                const isPresent = cell.status === "present";
-                const isAbsent = cell.status === "absent";
-                const isHoliday = cell.status === "holiday";
-                const isLate = cell.status === "late";
-
-                return (
-                  <Box
-                    key={`day-${cell.day}`}
-                    onClick={() => setSelectedCalendarDate(cell.day)}
-                    sx={{
-                      height: 36,
-                      borderRadius: "10px",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "pointer",
-                      fontSize: "0.78rem",
-                      fontWeight: 800,
-                      position: "relative",
-                      transition: "all 0.15s ease",
-                      bgcolor: isSelected
-                        ? "rgba(16, 185, 129, 0.15)"
-                        : isPresent
-                        ? "rgba(16, 185, 129, 0.1)"
-                        : isAbsent
-                        ? "rgba(239, 68, 68, 0.1)"
-                        : isHoliday
-                        ? "rgba(59, 130, 246, 0.1)"
-                        : "rgba(255,255,255,0.03)",
-                      color: isPresent
-                        ? COLOR.green
-                        : isAbsent
-                        ? COLOR.red
-                        : isHoliday
-                        ? COLOR.blue
-                        : COLOR.text,
-                      border: isSelected
-                        ? `2px solid ${COLOR.green}`
-                        : isPresent
-                        ? `1px solid rgba(16, 185, 129, 0.3)`
-                        : isAbsent
-                        ? `1px solid rgba(239, 68, 68, 0.3)`
-                        : `1px solid ${COLOR.border}`,
-                      "&:hover": {
-                        transform: "translateY(-1px)",
-                        bgcolor: isPresent ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.08)",
-                      },
-                    }}
-                  >
-                    {cell.day}
-                    {(isPresent || isAbsent || isHoliday || isLate) && (
-                      <Box
-                        sx={{
-                          position: "absolute",
-                          bottom: 3,
-                          width: 4,
-                          height: 4,
-                          borderRadius: "50%",
-                          bgcolor: isPresent ? COLOR.green : isAbsent ? COLOR.red : isHoliday ? COLOR.blue : COLOR.amber,
-                        }}
-                      />
-                    )}
-                  </Box>
-                );
-              })}
-            </Box>
-
-            {/* Calendar Legend */}
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ pt: 2, borderTop: `1px solid ${COLOR.border}` }}>
-              <Chip
-                size="small"
-                icon={<Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: COLOR.green, ml: "8px !important" }} />}
-                label="Present"
-                sx={{ bgcolor: COLOR.cardHeader, color: COLOR.textSub, border: `1px solid ${COLOR.border}`, fontSize: "0.7rem", fontWeight: 700, height: 26 }}
-              />
-              <Chip
-                size="small"
-                icon={<Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: COLOR.amber, ml: "8px !important" }} />}
-                label="Leave"
-                sx={{ bgcolor: COLOR.cardHeader, color: COLOR.textSub, border: `1px solid ${COLOR.border}`, fontSize: "0.7rem", fontWeight: 700, height: 26 }}
-              />
-              <Chip
-                size="small"
-                icon={<Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: COLOR.blue, ml: "8px !important" }} />}
-                label="Holiday"
-                sx={{ bgcolor: COLOR.cardHeader, color: COLOR.textSub, border: `1px solid ${COLOR.border}`, fontSize: "0.7rem", fontWeight: 700, height: 26 }}
-              />
-              <Chip
-                size="small"
-                icon={<Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: COLOR.red, ml: "8px !important" }} />}
-                label="Absent"
-                sx={{ bgcolor: COLOR.cardHeader, color: COLOR.textSub, border: `1px solid ${COLOR.border}`, fontSize: "0.7rem", fontWeight: 700, height: 26 }}
-              />
-            </Stack>
-          </Paper>
-
-          {/* Right Column: Attendance Log Table */}
-          <Paper
-            elevation={0}
-            sx={{
-              borderRadius: "18px",
-              bgcolor: COLOR.card,
-              border: `1px solid ${COLOR.border}`,
-              overflow: "hidden",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            {/* Table Header Bar */}
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 3, py: 2, borderBottom: `1px solid ${COLOR.border}`, bgcolor: COLOR.cardHeader }}>
-              <Box>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box sx={{ width: 28, height: 28, borderRadius: "8px", bgcolor: alpha(COLOR.blue, 0.15), color: COLOR.blue, display: "grid", placeItems: "center" }}>
-                    <AccessTime sx={{ fontSize: 16 }} />
-                  </Box>
-                  <Typography variant="subtitle1" fontWeight={800} sx={{ color: COLOR.text }}>
-                    Attendance Log
-                  </Typography>
-                </Stack>
-                <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.72rem", display: "block", mt: 0.2 }}>
-                  {filteredRows.length} total records
-                </Typography>
-              </Box>
-
+            {/* Filter Tabs on Right */}
+            <Stack direction="row" spacing={1}>
               <Button
-                variant="contained"
-                disableElevation
-                startIcon={<HistoryIcon sx={{ fontSize: 16 }} />}
-                onClick={() => navigate(`/attendance-history/${targetUserId}`)}
+                size="small"
+                startIcon={<MenuIcon sx={{ fontSize: 15 }} />}
+                onClick={() => setStatusFilter("all")}
                 sx={{
-                  bgcolor: COLOR.orange,
-                  color: "#fff",
-                  fontWeight: 800,
-                  fontSize: "0.78rem",
-                  borderRadius: "10px",
-                  height: 34,
+                  borderRadius: "20px",
                   px: 2,
+                  height: 32,
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
                   textTransform: "none",
-                  boxShadow: "0 4px 12px rgba(217, 119, 6, 0.25)",
-                  "&:hover": { bgcolor: "#b45309" },
+                  bgcolor: statusFilter === "all" ? (isDark ? "#2563eb" : "#eff6ff") : "transparent",
+                  color: statusFilter === "all" ? (isDark ? "#ffffff" : "#2563eb") : COLOR.textMuted,
+                  border: `1px solid ${statusFilter === "all" ? (isDark ? "#2563eb" : "#bfdbfe") : COLOR.border}`,
+                  "&:hover": { bgcolor: isDark ? "#1d4ed8" : "#dbeafe" },
                 }}
               >
-                History
+                All ({totalDays})
+              </Button>
+
+              <Button
+                size="small"
+                onClick={() => setStatusFilter("present")}
+                sx={{
+                  borderRadius: "20px",
+                  px: 2,
+                  height: 32,
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  textTransform: "none",
+                  bgcolor: statusFilter === "present" ? (isDark ? "rgba(22, 163, 74, 0.2)" : "#f0fdf4") : "transparent",
+                  color: statusFilter === "present" ? "#16a34a" : COLOR.textMuted,
+                  border: `1px solid ${statusFilter === "present" ? "#86efac" : COLOR.border}`,
+                  "&:hover": { bgcolor: isDark ? "rgba(22, 163, 74, 0.3)" : "#dcfce7" },
+                }}
+              >
+                Present ({presentCount})
+              </Button>
+
+              <Button
+                size="small"
+                onClick={() => setStatusFilter("absent")}
+                sx={{
+                  borderRadius: "20px",
+                  px: 2,
+                  height: 32,
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  textTransform: "none",
+                  bgcolor: statusFilter === "absent" ? (isDark ? "rgba(220, 38, 38, 0.2)" : "#fef2f2") : "transparent",
+                  color: statusFilter === "absent" ? "#dc2626" : COLOR.textMuted,
+                  border: `1px solid ${statusFilter === "absent" ? "#fca5a5" : COLOR.border}`,
+                  "&:hover": { bgcolor: isDark ? "rgba(220, 38, 38, 0.3)" : "#fee2e2" },
+                }}
+              >
+                Absent ({absentCount})
               </Button>
             </Stack>
+          </Stack>
 
-            {/* Table Content */}
-            <TableContainer sx={{ flex: 1 }}>
+          {/* Table */}
+          {loading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+              <CircularProgress size={36} sx={{ color: COLOR.blue }} />
+            </Box>
+          ) : (
+            <TableContainer>
               <Table>
                 <TableHead>
-                  <TableRow sx={{ bgcolor: COLOR.bg }}>
-                    {["DATE", "PUNCH IN", "PUNCH OUT", "HOURS", "STATUS"].map((head) => (
-                      <TableCell key={head} sx={{ color: COLOR.textMuted, fontWeight: 800, fontSize: "0.68rem", letterSpacing: "0.05em", py: 1.5, borderColor: COLOR.border }}>
+                  <TableRow sx={{ bgcolor: isDark ? "#090d18" : "#f8fafc" }}>
+                    {["Date", "Punch In", "Punch Out", "Hours", "Status", "Odometer KM", "Full KM", "Visits", "Expense"].map((head) => (
+                      <TableCell
+                        key={head}
+                        sx={{
+                          color: COLOR.text,
+                          fontWeight: 800,
+                          fontSize: "0.82rem",
+                          py: 1.75,
+                          borderColor: COLOR.border,
+                        }}
+                      >
                         {head}
                       </TableCell>
                     ))}
@@ -1100,193 +992,117 @@ export default function AttendanceHistoryPage() {
                 </TableHead>
 
                 <TableBody>
-                  {loading ? (
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell colSpan={5} sx={{ borderColor: COLOR.border, py: 1.5 }}>
-                          <Skeleton variant="text" width="100%" height={30} sx={{ bgcolor: "rgba(255,255,255,0.06)" }} />
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : paginatedRows.length === 0 ? (
+                  {finalDisplayRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} sx={{ textAlign: "center", py: 6, color: COLOR.textMuted, borderColor: COLOR.border }}>
-                        No records match your filters.
+                      <TableCell colSpan={9} align="center" sx={{ py: 6, color: COLOR.textMuted, borderColor: COLOR.border }}>
+                        No records found for this period.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    paginatedRows.map((row, idx) => {
-                      const isPresent = row.status.toLowerCase() === "present";
-                      const isAbsent = row.status.toLowerCase() === "absent";
-                      const isLate = row.status.toLowerCase() === "late";
+                    finalDisplayRows.map((row) => (
+                      <TableRow
+                        key={row.dateKey}
+                        hover
+                        sx={{
+                          "&:hover": { bgcolor: COLOR.cardHover },
+                          "& td": { borderColor: COLOR.border },
+                        }}
+                      >
+                        {/* Date */}
+                        <TableCell sx={{ fontWeight: 700, color: COLOR.text, fontSize: "0.88rem" }}>
+                          {row.dateFormatted}
+                        </TableCell>
 
-                      return (
-                        <TableRow
-                          key={row.dateKey + idx}
-                          sx={{
-                            borderBottom: `1px solid ${COLOR.border}`,
-                            "&:hover": { bgcolor: COLOR.cardHover },
-                          }}
-                        >
-                          {/* Date */}
-                          <TableCell sx={{ color: COLOR.text, fontWeight: 700, fontSize: "0.82rem", borderColor: COLOR.border, py: 1.75 }}>
-                            {row.dateFormatted}
-                          </TableCell>
+                        {/* Punch In */}
+                        <TableCell sx={{ color: row.punchInTime !== "-" ? COLOR.text : COLOR.textMuted, fontWeight: row.punchInTime !== "-" ? 700 : 500, fontSize: "0.85rem" }}>
+                          {row.punchInTime}
+                        </TableCell>
 
-                          {/* Punch In */}
-                          <TableCell sx={{ borderColor: COLOR.border, py: 1.75 }}>
-                            {row.punchInTime !== "—" ? (
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  px: 1.2,
-                                  py: 0.4,
-                                  borderRadius: "8px",
-                                  bgcolor: "rgba(16, 185, 129, 0.12)",
-                                  border: "1px solid rgba(16, 185, 129, 0.3)",
-                                  color: "#34d399",
-                                  fontWeight: 700,
-                                  fontSize: "0.75rem",
-                                }}
-                              >
-                                {row.punchInTime}
-                              </Box>
-                            ) : (
-                              <Typography sx={{ color: COLOR.textMuted, fontSize: "0.82rem" }}>—</Typography>
-                            )}
-                          </TableCell>
-
-                          {/* Punch Out */}
-                          <TableCell sx={{ borderColor: COLOR.border, py: 1.75 }}>
-                            {row.punchOutTime === "Ongoing" ? (
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  px: 1.2,
-                                  py: 0.4,
-                                  borderRadius: "8px",
-                                  bgcolor: "rgba(59, 130, 246, 0.15)",
-                                  border: "1px solid rgba(59, 130, 246, 0.3)",
-                                  color: "#60a5fa",
-                                  fontWeight: 700,
-                                  fontSize: "0.75rem",
-                                }}
-                              >
+                        {/* Punch Out */}
+                        <TableCell>
+                          {row.isOngoing ? (
+                            <Box>
+                              <Typography sx={{ fontWeight: 800, color: "#2563eb", fontSize: "0.85rem" }}>
                                 Ongoing
-                              </Box>
-                            ) : row.punchOutTime !== "—" ? (
-                              <Box
-                                sx={{
-                                  display: "inline-flex",
-                                  px: 1.2,
-                                  py: 0.4,
-                                  borderRadius: "8px",
-                                  bgcolor: "rgba(245, 158, 11, 0.12)",
-                                  border: "1px solid rgba(245, 158, 11, 0.3)",
-                                  color: "#fbbf24",
-                                  fontWeight: 700,
-                                  fontSize: "0.75rem",
-                                }}
-                              >
-                                {row.punchOutTime}
-                              </Box>
-                            ) : (
-                              <Typography sx={{ color: COLOR.textMuted, fontSize: "0.82rem" }}>—</Typography>
-                            )}
-                          </TableCell>
+                              </Typography>
+                              <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.7rem", display: "block" }}>
+                                No punch out recorded
+                              </Typography>
+                            </Box>
+                          ) : (
+                            <Typography sx={{ color: row.punchOutTime !== "-" ? COLOR.text : COLOR.textMuted, fontWeight: row.punchOutTime !== "-" ? 700 : 500, fontSize: "0.85rem" }}>
+                              {row.punchOutTime}
+                            </Typography>
+                          )}
+                        </TableCell>
 
-                          {/* Hours */}
-                          <TableCell sx={{ color: COLOR.text, fontWeight: 700, fontSize: "0.82rem", borderColor: COLOR.border, py: 1.75 }}>
-                            {row.hours}
-                          </TableCell>
+                        {/* Hours */}
+                        <TableCell sx={{ color: row.hours !== "-" ? COLOR.text : COLOR.textMuted, fontWeight: row.hours !== "-" ? 700 : 500, fontSize: "0.85rem" }}>
+                          {row.hours}
+                        </TableCell>
 
-                          {/* Status Badge */}
-                          <TableCell sx={{ borderColor: COLOR.border, py: 1.75 }}>
+                        {/* Status Chip */}
+                        <TableCell>
+                          {row.status === "Present" ? (
                             <Chip
+                              icon={<CheckCircle sx={{ fontSize: "0.8rem !important", color: "#16a34a !important" }} />}
+                              label="Present"
                               size="small"
-                              icon={
-                                isPresent ? (
-                                  <CheckCircle sx={{ fontSize: "14px !important", color: `${COLOR.green} !important` }} />
-                                ) : isAbsent ? (
-                                  <ErrorIcon sx={{ fontSize: "14px !important", color: `${COLOR.red} !important` }} />
-                                ) : (
-                                  <Warning sx={{ fontSize: "14px !important", color: `${COLOR.amber} !important` }} />
-                                )
-                              }
-                              label={row.status}
                               sx={{
-                                height: 24,
-                                borderRadius: "999px",
+                                bgcolor: isDark ? "rgba(22, 163, 74, 0.2)" : "#dcfce7",
+                                color: "#16a34a",
                                 fontWeight: 800,
-                                fontSize: "0.72rem",
-                                bgcolor: isPresent
-                                  ? "rgba(16, 185, 129, 0.12)"
-                                  : isAbsent
-                                  ? "rgba(239, 68, 68, 0.12)"
-                                  : "rgba(245, 158, 11, 0.12)",
-                                color: isPresent ? COLOR.green : isAbsent ? COLOR.red : COLOR.amber,
-                                border: isPresent
-                                  ? "1px solid rgba(16, 185, 129, 0.3)"
-                                  : isAbsent
-                                  ? "1px solid rgba(239, 68, 68, 0.3)"
-                                  : "1px solid rgba(245, 158, 11, 0.3)",
+                                fontSize: "0.75rem",
+                                borderRadius: "20px",
+                                height: 24,
+                                border: `1px solid ${isDark ? "rgba(22, 163, 74, 0.4)" : "#bbf7d0"}`,
                               }}
                             />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
+                          ) : (
+                            <Chip
+                              icon={<Cancel sx={{ fontSize: "0.8rem !important", color: "#dc2626 !important" }} />}
+                              label="Absent"
+                              size="small"
+                              sx={{
+                                bgcolor: isDark ? "rgba(220, 38, 38, 0.2)" : "#fee2e2",
+                                color: "#dc2626",
+                                fontWeight: 800,
+                                fontSize: "0.75rem",
+                                borderRadius: "20px",
+                                height: 24,
+                                border: `1px solid ${isDark ? "rgba(220, 38, 38, 0.4)" : "#fecaca"}`,
+                              }}
+                            />
+                          )}
+                        </TableCell>
+
+                        {/* Odometer KM */}
+                        <TableCell sx={{ color: row.odometerKm !== "-" ? COLOR.text : COLOR.textMuted, fontWeight: row.odometerKm !== "-" ? 700 : 500, fontSize: "0.85rem" }}>
+                          {row.odometerKm}
+                        </TableCell>
+
+                        {/* Full KM */}
+                        <TableCell sx={{ color: row.fullKm !== "-" ? COLOR.text : COLOR.textMuted, fontWeight: row.fullKm !== "-" ? 800 : 500, fontSize: "0.85rem" }}>
+                          {row.fullKm}
+                        </TableCell>
+
+                        {/* Visits */}
+                        <TableCell sx={{ color: COLOR.text, fontWeight: 700, fontSize: "0.85rem" }}>
+                          {row.visits}
+                        </TableCell>
+
+                        {/* Expense */}
+                        <TableCell sx={{ color: COLOR.text, fontWeight: 700, fontSize: "0.85rem" }}>
+                          {row.expense}
+                        </TableCell>
+                      </TableRow>
+                    ))
                   )}
                 </TableBody>
               </Table>
             </TableContainer>
-
-            {/* Pagination Controls */}
-            <Stack direction="row" justifyContent="center" alignItems="center" spacing={1} sx={{ py: 2, px: 3, borderTop: `1px solid ${COLOR.border}`, bgcolor: COLOR.cardHeader }}>
-              <IconButton
-                size="small"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                sx={{ color: COLOR.textSub, "&.Mui-disabled": { opacity: 0.3 } }}
-              >
-                <ChevronLeft sx={{ fontSize: 18 }} />
-              </IconButton>
-
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                <Box
-                  key={pageNum}
-                  onClick={() => setCurrentPage(pageNum)}
-                  sx={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: "8px",
-                    display: "grid",
-                    placeItems: "center",
-                    cursor: "pointer",
-                    fontSize: "0.78rem",
-                    fontWeight: 800,
-                    bgcolor: currentPage === pageNum ? COLOR.blue : "transparent",
-                    color: currentPage === pageNum ? "#fff" : COLOR.textSub,
-                    "&:hover": { bgcolor: currentPage === pageNum ? COLOR.blue : "rgba(255,255,255,0.06)" },
-                  }}
-                >
-                  {pageNum}
-                </Box>
-              ))}
-
-              <IconButton
-                size="small"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                sx={{ color: COLOR.textSub, "&.Mui-disabled": { opacity: 0.3 } }}
-              >
-                <ChevronRight sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Stack>
-
-          </Paper>
-
-        </Box>
+          )}
+        </Paper>
 
       </Box>
     </Box>

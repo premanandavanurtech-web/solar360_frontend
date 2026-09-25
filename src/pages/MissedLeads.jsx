@@ -978,16 +978,16 @@ const MobileLeadCard = ({ lead, onView, onReopen }) => {
         <Grid container spacing={1} sx={{ mb: 1.5 }}>
           <Grid item xs={6}>
             <Stack direction="row" spacing={0.5} alignItems="center">
-              <Phone sx={{ fontSize: 14, color: alpha(PRIMARY_COLOR, 0.6) }} />
-              <Typography variant="caption" noWrap>
+              <Phone sx={{ fontSize: 14, color: isDark ? "#60a5fa" : alpha(PRIMARY_COLOR, 0.6) }} />
+              <Typography variant="caption" sx={{ color: isDark ? "#cbd5e1" : "text.secondary" }} noWrap>
                 {lead.phone || "No phone"}
               </Typography>
             </Stack>
           </Grid>
           <Grid item xs={6}>
             <Stack direction="row" spacing={0.5} alignItems="center">
-              <Email sx={{ fontSize: 14, color: alpha(PRIMARY_COLOR, 0.6) }} />
-              <Typography variant="caption" noWrap>
+              <Email sx={{ fontSize: 14, color: isDark ? "#60a5fa" : alpha(PRIMARY_COLOR, 0.6) }} />
+              <Typography variant="caption" sx={{ color: isDark ? "#cbd5e1" : "text.secondary" }} noWrap>
                 {lead.email || "No email"}
               </Typography>
             </Stack>
@@ -1003,16 +1003,16 @@ const MobileLeadCard = ({ lead, onView, onReopen }) => {
             sx={{ mb: 0.5 }}
           >
             <CalendarToday
-              sx={{ fontSize: 14, color: alpha(PRIMARY_COLOR, 0.6) }}
+              sx={{ fontSize: 14, color: isDark ? "#60a5fa" : alpha(PRIMARY_COLOR, 0.6) }}
             />
-            <Typography variant="body2" fontWeight={500}>
+            <Typography variant="body2" fontWeight={500} sx={{ color: isDark ? "#e2e8f0" : "inherit" }}>
               {formatDate(lead.createdAt, "dd MMM yyyy")}
             </Typography>
-            <FiberManualRecord sx={{ fontSize: 4, color: "text.disabled" }} />
+            <FiberManualRecord sx={{ fontSize: 4, color: isDark ? "#64748b" : "text.disabled" }} />
             <AccessTime
-              sx={{ fontSize: 14, color: alpha(PRIMARY_COLOR, 0.6) }}
+              sx={{ fontSize: 14, color: isDark ? "#60a5fa" : alpha(PRIMARY_COLOR, 0.6) }}
             />
-            <Typography variant="body2" fontWeight={500}>
+            <Typography variant="body2" fontWeight={500} sx={{ color: isDark ? "#e2e8f0" : "inherit" }}>
               {lead.daysInactive || 0} days
             </Typography>
           </Stack>
@@ -1395,7 +1395,7 @@ export default function MissedLeadsPage() {
   const userRole = getUserRole();
 
   // State Management
-  const [period, setPeriod] = useState("Today");
+  const [period, setPeriod] = useState("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -2529,7 +2529,7 @@ export default function MissedLeadsPage() {
                   "&:hover": { bgcolor: "#1d4ed8" },
                 }}
               >
-                Create New Mislead
+                Create New Missed Lead
               </Button>
               {isMobile && (
                 <Button

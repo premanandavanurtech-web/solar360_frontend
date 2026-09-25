@@ -291,6 +291,62 @@ export const useAttendance = () => {
     [fetchAPI, fetchAttendances, handleError]
   );
 
+  // ── markAttendance (Admin manual create / mark absent to present) ──────────
+  const markAttendance = useCallback(
+    async (data) => {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+      try {
+        const res = await fetchAPI('/attendance', {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        if (res?.success) {
+          setSuccess(res.message || "Attendance recorded successfully");
+          await fetchAttendances();
+          return { success: true, data: res.result };
+        }
+        return { success: false, error: res?.message || "Failed to mark attendance" };
+      } catch (err) {
+        const msg = handleError(err, "Failed to mark attendance");
+        return { success: false, error: msg };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchAPI, fetchAttendances, handleError]
+  );
+
+  // ── allowMobilePunchIn (Admin allows user to punch in with GPS & sends push notification) ──
+  const allowMobilePunchIn = useCallback(
+    async ({ userId, attendanceId, date }) => {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+      try {
+        const res = await fetchAPI('/attendance/allow-punch-in', {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, attendanceId, date }),
+        });
+        if (res?.success) {
+          setSuccess(res.message || "Mobile Punch-In unlocked and notification sent!");
+          await fetchAttendances();
+          return { success: true, message: res.message };
+        }
+        return { success: false, error: res?.message || "Failed to allow mobile punch in" };
+      } catch (err) {
+        const msg = handleError(err, "Failed to allow mobile punch in");
+        return { success: false, error: msg };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchAPI, fetchAttendances, handleError]
+  );
+
   return {
     // state
     attendances,
@@ -308,7 +364,9 @@ export const useAttendance = () => {
     punchIn,
     punchOut,
     updateAttendance,
+    markAttendance,
     deleteAttendance,
+    allowMobilePunchIn,
     clearMessages,
   };
 };

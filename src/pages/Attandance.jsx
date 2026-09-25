@@ -28,6 +28,7 @@ import axios from "axios";
 import { useAuth } from "../contexts/AuthContext";
 import { useAttendance } from "../hooks/useAttendance";
 import { useGeo } from "../hooks/useGeo";
+import { toBackendAssetUrl } from "../utils/backendAssetUrl";
 import AttendanceDetails, {
   generateCSV, generateJSON, downloadFile, printRecord,
 } from "./AttendanceDetails";
@@ -45,25 +46,34 @@ import { API_ORIGIN } from "../utils/apiConfig";
 // ─── Constants & Dark Palette ──────────────────────────────────────────────────
 const API = API_ORIGIN;
 
-const COLOR = {
-  get isDark() {
-    return (localStorage.getItem("appThemeMode") || "dark") === "dark";
-  },
-  get bg() { return this.isDark ? "#060a12" : "#f6f8fc"; },
-  get card() { return this.isDark ? "#0e1424" : "#ffffff"; },
-  get cardHover() { return this.isDark ? "#131b30" : "#f8fafc"; },
-  get cardHeader() { return this.isDark ? "#0b101c" : "#ffffff"; },
-  get tableHead() { return this.isDark ? "#090d18" : "#f8fafc"; },
-  get border() { return this.isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0"; },
-  get text() { return this.isDark ? "#f8fafc" : "#0f172a"; },
-  get textSub() { return this.isDark ? "#94a3b8" : "#334155"; },
-  get textMuted() { return this.isDark ? "#64748b" : "#64748b"; },
+// ─── Theme Colors ──────────────────────────────────────────────────────────────
+const PALETTE = {
   blue: "#3b82f6",
   green: "#10b981",
   amber: "#f59e0b",
   red: "#ef4444",
   orange: "#d97706",
 };
+
+const getColors = (isDark) => ({
+  isDark,
+  bg: isDark ? "#060a12" : "#f6f8fc",
+  card: isDark ? "#0e1424" : "#ffffff",
+  cardHover: isDark ? "#131b30" : "#f8fafc",
+  cardHeader: isDark ? "#0b101c" : "#ffffff",
+  tableHead: isDark ? "#090d18" : "#f8fafc",
+  border: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0",
+  inputBg: isDark ? "#0e1424" : "#f8fafc",
+  inputBorder: isDark ? "rgba(255, 255, 255, 0.15)" : "#cbd5e1",
+  text: isDark ? "#f8fafc" : "#0f172a",
+  textSub: isDark ? "#94a3b8" : "#475569",
+  textMuted: isDark ? "#64748b" : "#64748b",
+  blue: PALETTE.blue,
+  green: PALETTE.green,
+  amber: PALETTE.amber,
+  red: PALETTE.red,
+  orange: PALETTE.orange,
+});
 
 const MANAGER_ROLES = ["ADMIN", "PROJECT_HEAD", "MANAGER", "SUPERVISOR"];
 
@@ -75,11 +85,11 @@ const PERIOD_OPTIONS = [
 ];
 
 const STATUS_CONFIG = {
-  present: { bg: "rgba(16, 185, 129, 0.12)", color: COLOR.green, icon: <CheckCircle sx={{ fontSize: 14 }} />, label: "Present" },
-  absent: { bg: "rgba(239, 68, 68, 0.12)", color: COLOR.red, icon: <ErrorIcon sx={{ fontSize: 14 }} />, label: "Absent" },
-  late: { bg: "rgba(245, 158, 11, 0.12)", color: COLOR.amber, icon: <Warning sx={{ fontSize: 14 }} />, label: "Late" },
+  present: { bg: "rgba(16, 185, 129, 0.12)", color: PALETTE.green, icon: <CheckCircle sx={{ fontSize: 14 }} />, label: "Present" },
+  absent: { bg: "rgba(239, 68, 68, 0.12)", color: PALETTE.red, icon: <ErrorIcon sx={{ fontSize: 14 }} />, label: "Absent" },
+  late: { bg: "rgba(245, 158, 11, 0.12)", color: PALETTE.amber, icon: <Warning sx={{ fontSize: 14 }} />, label: "Late" },
   leave: { bg: "rgba(168, 85, 247, 0.12)", color: "#c084fc", icon: <Person sx={{ fontSize: 14 }} />, label: "Leave" },
-  holiday: { bg: "rgba(59, 130, 246, 0.12)", color: COLOR.blue, icon: <CalendarToday sx={{ fontSize: 14 }} />, label: "Holiday" },
+  holiday: { bg: "rgba(59, 130, 246, 0.12)", color: PALETTE.blue, icon: <CalendarToday sx={{ fontSize: 14 }} />, label: "Holiday" },
 };
 
 const DOW = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -156,6 +166,8 @@ function useWorkTimer() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Attendance() {
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const COLOR = useMemo(() => getColors(isDark), [isDark]);
   const navigate = useNavigate();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { userId: paramUserId } = useParams();
@@ -163,7 +175,7 @@ export default function Attendance() {
   const memberInfo = location.state || {};
   const isAdminView = !!paramUserId;
 
-  const { user, getCanonicalUserRole } = useAuth();
+  const { user, getCanonicalUserRole, safeFetchAPI } = useAuth();
   const { socketRef } = useSocket();
   const {
     attendances, loading, error, success, pagination, summary,
@@ -192,62 +204,237 @@ export default function Attendance() {
   const hasPunchedIn = !!todayAtt?.punchIn;
   const hasPunchedOut = !!todayAtt?.punchOut;
 
-  const [period, setPeriod] = useState(memberInfo.historyView ? "All" : "This Month");
-  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 7, 1));
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [filters, setFilters] = useState({ page: 1, limit: 10, status: "", search: "" });
+  const [period, setPeriod] = useState("This Month");
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [filters, setFilters] = useState({ page: 1, limit: 200, status: "", search: "" });
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [exportAnchorEl, setExportAnchorEl] = useState(null);
   const [tablePage, setTablePage] = useState(1);
   const rowsPerPage = 8;
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedAttendance, setSelectedAttendance] = useState(null);
 
   const showSnack = useCallback((msg, sev = "success") => setSnackbar({ open: true, message: msg, severity: sev }), []);
 
+  // Fetch full employee profile to guarantee joiningDate & createdAt are never lost on month change
+  const [profileUser, setProfileUser] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadUserProfile = async () => {
+      const targetId = paramUserId || user?._id || user?.id;
+      if (!targetId) return;
+      try {
+        const res = await safeFetchAPI(`/user/getUserById/${targetId}`);
+        const uData = res?.data || res?.result || (res?.success ? res?.user : null);
+        if (isMounted && uData) {
+          setProfileUser(uData);
+        }
+      } catch (e) {
+        console.error("Failed to load user profile in attendance:", e);
+      }
+    };
+    loadUserProfile();
+    return () => { isMounted = false; };
+  }, [paramUserId, user, safeFetchAPI]);
+
+  // Employee Joining Date - persistent from profileUser, memberInfo, user, or attendance payload
+  const targetUserObj = profileUser || attendances?.[0]?.user || (!isAdminView ? user : null);
+  const rawJoinDate =
+    memberInfo.joiningDate ||
+    memberInfo.memberCreatedAt ||
+    memberInfo.createdAt ||
+    profileUser?.joiningDate ||
+    profileUser?.createdAt ||
+    targetUserObj?.joiningDate ||
+    targetUserObj?.createdAt;
+  const joiningDateObj = useMemo(() => (rawJoinDate ? new Date(rawJoinDate) : null), [rawJoinDate]);
+  const isValidJoinDate = joiningDateObj && !Number.isNaN(joiningDateObj.getTime());
+  const joiningDateKey = isValidJoinDate ? format(joiningDateObj, "yyyy-MM-dd") : null;
+  const joiningDateFormatted = isValidJoinDate ? fmtDate(joiningDateObj) : null;
+
+  // Month navigation boundaries based on joining date
+  const todayDate = useMemo(() => {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t;
+  }, []);
+
+  const maxMonth = useMemo(() => {
+    return new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+  }, [todayDate]);
+
+  // Strict minimum month: if joining date is not yet known or loaded, clamp to current month (maxMonth)
+  // This strictly guarantees that the user can NEVER navigate back to past months/years (like June 2024)!
+  const minMonth = useMemo(() => {
+    if (!isValidJoinDate) {
+      return maxMonth;
+    }
+    const jm = new Date(joiningDateObj.getFullYear(), joiningDateObj.getMonth(), 1);
+    return jm > maxMonth ? maxMonth : jm;
+  }, [isValidJoinDate, joiningDateObj, maxMonth]);
+
+  const canGoPrevMonth = useMemo(() => {
+    if (!minMonth) return false;
+    const currentView = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    return currentView.getTime() > minMonth.getTime();
+  }, [minMonth, currentMonth]);
+
+  const canGoNextMonth = useMemo(() => {
+    const currentView = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    return currentView.getTime() < maxMonth.getTime();
+  }, [maxMonth, currentMonth]);
+
+  // Clamp currentMonth strictly within [minMonth, maxMonth] boundaries
+  // If the view was in June 2024 or earlier, this immediately snaps it back to joining month
+  useEffect(() => {
+    const currentView = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    if (minMonth && currentView.getTime() < minMonth.getTime()) {
+      setCurrentMonth(new Date(minMonth));
+      setSelectedDate(null);
+    } else if (currentView.getTime() > maxMonth.getTime()) {
+      setCurrentMonth(new Date(maxMonth));
+      setSelectedDate(null);
+    }
+  }, [minMonth, maxMonth, currentMonth]);
+
+  const currentMonthYear = currentMonth.getFullYear();
+  const currentMonthMonth = currentMonth.getMonth();
+
   const loadData = useCallback(async () => {
     const dates = {};
+    if (period === "Today") {
+      const todayStr = format(new Date(), "yyyy-MM-dd");
+      dates.startDate = todayStr;
+      dates.endDate = todayStr;
+    } else if (period === "This Week") {
+      const now = new Date();
+      const firstDayOfWeek = new Date(now);
+      firstDayOfWeek.setDate(now.getDate() - now.getDay());
+      const lastDayOfWeek = new Date(firstDayOfWeek);
+      lastDayOfWeek.setDate(firstDayOfWeek.getDate() + 6);
+      dates.startDate = format(firstDayOfWeek, "yyyy-MM-dd");
+      dates.endDate = format(lastDayOfWeek, "yyyy-MM-dd");
+    } else if (period === "All") {
+      if (joiningDateObj && !Number.isNaN(joiningDateObj.getTime())) {
+        dates.startDate = format(joiningDateObj, "yyyy-MM-dd");
+      }
+      dates.endDate = format(new Date(), "yyyy-MM-dd");
+    } else {
+      // Default & "This Month": fetch records for the active currentMonth
+      const isJoiningMonth = joiningDateObj && currentMonthYear === joiningDateObj.getFullYear() && currentMonthMonth === joiningDateObj.getMonth();
+      const startDay = isJoiningMonth ? joiningDateObj.getDate() : 1;
+      dates.startDate = format(new Date(currentMonthYear, currentMonthMonth, startDay), "yyyy-MM-dd");
+      dates.endDate = format(new Date(currentMonthYear, currentMonthMonth + 1, 0), "yyyy-MM-dd");
+    }
+
     const q = {
-      page: filters.page,
-      limit: filters.limit,
-      ...(filters.status && { status: filters.status }),
-      ...(filters.search && { search: filters.search }),
+      page: 1,
+      limit: 200,
       ...(paramUserId ? { userId: paramUserId } : isTeam && user?._id ? { userId: user._id } : {}),
       ...dates,
     };
     await fetchAttendances(q);
-  }, [filters, isTeam, user, fetchAttendances, paramUserId]);
+  }, [period, currentMonthYear, currentMonthMonth, isTeam, user?._id, fetchAttendances, paramUserId, rawJoinDate]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Combined Rows
+  // Combined Rows for the active month view
   const mergedRows = useMemo(() => {
-    if (!attendances || attendances.length === 0) {
-      return DEMO_FALLBACK_ROWS;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // If month is prior to joining month, return no rows
+    if (minMonth && new Date(year, month, 1).getTime() < minMonth.getTime()) {
+      return [];
     }
-    return attendances.map((item) => {
-      const dateKey = format(new Date(item.date || item.createdAt), "yyyy-MM-dd");
-      const dateFormatted = fmtDate(item.date || item.createdAt);
+
+    // Map existing records from API by dateKey (yyyy-MM-dd)
+    const existingMap = new Map();
+    (attendances || []).forEach((item) => {
+      const itemDate = new Date(item.date || item.createdAt);
+      const dateKey = format(itemDate, "yyyy-MM-dd");
+      const dateFormatted = fmtDate(itemDate);
       const punchInTime = item.punchIn?.time ? fmtTime(item.punchIn.time) : "—";
       const punchOutTime = item.punchOut?.time ? fmtTime(item.punchOut.time) : item.punchIn?.time ? "Ongoing" : "—";
       const hoursNum = Number(item.workHours || 0);
       const h = Math.floor(hoursNum);
       const m = Math.round((hoursNum - h) * 60);
       const hours = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-      const status = item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1).toLowerCase() : item.punchIn?.time ? "Present" : "Absent";
+      const status = item.status
+        ? item.status.charAt(0).toUpperCase() + item.status.slice(1).toLowerCase()
+        : item.punchIn?.time
+        ? "Present"
+        : "Absent";
 
-      return {
+      existingMap.set(dateKey, {
         dateKey,
         dateFormatted,
         punchInTime,
         punchOutTime,
         hours,
         status,
-      };
+        rawDate: itemDate,
+      });
     });
-  }, [attendances]);
+
+    // Build daily rows for currentMonth
+    const rows = [];
+    const isCurrentCalendarMonth = year === today.getFullYear() && month === today.getMonth();
+    const isPastCalendarMonth = new Date(year, month + 1, 0) < today;
+
+    const maxDay = isCurrentCalendarMonth
+      ? today.getDate()
+      : isPastCalendarMonth
+      ? daysInMonth
+      : 0;
+
+    // In the joining month, start strictly from the joining day (no rows prior to joining date)
+    const isJoiningMonth = joiningDateObj && year === joiningDateObj.getFullYear() && month === joiningDateObj.getMonth();
+    const minDay = isJoiningMonth ? joiningDateObj.getDate() : 1;
+
+    for (let d = maxDay; d >= minDay; d--) {
+      const cellDate = new Date(year, month, d);
+      const dateKey = format(cellDate, "yyyy-MM-dd");
+      const isJoiningDate = dateKey === joiningDateKey;
+
+      if (existingMap.has(dateKey)) {
+        const row = existingMap.get(dateKey);
+        rows.push({
+          ...row,
+          isJoiningDate,
+        });
+      } else {
+        const isSunday = cellDate.getDay() === 0;
+        rows.push({
+          dateKey,
+          dateFormatted: fmtDate(cellDate),
+          punchInTime: "—",
+          punchOutTime: "—",
+          hours: "00:00",
+          status: isSunday ? "Holiday" : "Absent",
+          rawDate: cellDate,
+          isJoiningDate,
+          isBeforeJoining: false,
+        });
+      }
+    }
+
+    return rows;
+  }, [attendances, currentMonth, joiningDateKey, joiningDateObj, minMonth]);
 
   // Filtered rows
   const filteredRows = useMemo(() => {
     return mergedRows.filter((r) => {
+      if (selectedDate) {
+        const selKey = format(selectedDate, "yyyy-MM-dd");
+        if (r.dateKey !== selKey) return false;
+      }
       if (filters.status && r.status.toLowerCase() !== filters.status.toLowerCase()) return false;
       if (filters.search) {
         const q = filters.search.toLowerCase();
@@ -255,7 +442,7 @@ export default function Attendance() {
       }
       return true;
     });
-  }, [mergedRows, filters.search, filters.status]);
+  }, [mergedRows, selectedDate, filters.search, filters.status]);
 
   // Paginated Table rows
   const totalTablePages = Math.ceil(filteredRows.length / rowsPerPage) || 1;
@@ -266,9 +453,9 @@ export default function Attendance() {
 
   // Summary counts
   const totalDaysCount = mergedRows.length;
-  const presentCount = mergedRows.filter((r) => r.status.toLowerCase() === "present" || r.punchInTime !== "—").length;
+  const presentCount = mergedRows.filter((r) => r.status.toLowerCase() === "present" || (r.punchInTime && r.punchInTime !== "—")).length;
   const lateCount = mergedRows.filter((r) => r.status.toLowerCase() === "late").length;
-  const absentCount = mergedRows.filter((r) => r.status.toLowerCase() === "absent" && r.punchInTime === "—").length;
+  const absentCount = mergedRows.filter((r) => r.status.toLowerCase() === "absent").length;
   let workHoursTotal = 0;
   mergedRows.forEach((r) => {
     if (r.hours && r.hours !== "00:00") {
@@ -279,6 +466,9 @@ export default function Attendance() {
 
   // Calendar Day Cells
   const calendarCells = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
@@ -290,16 +480,46 @@ export default function Attendance() {
       cells.push({ day: prevDays - i, isCurrent: false });
     }
     for (let d = 1; d <= daysInMonth; d++) {
+      const cellDate = new Date(year, month, d, 0, 0, 0, 0);
+      const isPast = cellDate < today;
+      const isToday = cellDate.getTime() === today.getTime();
+      const isFuture = cellDate > today;
+      const isSunday = cellDate.getDay() === 0;
+
       const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const isJoiningDate = dateStr === joiningDateKey;
+      const isBeforeJoiningMonth = minMonth && new Date(year, month, 1).getTime() < minMonth.getTime();
+      const isBeforeJoiningDay = isValidJoinDate && cellDate < new Date(joiningDateObj.getFullYear(), joiningDateObj.getMonth(), joiningDateObj.getDate());
+      const isBeforeJoining = isBeforeJoiningMonth || isBeforeJoiningDay;
+
       const match = mergedRows.find((r) => r.dateKey === dateStr);
+
       let dayStatus = null;
-      if (match) {
+      if (isBeforeJoining) {
+        dayStatus = null;
+      } else if (match) {
         dayStatus = match.status.toLowerCase();
+      } else if (isSunday) {
+        dayStatus = "holiday";
+      } else if (isPast) {
+        dayStatus = "absent";
+      } else if (isToday) {
+        dayStatus = todayAtt?.punchIn ? "present" : "absent";
       } else {
-        const isSunday = new Date(year, month, d).getDay() === 0;
-        if (isSunday) dayStatus = "holiday";
+        dayStatus = null;
       }
-      cells.push({ day: d, isCurrent: true, status: dayStatus, dateKey: dateStr });
+
+      cells.push({
+        day: d,
+        isCurrent: true,
+        status: dayStatus,
+        dateKey: dateStr,
+        isPast,
+        isToday,
+        isFuture,
+        isJoiningDate,
+        isBeforeJoining,
+      });
     }
     const remaining = 35 - cells.length;
     const extra = remaining < 0 ? 42 - cells.length : remaining;
@@ -307,14 +527,65 @@ export default function Attendance() {
       cells.push({ day: d, isCurrent: false });
     }
     return cells;
-  }, [currentMonth, mergedRows]);
+  }, [currentMonth, mergedRows, todayAtt, joiningDateKey, joiningDateObj]);
 
   // Display metadata
-  const displayName = memberInfo.memberName || (user?.firstName ? `${user.firstName} ${user.lastName || ""}` : user?.name || "SMRUTI RANJAN JENA");
-  const displayRole = memberInfo.memberRole || user?.role || "TEAM";
-  const displayPhone = memberInfo.memberPhone || user?.phone || user?.phoneNumber || "9668970773";
-  const displayEmail = memberInfo.memberEmail || user?.email || "srjena@s.s.com";
+  const displayName =
+    (profileUser?.firstName ? `${profileUser.firstName} ${profileUser.lastName || ""}`.trim() : profileUser?.name) ||
+    memberInfo.memberName ||
+    (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : user?.name) ||
+    "Employee";
+  const displayRole = profileUser?.role || memberInfo.memberRole || user?.role || "TEAM";
+  const displayPhone = profileUser?.phoneNumber || profileUser?.phone || memberInfo.memberPhone || user?.phone || user?.phoneNumber || "";
+  const displayEmail = profileUser?.email || memberInfo.memberEmail || user?.email || "";
   const displayAvatar = displayName.charAt(0).toUpperCase();
+  const displayAvatarUrl = toBackendAssetUrl(
+    profileUser?.profileImage || profileUser?.avatar || memberInfo.memberAvatar || memberInfo.profileImage || memberInfo.avatar || (!isAdminView ? (user?.avatar || user?.profileImage || user?.photo) : null)
+  );
+
+  const targetEmployeeId = paramUserId || profileUser?._id || user?._id || user?.id;
+  const resolvedTargetUser = useMemo(() => ({
+    _id: targetEmployeeId,
+    name: displayName,
+    email: displayEmail,
+    phone: displayPhone,
+    role: displayRole,
+    firstName: profileUser?.firstName || user?.firstName || displayName,
+    lastName: profileUser?.lastName || user?.lastName || "",
+  }), [targetEmployeeId, displayName, displayEmail, displayPhone, displayRole, profileUser, user]);
+
+  // Helper to open AttendanceDetails modal for a clicked date or table row
+  const openAttendanceForDate = useCallback((dateStr, cellDate, optionalRow = null) => {
+    const matchRow = optionalRow || mergedRows.find((r) => r.dateKey === dateStr);
+    const matchedAtt = attendances?.find((a) => {
+      const aDate = new Date(a.date || a.createdAt);
+      return format(aDate, "yyyy-MM-dd") === dateStr;
+    });
+
+    const isToday = format(new Date(), "yyyy-MM-dd") === dateStr;
+    const defaultStatus = matchRow?.status || (cellDate.getDay() === 0 ? "Holiday" : cellDate > new Date() ? "Upcoming" : isToday && todayAtt?.punchIn ? "Present" : "Absent");
+
+    const attToDisplay = matchedAtt ? {
+      ...matchedAtt,
+      userId: targetEmployeeId,
+      user: matchedAtt.user?._id ? matchedAtt.user : { ...resolvedTargetUser, ...(matchedAtt.user || {}) },
+    } : {
+      _id: `rec-${dateStr}`,
+      userId: targetEmployeeId,
+      date: cellDate,
+      status: defaultStatus,
+      workHours: matchRow?.hours || "00:00",
+      workHoursFormatted: matchRow?.hours || "00:00",
+      punchIn: matchRow?.punchInTime && matchRow?.punchInTime !== "—" ? { time: matchRow.punchInTime } : (isToday && todayAtt?.punchIn ? todayAtt.punchIn : null),
+      punchOut: matchRow?.punchOutTime && matchRow?.punchOutTime !== "—" && matchRow?.punchOutTime !== "Ongoing" ? { time: matchRow.punchOutTime } : (isToday && todayAtt?.punchOut ? todayAtt.punchOut : null),
+      user: resolvedTargetUser,
+      createdAt: cellDate,
+      updatedAt: cellDate,
+    };
+
+    setSelectedAttendance(attToDisplay);
+    setDetailsOpen(true);
+  }, [attendances, mergedRows, targetEmployeeId, resolvedTargetUser, todayAtt]);
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: COLOR.bg, color: COLOR.text, p: { xs: 1.5, md: 3 } }}>
@@ -363,7 +634,20 @@ export default function Attendance() {
                 <ArrowBack sx={{ fontSize: 18 }} />
               </IconButton>
               
-              <Avatar sx={{ width: 46, height: 46, bgcolor: "#3b82f6", color: "#fff", fontWeight: 800, fontSize: "1.1rem" }}>
+              <Avatar
+                src={displayAvatarUrl}
+                sx={{
+                  width: { xs: 54, md: 66 },
+                  height: { xs: 54, md: 66 },
+                  bgcolor: "#3b82f6",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: "1.4rem",
+                  border: "2.5px solid rgba(255, 255, 255, 0.25)",
+                  boxShadow: "0 6px 20px rgba(0, 0, 0, 0.4)",
+                  flexShrink: 0,
+                }}
+              >
                 {displayAvatar}
               </Avatar>
 
@@ -395,6 +679,21 @@ export default function Attendance() {
                       <Email sx={{ fontSize: 13 }} />
                       <span>{displayEmail}</span>
                     </Stack>
+                  )}
+                  {joiningDateFormatted && (
+                    <Chip
+                      label={`Joined: ${joiningDateFormatted}`}
+                      size="small"
+                      sx={{
+                        bgcolor: "rgba(168, 85, 247, 0.18)",
+                        color: "#d8b4fe",
+                        fontWeight: 800,
+                        height: 22,
+                        fontSize: "0.68rem",
+                        border: "1px solid rgba(168, 85, 247, 0.35)",
+                        ml: { xs: 0, sm: 1 },
+                      }}
+                    />
                   )}
                 </Stack>
               </Box>
@@ -614,12 +913,15 @@ export default function Attendance() {
                 sx={{
                   width: { xs: "100%", sm: 260 },
                   "& .MuiOutlinedInput-root": {
-                    bgcolor: COLOR.bg,
+                    bgcolor: COLOR.inputBg,
                     borderRadius: "10px",
-                    color: "#fff",
+                    color: COLOR.text,
                     fontSize: "0.85rem",
-                    "& fieldset": { borderColor: "rgba(255,255,255,0.1)" },
-                    "&:hover fieldset": { borderColor: "rgba(255,255,255,0.2)" },
+                    "& fieldset": { borderColor: COLOR.inputBorder },
+                    "&:hover fieldset": { borderColor: COLOR.blue },
+                    "&.Mui-focused fieldset": { borderColor: COLOR.blue },
+                    "& input": { color: COLOR.text },
+                    "& input::placeholder": { color: COLOR.textMuted, opacity: 1 },
                   },
                 }}
               />
@@ -631,12 +933,15 @@ export default function Attendance() {
                 displayEmpty
                 sx={{
                   minWidth: 130,
-                  bgcolor: COLOR.bg,
+                  bgcolor: COLOR.inputBg,
                   borderRadius: "10px",
-                  color: "#fff",
+                  color: COLOR.text,
                   fontSize: "0.85rem",
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.1)" },
-                  "& .MuiSvgIcon-root": { color: COLOR.textSub },
+                  "& .MuiSelect-select": { color: COLOR.text, fontWeight: 500 },
+                  "& .MuiOutlinedInput-notchedOutline": { borderColor: COLOR.inputBorder },
+                  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: COLOR.blue },
+                  "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: COLOR.blue },
+                  "& .MuiSvgIcon-root": { color: COLOR.textMuted },
                 }}
               >
                 <MenuItem value="">Status: All</MenuItem>
@@ -651,12 +956,15 @@ export default function Attendance() {
                 size="small"
                 sx={{
                   minWidth: 150,
-                  bgcolor: COLOR.bg,
+                  bgcolor: COLOR.inputBg,
                   borderRadius: "10px",
-                  color: "#fff",
+                  color: COLOR.text,
                   fontSize: "0.85rem",
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.1)" },
-                  "& .MuiSvgIcon-root": { color: COLOR.textSub },
+                  "& .MuiSelect-select": { color: COLOR.text, fontWeight: 500 },
+                  "& .MuiOutlinedInput-notchedOutline": { borderColor: COLOR.inputBorder },
+                  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: COLOR.blue },
+                  "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: COLOR.blue },
+                  "& .MuiSvgIcon-root": { color: COLOR.textMuted },
                 }}
               >
                 {PERIOD_OPTIONS.map((o) => (
@@ -665,10 +973,10 @@ export default function Attendance() {
               </Select>
             </Stack>
 
-            {(filters.search || filters.status || period !== "All") && (
+            {(filters.search || filters.status || (period && period !== "All" && period !== "all") || selectedDate) && (
               <Button
                 size="small"
-                onClick={() => { setFilters({ page: 1, limit: 10, status: "", search: "" }); setPeriod("All"); }}
+                onClick={() => { setFilters({ page: 1, limit: 200, status: "", search: "" }); setPeriod("All"); setSelectedDate(null); }}
                 startIcon={<Close sx={{ fontSize: 14 }} />}
                 sx={{ color: COLOR.red, textTransform: "none", fontWeight: 700, fontSize: "0.82rem" }}
               >
@@ -677,22 +985,75 @@ export default function Attendance() {
             )}
           </Stack>
 
-          {/* Active filter badges */}
-          <Stack direction="row" spacing={1} sx={{ mt: 1.5, pt: 1.25, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-            <Chip
-              size="small"
-              label={`Period: ${period}`}
-              onDelete={() => setPeriod("All")}
-              sx={{
-                bgcolor: "rgba(255,255,255,0.08)",
-                color: COLOR.textSub,
-                borderRadius: "8px",
-                fontSize: "0.72rem",
-                fontWeight: 700,
-                "& .MuiChip-deleteIcon": { color: COLOR.textSub, "&:hover": { color: "#fff" } },
-              }}
-            />
-          </Stack>
+          {/* Active filter badges - only show when filters are actually active */}
+          {(filters.search || filters.status || (period && period !== "All" && period !== "all") || selectedDate) && (
+            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1.5, pt: 1.25, borderTop: `1px solid ${COLOR.border}` }}>
+              {selectedDate && (
+                <Chip
+                  size="small"
+                  label={`Date: ${format(selectedDate, "MMM dd, yyyy")}`}
+                  onDelete={() => setSelectedDate(null)}
+                  sx={{
+                    bgcolor: COLOR.isDark ? "rgba(16, 185, 129, 0.15)" : "#e6f4ea",
+                    color: COLOR.green,
+                    border: `1px solid rgba(16, 185, 129, 0.3)`,
+                    borderRadius: "8px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    "& .MuiChip-deleteIcon": { color: COLOR.green, "&:hover": { color: COLOR.text } },
+                  }}
+                />
+              )}
+              {period && period !== "All" && period !== "all" && (
+                <Chip
+                  size="small"
+                  label={`Period: ${period}`}
+                  onDelete={() => setPeriod("All")}
+                  sx={{
+                    bgcolor: COLOR.isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
+                    color: COLOR.text,
+                    border: `1px solid ${COLOR.border}`,
+                    borderRadius: "8px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    "& .MuiChip-deleteIcon": { color: COLOR.textSub, "&:hover": { color: COLOR.text } },
+                  }}
+                />
+              )}
+              {filters.status && (
+                <Chip
+                  size="small"
+                  label={`Status: ${filters.status}`}
+                  onDelete={() => setFilters((p) => ({ ...p, status: "" }))}
+                  sx={{
+                    bgcolor: COLOR.isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
+                    color: COLOR.text,
+                    border: `1px solid ${COLOR.border}`,
+                    borderRadius: "8px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    "& .MuiChip-deleteIcon": { color: COLOR.textSub, "&:hover": { color: COLOR.text } },
+                  }}
+                />
+              )}
+              {filters.search && (
+                <Chip
+                  size="small"
+                  label={`Search: "${filters.search}"`}
+                  onDelete={() => setFilters((p) => ({ ...p, search: "" }))}
+                  sx={{
+                    bgcolor: COLOR.isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
+                    color: COLOR.text,
+                    border: `1px solid ${COLOR.border}`,
+                    borderRadius: "8px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    "& .MuiChip-deleteIcon": { color: COLOR.textSub, "&:hover": { color: COLOR.text } },
+                  }}
+                />
+              )}
+            </Stack>
+          )}
         </Paper>
 
         {/* ── 2-Column Content Layout ── */}
@@ -726,12 +1087,62 @@ export default function Attendance() {
               </Box>
 
               <Stack direction="row" spacing={0.5}>
-                <IconButton size="small" onClick={() => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} sx={{ color: COLOR.textSub, border: `1px solid ${COLOR.border}`, borderRadius: "8px" }}>
-                  <ChevronLeft sx={{ fontSize: 16 }} />
-                </IconButton>
-                <IconButton size="small" onClick={() => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} sx={{ color: COLOR.textSub, border: `1px solid ${COLOR.border}`, borderRadius: "8px" }}>
-                  <ChevronRight sx={{ fontSize: 16 }} />
-                </IconButton>
+                <Tooltip title={!canGoPrevMonth ? "Cannot go before joining month" : "Previous Month"}>
+                  <span>
+                    <IconButton
+                      size="small"
+                      disabled={!canGoPrevMonth}
+                      onClick={() => {
+                        if (!canGoPrevMonth) return;
+                        setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+                        setSelectedDate(null);
+                        setTablePage(1);
+                      }}
+                      sx={{
+                        color: canGoPrevMonth ? COLOR.textSub : COLOR.textMuted,
+                        border: `1px solid ${COLOR.border}`,
+                        borderRadius: "8px",
+                        opacity: canGoPrevMonth ? 1 : 0.25,
+                        cursor: canGoPrevMonth ? "pointer" : "not-allowed",
+                        "&.Mui-disabled": {
+                          opacity: 0.25,
+                          cursor: "not-allowed",
+                          pointerEvents: "auto",
+                        },
+                      }}
+                    >
+                      <ChevronLeft sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Tooltip title={!canGoNextMonth ? "Cannot go to future months" : "Next Month"}>
+                  <span>
+                    <IconButton
+                      size="small"
+                      disabled={!canGoNextMonth}
+                      onClick={() => {
+                        if (!canGoNextMonth) return;
+                        setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+                        setSelectedDate(null);
+                        setTablePage(1);
+                      }}
+                      sx={{
+                        color: canGoNextMonth ? COLOR.textSub : COLOR.textMuted,
+                        border: `1px solid ${COLOR.border}`,
+                        borderRadius: "8px",
+                        opacity: canGoNextMonth ? 1 : 0.25,
+                        cursor: canGoNextMonth ? "pointer" : "not-allowed",
+                        "&.Mui-disabled": {
+                          opacity: 0.25,
+                          cursor: "not-allowed",
+                          pointerEvents: "auto",
+                        },
+                      }}
+                    >
+                      <ChevronRight sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
               </Stack>
             </Stack>
 
@@ -749,13 +1160,26 @@ export default function Attendance() {
               {calendarCells.map((cell, idx) => {
                 if (!cell.isCurrent) {
                   return (
-                    <Box key={`empty-${idx}`} sx={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.15)", fontSize: "0.75rem", fontWeight: 600 }}>
+                    <Box
+                      key={`empty-${idx}`}
+                      sx={{
+                        height: 36,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: isDark ? "rgba(255,255,255,0.2)" : "#cbd5e1",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                      }}
+                    >
                       {cell.day}
                     </Box>
                   );
                 }
 
-                const isSelected = selectedDate.getDate() === cell.day;
+                const isSelected = selectedDate ? cell.dateKey === format(selectedDate, "yyyy-MM-dd") : false;
+                const isJoining = cell.isJoiningDate;
+                const isBeforeJoining = cell.isBeforeJoining;
                 const isPresent = cell.status === "present";
                 const isAbsent = cell.status === "absent";
                 const isHoliday = cell.status === "holiday";
@@ -764,7 +1188,15 @@ export default function Attendance() {
                 return (
                   <Box
                     key={`day-${cell.day}`}
-                    onClick={() => setSelectedDate(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), cell.day))}
+                    onClick={() => {
+                      if (isBeforeJoining) return;
+                      const cellDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), cell.day);
+                      const cellDateStr = format(cellDate, "yyyy-MM-dd");
+                      setSelectedDate(cellDate);
+                      setTablePage(1);
+                      openAttendanceForDate(cellDateStr, cellDate);
+                    }}
+                    title={isBeforeJoining ? "Before joining date" : isJoining ? "Employee Joining Date (Click to view details)" : "Click to view attendance details"}
                     sx={{
                       height: 36,
                       borderRadius: "10px",
@@ -772,13 +1204,18 @@ export default function Attendance() {
                       flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
-                      cursor: "pointer",
+                      cursor: isBeforeJoining ? "not-allowed" : "pointer",
+                      opacity: isBeforeJoining ? 0.28 : 1,
                       fontSize: "0.78rem",
                       fontWeight: 800,
                       position: "relative",
                       transition: "all 0.15s ease",
-                      bgcolor: isSelected
-                        ? "rgba(16, 185, 129, 0.15)"
+                      bgcolor: isBeforeJoining
+                        ? "transparent"
+                        : isSelected
+                        ? "rgba(16, 185, 129, 0.18)"
+                        : isJoining
+                        ? "rgba(168, 85, 247, 0.2)"
                         : isPresent
                         ? "rgba(16, 185, 129, 0.1)"
                         : isAbsent
@@ -786,28 +1223,56 @@ export default function Attendance() {
                         : isHoliday
                         ? "rgba(59, 130, 246, 0.1)"
                         : "rgba(255,255,255,0.03)",
-                      color: isPresent
+                      color: isBeforeJoining
+                        ? COLOR.textMuted
+                        : isJoining
+                        ? "#c084fc"
+                        : isPresent
                         ? COLOR.green
                         : isAbsent
                         ? COLOR.red
                         : isHoliday
                         ? COLOR.blue
                         : COLOR.text,
-                      border: isSelected
+                      border: isBeforeJoining
+                        ? `1px dashed ${COLOR.border}`
+                        : isSelected
                         ? `2px solid ${COLOR.green}`
+                        : isJoining
+                        ? `2px solid #a855f7`
                         : isPresent
                         ? `1px solid rgba(16, 185, 129, 0.3)`
                         : isAbsent
                         ? `1px solid rgba(239, 68, 68, 0.3)`
                         : `1px solid ${COLOR.border}`,
                       "&:hover": {
-                        transform: "translateY(-1px)",
-                        bgcolor: isPresent ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.08)",
+                        transform: isBeforeJoining ? "none" : "translateY(-1px)",
+                        bgcolor: isBeforeJoining
+                          ? "transparent"
+                          : isJoining
+                          ? "rgba(168, 85, 247, 0.3)"
+                          : isPresent
+                          ? "rgba(16, 185, 129, 0.2)"
+                          : "rgba(255,255,255,0.08)",
                       },
                     }}
                   >
                     {cell.day}
-                    {(isPresent || isAbsent || isHoliday || isLate) && (
+                    {isJoining && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: 2,
+                          right: 2,
+                          width: 5,
+                          height: 5,
+                          borderRadius: "50%",
+                          bgcolor: "#a855f7",
+                          boxShadow: "0 0 6px #a855f7",
+                        }}
+                      />
+                    )}
+                    {!isBeforeJoining && (isPresent || isAbsent || isHoliday || isLate) && (
                       <Box
                         sx={{
                           position: "absolute",
@@ -830,6 +1295,12 @@ export default function Attendance() {
                 size="small"
                 icon={<Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: COLOR.green, ml: "8px !important" }} />}
                 label="Present"
+                sx={{ bgcolor: COLOR.cardHeader, color: COLOR.textSub, border: `1px solid ${COLOR.border}`, fontSize: "0.7rem", fontWeight: 700, height: 26 }}
+              />
+              <Chip
+                size="small"
+                icon={<Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: "#a855f7", ml: "8px !important" }} />}
+                label="Joining Date"
                 sx={{ bgcolor: COLOR.cardHeader, color: COLOR.textSub, border: `1px solid ${COLOR.border}`, fontSize: "0.7rem", fontWeight: 700, height: 26 }}
               />
               <Chip
@@ -873,11 +1344,11 @@ export default function Attendance() {
                     <AccessTime sx={{ fontSize: 16 }} />
                   </Box>
                   <Typography variant="subtitle1" fontWeight={800} sx={{ color: COLOR.text }}>
-                    Attendance Log
+                    Attendance Log — {selectedDate ? format(selectedDate, "MMM dd, yyyy") : currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
                   </Typography>
                 </Stack>
                 <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.72rem", display: "block", mt: 0.2 }}>
-                  {filteredRows.length} total records
+                  {filteredRows.length} record{filteredRows.length === 1 ? "" : "s"} for {selectedDate ? format(selectedDate, "MMM dd, yyyy") : currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
                 </Typography>
               </Box>
 
@@ -885,7 +1356,19 @@ export default function Attendance() {
                 variant="contained"
                 disableElevation
                 startIcon={<History sx={{ fontSize: 16 }} />}
-                onClick={() => navigate(isAdminView ? `/attendance-history/${paramUserId}` : "/attendance-history/me")}
+                onClick={() =>
+                  navigate(isAdminView ? `/attendance-history/${paramUserId}` : "/attendance-history/me", {
+                    state: {
+                      userId: paramUserId || user?._id || user?.id,
+                      memberName:
+                        memberInfo.memberName ||
+                        (user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`).trim(),
+                      memberRole: memberInfo.memberRole || userRole,
+                      memberCreatedAt: user?.createdAt,
+                      initialAttendances: attendances,
+                    },
+                  })
+                }
                 sx={{
                   bgcolor: COLOR.orange,
                   color: "#fff",
@@ -917,11 +1400,11 @@ export default function Attendance() {
                 </TableHead>
 
                 <TableBody>
-                  {loading ? (
+                  {loading && mergedRows.length === 0 ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <TableRow key={i}>
                         <TableCell colSpan={5} sx={{ borderColor: COLOR.border, py: 1.5 }}>
-                          <Skeleton variant="text" width="100%" height={30} sx={{ bgcolor: "rgba(255,255,255,0.06)" }} />
+                          <Skeleton variant="text" width="100%" height={30} sx={{ bgcolor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
                         </TableCell>
                       </TableRow>
                     ))
@@ -940,14 +1423,36 @@ export default function Attendance() {
                       return (
                         <TableRow
                           key={row.dateKey + idx}
+                          onClick={() => {
+                            const cellDate = new Date(row.rawDate || row.dateKey);
+                            openAttendanceForDate(row.dateKey, cellDate, row);
+                          }}
                           sx={{
                             borderBottom: `1px solid ${COLOR.border}`,
+                            cursor: "pointer",
+                            transition: "background-color 0.15s ease",
                             "&:hover": { bgcolor: COLOR.cardHover },
                           }}
                         >
                           {/* Date */}
                           <TableCell sx={{ color: COLOR.text, fontWeight: 700, fontSize: "0.82rem", borderColor: COLOR.border, py: 1.75 }}>
-                            {row.dateFormatted}
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <span>{row.dateFormatted}</span>
+                              {row.isJoiningDate && (
+                                <Chip
+                                  label="Joined 🎉"
+                                  size="small"
+                                  sx={{
+                                    height: 20,
+                                    fontSize: "0.65rem",
+                                    fontWeight: 800,
+                                    bgcolor: "rgba(168, 85, 247, 0.18)",
+                                    color: "#c084fc",
+                                    border: "1px solid rgba(168, 85, 247, 0.35)",
+                                  }}
+                                />
+                              )}
+                            </Stack>
                           </TableCell>
 
                           {/* Punch In */}
@@ -1019,36 +1524,50 @@ export default function Attendance() {
 
                           {/* Status Badge */}
                           <TableCell sx={{ borderColor: COLOR.border, py: 1.75 }}>
-                            <Chip
-                              size="small"
-                              icon={
-                                isPresent ? (
-                                  <CheckCircle sx={{ fontSize: "14px !important", color: `${COLOR.green} !important` }} />
-                                ) : isAbsent ? (
-                                  <ErrorIcon sx={{ fontSize: "14px !important", color: `${COLOR.red} !important` }} />
-                                ) : (
-                                  <Warning sx={{ fontSize: "14px !important", color: `${COLOR.amber} !important` }} />
-                                )
-                              }
-                              label={row.status}
-                              sx={{
-                                height: 24,
-                                borderRadius: "999px",
-                                fontWeight: 800,
-                                fontSize: "0.72rem",
-                                bgcolor: isPresent
-                                  ? "rgba(16, 185, 129, 0.12)"
-                                  : isAbsent
-                                  ? "rgba(239, 68, 68, 0.12)"
-                                  : "rgba(245, 158, 11, 0.12)",
-                                color: isPresent ? COLOR.green : isAbsent ? COLOR.red : COLOR.amber,
-                                border: isPresent
-                                  ? "1px solid rgba(16, 185, 129, 0.3)"
-                                  : isAbsent
-                                  ? "1px solid rgba(239, 68, 68, 0.3)"
-                                  : "1px solid rgba(245, 158, 11, 0.3)",
-                              }}
-                            />
+                            {(() => {
+                              const isHoliday = row.status.toLowerCase() === "holiday";
+                              const chipBg = isPresent
+                                ? "rgba(16, 185, 129, 0.12)"
+                                : isAbsent
+                                ? "rgba(239, 68, 68, 0.12)"
+                                : isHoliday
+                                ? "rgba(59, 130, 246, 0.12)"
+                                : "rgba(245, 158, 11, 0.12)";
+                              const chipColor = isPresent
+                                ? COLOR.green
+                                : isAbsent
+                                ? COLOR.red
+                                : isHoliday
+                                ? COLOR.blue
+                                : COLOR.amber;
+
+                              return (
+                                <Chip
+                                  size="small"
+                                  icon={
+                                    isPresent ? (
+                                      <CheckCircle sx={{ fontSize: "14px !important", color: `${chipColor} !important` }} />
+                                    ) : isAbsent ? (
+                                      <ErrorIcon sx={{ fontSize: "14px !important", color: `${chipColor} !important` }} />
+                                    ) : isHoliday ? (
+                                      <CalendarToday sx={{ fontSize: "14px !important", color: `${chipColor} !important` }} />
+                                    ) : (
+                                      <Warning sx={{ fontSize: "14px !important", color: `${chipColor} !important` }} />
+                                    )
+                                  }
+                                  label={row.status}
+                                  sx={{
+                                    height: 24,
+                                    borderRadius: "999px",
+                                    fontWeight: 800,
+                                    fontSize: "0.72rem",
+                                    bgcolor: chipBg,
+                                    color: chipColor,
+                                    border: `1px solid ${alpha(chipColor, 0.35)}`,
+                                  }}
+                                />
+                              );
+                            })()}
                           </TableCell>
                         </TableRow>
                       );
@@ -1106,6 +1625,16 @@ export default function Attendance() {
         </Box>
 
       </Box>
+
+      {/* ── Attendance Details Modal Dialog ── */}
+      <AttendanceDetails
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        attendance={selectedAttendance}
+        canEdit={isAdminView}
+        canDelete={isAdminView}
+        onEdit={() => loadData()}
+      />
     </Box>
   );
 }

@@ -9,19 +9,19 @@ import {
   Box, Typography, Avatar, Chip, TextField, InputAdornment, Button,
   IconButton, Tooltip, LinearProgress, Divider, CircularProgress,
   Dialog, DialogContent, DialogTitle, DialogActions, MenuItem, useTheme,
-  Switch, FormControlLabel,
+  Switch, FormControlLabel, Popover,
 } from "@mui/material";
 import {
   Search, Refresh, AccessTime, CheckCircle, Cancel, LocationOn, Person,
   BatteryChargingFull, BatteryAlert, Battery20, Battery50, Battery80,
   CalendarToday, Celebration, Settings, History, Group, ShowChart, CardGiftcard,
-  PersonOff, BatterySaver,
+  PersonOff, BatterySaver, ChevronLeft, ChevronRight, KeyboardArrowDown,
 } from "@mui/icons-material";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import LiveTrackMap from "../utils/Livetrackmap";
 import { API_ORIGIN } from "../utils/apiConfig";
+import { toBackendAssetUrl } from "../utils/backendAssetUrl";
 
 const API = API_ORIGIN;
 
@@ -86,6 +86,14 @@ const formatHours = (hours) => {
   return `${h}h ${m}m`;
 };
 
+// Sort priority: Punched In (Active) -> Punched Out -> Holiday -> Not Punched In (Absent)
+const getAttendanceSortPriority = (m) => {
+  if (m.punchedIn && !m.punchOutTime) return 0; // Active / Punched in
+  if (m.punchOutTime) return 1;                  // Completed / Punched out
+  if (m.status === "holiday") return 2;          // Holiday
+  return 3;                                      // Not yet punched in / Absent
+};
+
 const getTodayDateInput = () => {
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -104,7 +112,288 @@ const formatSelectedDateLabel = (value) => {
   });
 };
 
+const formatSelectedDateFull = (value) => {
+  if (!value) return "";
+  const [yyyy, mm, dd] = value.split("-").map(Number);
+  return new Date(yyyy, mm - 1, dd).toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+};
+
 const isTodayValue = (value) => value === getTodayDateInput();
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+const WEEK_DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+const CustomDatePicker = ({ value, onChange }) => {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+
+  const [selectedY, selectedM, selectedD] = (value || getTodayDateInput()).split("-").map(Number);
+  const [viewYear, setViewYear] = useState(selectedY || new Date().getFullYear());
+  const [viewMonth, setViewMonth] = useState((selectedM || (new Date().getMonth() + 1)) - 1);
+
+  useEffect(() => {
+    if (value) {
+      const [y, m] = value.split("-").map(Number);
+      setViewYear(y);
+      setViewMonth(m - 1);
+    }
+  }, [value]);
+
+  const handlePrevMonth = () => {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear(viewYear - 1);
+    } else {
+      setViewMonth(viewMonth - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear(viewYear + 1);
+    } else {
+      setViewMonth(viewMonth + 1);
+    }
+  };
+
+  const handleSelectDay = (day) => {
+    const yyyy = String(viewYear);
+    const mm = String(viewMonth + 1).padStart(2, "0");
+    const dd = String(day).padStart(2, "0");
+    onChange(`${yyyy}-${mm}-${dd}`);
+    setAnchorEl(null);
+  };
+
+  const handleQuickSelect = (type) => {
+    const now = new Date();
+    if (type === "yesterday") {
+      now.setDate(now.getDate() - 1);
+    }
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    onChange(`${yyyy}-${mm}-${dd}`);
+    setViewYear(yyyy);
+    setViewMonth(now.getMonth());
+    setAnchorEl(null);
+  };
+
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
+
+  const todayStr = getTodayDateInput();
+  const [todayY, todayM, todayD] = todayStr.split("-").map(Number);
+
+  return (
+    <>
+      <Button
+        onClick={(e) => setAnchorEl(e.currentTarget)}
+        startIcon={<CalendarToday sx={{ fontSize: 16, color: "#c084fc" }} />}
+        endIcon={<KeyboardArrowDown sx={{ fontSize: 18, color: "rgba(255,255,255,0.7)", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }} />}
+        sx={{
+          borderRadius: "12px",
+          px: 2,
+          py: 0.85,
+          color: "#ffffff",
+          bgcolor: "rgba(255, 255, 255, 0.12)",
+          backdropFilter: "blur(10px)",
+          border: "1px solid rgba(255, 255, 255, 0.2)",
+          textTransform: "none",
+          fontWeight: 700,
+          fontSize: "0.85rem",
+          letterSpacing: "-0.01em",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+          "&:hover": {
+            bgcolor: "rgba(255, 255, 255, 0.2)",
+            borderColor: "rgba(255, 255, 255, 0.35)",
+          },
+        }}
+      >
+        {formatSelectedDateLabel(value)}
+      </Button>
+
+      <Popover
+        open={open}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{
+          sx: {
+            mt: 1.5,
+            p: 2.2,
+            width: 320,
+            borderRadius: "20px",
+            bgcolor: "#0f172a",
+            color: "#ffffff",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            boxShadow: "0 24px 48px -12px rgba(0,0,0,0.7), 0 0 24px rgba(124, 58, 237, 0.2)",
+            backdropFilter: "blur(20px)",
+          },
+        }}
+      >
+        {/* Quick presets */}
+        <Box sx={{ display: "flex", gap: 1, mb: 1.5 }}>
+          <Chip
+            label="Today"
+            size="small"
+            clickable
+            onClick={() => handleQuickSelect("today")}
+            sx={{
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              bgcolor: value === todayStr ? "rgba(124, 58, 237, 0.35)" : "rgba(255, 255, 255, 0.08)",
+              color: value === todayStr ? "#c084fc" : "#94a3b8",
+              border: value === todayStr ? "1px solid rgba(168, 85, 247, 0.5)" : "1px solid rgba(255, 255, 255, 0.1)",
+              "&:hover": { bgcolor: "rgba(124, 58, 237, 0.4)", color: "#fff" },
+            }}
+          />
+          <Chip
+            label="Yesterday"
+            size="small"
+            clickable
+            onClick={() => handleQuickSelect("yesterday")}
+            sx={{
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              bgcolor: "rgba(255, 255, 255, 0.08)",
+              color: "#94a3b8",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              "&:hover": { bgcolor: "rgba(124, 58, 237, 0.4)", color: "#fff" },
+            }}
+          />
+        </Box>
+
+        {/* Month / Year header with navigation */}
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+          <Typography sx={{ fontWeight: 800, fontSize: "0.95rem", color: "#f8fafc", letterSpacing: "-0.01em" }}>
+            {MONTH_NAMES[viewMonth]} {viewYear}
+          </Typography>
+          <Box sx={{ display: "flex", gap: 0.5 }}>
+            <IconButton
+              size="small"
+              onClick={handlePrevMonth}
+              sx={{
+                color: "#cbd5e1",
+                bgcolor: "rgba(255, 255, 255, 0.06)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "8px",
+                p: 0.5,
+                "&:hover": { bgcolor: "rgba(255, 255, 255, 0.15)", color: "#fff" },
+              }}
+            >
+              <ChevronLeft sx={{ fontSize: 18 }} />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={handleNextMonth}
+              sx={{
+                color: "#cbd5e1",
+                bgcolor: "rgba(255, 255, 255, 0.06)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "8px",
+                p: 0.5,
+                "&:hover": { bgcolor: "rgba(255, 255, 255, 0.15)", color: "#fff" },
+              }}
+            >
+              <ChevronRight sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Box>
+        </Box>
+
+        {/* Weekday headers */}
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 0.5, mb: 1, textAlign: "center" }}>
+          {WEEK_DAYS.map((day) => (
+            <Typography key={day} sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b" }}>
+              {day}
+            </Typography>
+          ))}
+        </Box>
+
+        {/* Calendar days grid */}
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 0.5 }}>
+          {/* Previous month filler days */}
+          {Array.from({ length: firstDayOfWeek }).map((_, i) => {
+            const dayNum = daysInPrevMonth - firstDayOfWeek + i + 1;
+            return (
+              <Box
+                key={`prev-${i}`}
+                sx={{
+                  height: 34,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "0.78rem",
+                  color: "#334155",
+                  userSelect: "none",
+                }}
+              >
+                {dayNum}
+              </Box>
+            );
+          })}
+
+          {/* Current month days */}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const dayNum = i + 1;
+            const isSelected = selectedY === viewYear && selectedM === viewMonth + 1 && selectedD === dayNum;
+            const isToday = todayY === viewYear && todayM === viewMonth + 1 && todayD === dayNum;
+
+            return (
+              <Box
+                key={`day-${dayNum}`}
+                onClick={() => handleSelectDay(dayNum)}
+                sx={{
+                  height: 34,
+                  borderRadius: "10px",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "0.82rem",
+                  fontWeight: isSelected ? 800 : isToday ? 700 : 500,
+                  cursor: "pointer",
+                  userSelect: "none",
+                  transition: "all 0.15s ease",
+                  color: isSelected ? "#ffffff" : isToday ? "#38bdf8" : "#e2e8f0",
+                  bgcolor: isSelected
+                    ? "linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%)"
+                    : isToday
+                    ? "rgba(56, 189, 248, 0.15)"
+                    : "transparent",
+                  border: isSelected
+                    ? "1px solid rgba(168, 85, 247, 0.8)"
+                    : isToday
+                    ? "1px solid rgba(56, 189, 248, 0.4)"
+                    : "1px solid transparent",
+                  boxShadow: isSelected ? "0 4px 12px rgba(124, 58, 237, 0.4)" : "none",
+                  "&:hover": {
+                    bgcolor: isSelected
+                      ? "linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%)"
+                      : "rgba(255, 255, 255, 0.12)",
+                    transform: "scale(1.06)",
+                  },
+                }}
+              >
+                {dayNum}
+              </Box>
+            );
+          })}
+        </Box>
+      </Popover>
+    </>
+  );
+};
 
 const DEFAULT_DEMO_TEAM = [
   {
@@ -468,13 +757,20 @@ const MemberCard = ({ member }) => {
       <Box>
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, mb: 1.5 }}>
           <Avatar
+            src={toBackendAssetUrl(member.profileImage || member.avatarImage || (typeof member.avatar === "string" && member.avatar.length > 2 ? member.avatar : null))}
             sx={{
-              width: 42, height: 42, bgcolor: member.color,
-              fontWeight: 800, fontSize: "1rem", flexShrink: 0,
+              width: 52,
+              height: 52,
+              bgcolor: member.color,
+              fontWeight: 800,
+              fontSize: "1.2rem",
+              flexShrink: 0,
               color: "#ffffff",
+              border: `2px solid ${isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.08)"}`,
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.2)",
             }}
           >
-            {member.avatar}
+            {(member.firstName?.[0] || member.avatar || "").toUpperCase()}
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography
@@ -613,6 +909,9 @@ const MemberCard = ({ member }) => {
                 memberRole: member.role,
                 memberPhone: member.phoneNumber,
                 memberEmail: member.email,
+                memberAvatar: member.profileImage || member.avatar,
+                memberCreatedAt: member.createdAt,
+                joiningDate: member.joiningDate || member.createdAt,
                 fromTeam: true,
                 historyView: true,
               },
@@ -689,17 +988,32 @@ const TeamAttendance = () => {
 
     try {
       const targetDate = selectedDate;
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken") || localStorage.getItem("accessToken");
       const headers = { Authorization: `Bearer ${token}` };
 
       let rawUsers = [];
       try {
-        const usersRes = await axios.get(`${API}/api/v1/user/getManagerUnderUserList`, {
-          headers, params: { limit: 200 },
+        const usersRes = await axios.get(`${API}/api/v1/user/getAllUsers`, {
+          headers, params: { page: 1, limit: 200 },
         });
-        rawUsers = usersRes.data?.result?.users || [];
+        const list = usersRes.data?.result?.users || usersRes.data?.data?.users || [];
+        if (list.length > 0) {
+          rawUsers = isAdminRole(user?.role) ? list.filter((u) => !isAdminRole(u.role)) : list;
+        }
       } catch (e) {
-        console.error("Users API failed:", e.message);
+        console.warn("getAllUsers API call failed, attempting fallback:", e.message);
+      }
+
+      if (!rawUsers || rawUsers.length === 0) {
+        try {
+          const fallbackRes = await axios.get(`${API}/api/v1/user/getManagerUnderUserList`, {
+            headers, params: { limit: 200 },
+          });
+          const fallbackList = fallbackRes.data?.result?.users || fallbackRes.data?.data?.users || [];
+          rawUsers = isAdminRole(user?.role) ? fallbackList.filter((u) => !isAdminRole(u.role)) : fallbackList;
+        } catch (e) {
+          console.error("Users fallback API failed:", e.message);
+        }
       }
 
       let attendances = [];
@@ -774,6 +1088,7 @@ const TeamAttendance = () => {
             phoneNumber: u.phoneNumber || "",
             email: u.email || "",
             role: u.role || "TEAM",
+            profileImage: u.avatar || u.profileImage || u.photo || null,
             avatar: (u.firstName?.[0] || "").toUpperCase(),
             color: getColor(u.firstName || ""),
             status: att?.status || "absent",
@@ -786,6 +1101,14 @@ const TeamAttendance = () => {
             batteryPercentage: batteryMap[uid]?.percentage ?? null,
             isCharging: batteryMap[uid]?.isCharging ?? false,
           };
+        });
+
+        // Sort: Punched in members first, unpunched at bottom
+        merged.sort((a, b) => {
+          const priorityA = getAttendanceSortPriority(a);
+          const priorityB = getAttendanceSortPriority(b);
+          if (priorityA !== priorityB) return priorityA - priorityB;
+          return `${a.firstName || ""} ${a.lastName || ""}`.localeCompare(`${b.firstName || ""} ${b.lastName || ""}`);
         });
 
         setTeam(merged);
@@ -873,6 +1196,7 @@ const TeamAttendance = () => {
           ...attendanceSettings,
           officePunchInTime: normalizeClockValue(attendanceSettings.officePunchInTime),
           officePunchOutTime: normalizeClockValue(attendanceSettings.officePunchOutTime),
+          punchInReminderStartTime: normalizeClockValue(attendanceSettings.officePunchInTime),
           blockEarlyPunchIn: Boolean(attendanceSettings.blockEarlyPunchIn),
           autoPunchOutEnabled: Boolean(attendanceSettings.autoPunchOutEnabled),
         },
@@ -916,6 +1240,11 @@ const TeamAttendance = () => {
         ? m.batteryPercentage !== null && m.batteryPercentage <= 20
         : !m.punchedIn;
     return matchSearch && matchFilter;
+  }).sort((a, b) => {
+    const priorityA = getAttendanceSortPriority(a);
+    const priorityB = getAttendanceSortPriority(b);
+    if (priorityA !== priorityB) return priorityA - priorityB;
+    return `${a.firstName || ""} ${a.lastName || ""}`.localeCompare(`${b.firstName || ""} ${b.lastName || ""}`);
   });
 
   const punchedInCount = team.filter((m) => m.punchedIn && !m.punchOutTime).length;
@@ -974,10 +1303,7 @@ const TeamAttendance = () => {
               Team Attendance
             </Typography>
             <Typography sx={{ color: "rgba(255,255,255,0.7)", fontSize: "0.85rem" }}>
-              {team.length} team members · Saturday, 1 August
-            </Typography>
-            <Typography sx={{ color: "rgba(255,255,255,0.85)", fontSize: "0.8rem", fontWeight: 600, mt: 0.4 }}>
-              Selected date: {formatSelectedDateLabel(selectedDate)}
+              {team.length} team members · {formatSelectedDateFull(selectedDate)}
             </Typography>
 
             <Box sx={{ mt: 1.5, width: { xs: "100%", sm: 300 } }}>
@@ -1001,62 +1327,10 @@ const TeamAttendance = () => {
           </Box>
 
           <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap", zIndex: 1 }}>
-            <TextField
-              type="date"
-              size="small"
+            <CustomDatePicker
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              sx={{
-                minWidth: 160,
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "12px",
-                  bgcolor: "rgba(255,255,255,0.1)",
-                  "& fieldset": { borderColor: "rgba(255,255,255,0.2)" },
-                  "&:hover fieldset": { borderColor: "rgba(255,255,255,0.4)" },
-                },
-                "& .MuiInputBase-input": { color: "#ffffff", fontWeight: 600, fontSize: "0.85rem" },
-              }}
+              onChange={(newDate) => setSelectedDate(newDate)}
             />
-            {canCreateHoliday && (
-              <>
-                <Button
-                  onClick={openSettingsDialog}
-                  startIcon={<Settings sx={{ fontSize: 18 }} />}
-                  sx={{
-                    borderRadius: "12px",
-                    px: 2,
-                    py: 0.9,
-                    color: "#ffffff",
-                    border: "1px solid rgba(255,255,255,0.2)",
-                    bgcolor: "rgba(255,255,255,0.1)",
-                    textTransform: "none",
-                    fontWeight: 700,
-                    fontSize: "0.82rem",
-                    "&:hover": { bgcolor: "rgba(255,255,255,0.2)" },
-                  }}
-                >
-                  Settings
-                </Button>
-                <Button
-                  onClick={openHolidayDialog}
-                  startIcon={<Celebration sx={{ fontSize: 18 }} />}
-                  sx={{
-                    borderRadius: "12px",
-                    px: 2,
-                    py: 0.9,
-                    color: "#ffffff",
-                    bgcolor: "rgba(124, 58, 237, 0.6)",
-                    border: "1px solid rgba(168, 85, 247, 0.4)",
-                    textTransform: "none",
-                    fontWeight: 700,
-                    fontSize: "0.82rem",
-                    "&:hover": { bgcolor: "rgba(124, 58, 237, 0.8)" },
-                  }}
-                >
-                  Add Holiday
-                </Button>
-              </>
-            )}
             <Tooltip title="Refresh attendance">
               <IconButton
                 onClick={() => fetchData(false)}
@@ -1090,51 +1364,58 @@ const TeamAttendance = () => {
           }}
         >
           {[
-            { label: "Total", value: team.length, color: "#3b82f6", icon: <Group sx={{ fontSize: 20 }} />, bg: "rgba(37, 99, 235, 0.15)" },
-            { label: "Active Now", value: punchedInCount, color: "#22c55e", icon: <ShowChart sx={{ fontSize: 20 }} />, bg: "rgba(34, 197, 94, 0.15)" },
-            { label: "Punched Out", value: punchedOutCount, color: "#f59e0b", icon: <AccessTime sx={{ fontSize: 20 }} />, bg: "rgba(245, 158, 11, 0.15)" },
-            { label: "Holiday", value: holidayCount, color: "#a855f7", icon: <CardGiftcard sx={{ fontSize: 20 }} />, bg: "rgba(168, 85, 247, 0.15)" },
-            { label: "Absent", value: absentCount, color: "#ef4444", icon: <PersonOff sx={{ fontSize: 20 }} />, bg: "rgba(239, 68, 68, 0.15)" },
-            { label: "Low Battery", value: lowBatteryCount, color: "#f97316", icon: <BatterySaver sx={{ fontSize: 20 }} />, bg: "rgba(249, 115, 22, 0.15)" },
-          ].map((stat) => (
-            <Box
-              key={stat.label}
-              sx={{
-                bgcolor: isDark ? "#0c1322" : "#ffffff",
-                borderRadius: "16px",
-                p: 2,
-                border: `1px solid ${isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0"}`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <Box>
-                <Typography
-                  sx={{ fontSize: "1.75rem", fontWeight: 800, color: stat.color, lineHeight: 1 }}
-                >
-                  {stat.value}
-                </Typography>
-                <Typography sx={{ fontSize: "0.78rem", color: isDark ? "#94a3b8" : "#64748b", mt: 0.6, fontWeight: 700 }}>
-                  {stat.label}
-                </Typography>
-              </Box>
+            { key: "all", label: "Total", value: team.length, color: "#3b82f6", icon: <Group sx={{ fontSize: 20 }} />, bg: "rgba(37, 99, 235, 0.15)" },
+            { key: "in", label: "Active Now", value: punchedInCount, color: "#22c55e", icon: <ShowChart sx={{ fontSize: 20 }} />, bg: "rgba(34, 197, 94, 0.15)" },
+            { key: "out", label: "Punched Out", value: punchedOutCount, color: "#f59e0b", icon: <AccessTime sx={{ fontSize: 20 }} />, bg: "rgba(245, 158, 11, 0.15)" },
+            { key: "holiday", label: "Holiday", value: holidayCount, color: "#a855f7", icon: <CardGiftcard sx={{ fontSize: 20 }} />, bg: "rgba(168, 85, 247, 0.15)" },
+            { key: "absent", label: "Absent", value: absentCount, color: "#ef4444", icon: <PersonOff sx={{ fontSize: 20 }} />, bg: "rgba(239, 68, 68, 0.15)" },
+            { key: "low", label: "Low Battery", value: lowBatteryCount, color: "#f97316", icon: <BatterySaver sx={{ fontSize: 20 }} />, bg: "rgba(249, 115, 22, 0.15)" },
+          ].map((stat) => {
+            const isSelected = filter === stat.key;
+            return (
               <Box
+                key={stat.label}
+                onClick={() => setFilter(stat.key)}
                 sx={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: "10px",
-                  bgcolor: stat.bg,
-                  color: stat.color,
-                  display: "grid",
-                  placeItems: "center",
-                  flexShrink: 0,
+                  bgcolor: isDark ? "#0c1322" : "#ffffff",
+                  borderRadius: "16px",
+                  p: 2,
+                  border: isSelected ? `2px solid ${stat.color}` : `1px solid ${isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0"}`,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  "&:hover": { transform: "translateY(-2px)", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" },
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
                 }}
               >
-                {stat.icon}
+                <Box>
+                  <Typography
+                    sx={{ fontSize: "1.75rem", fontWeight: 800, color: stat.color, lineHeight: 1 }}
+                  >
+                    {stat.value}
+                  </Typography>
+                  <Typography sx={{ fontSize: "0.78rem", color: isDark ? "#94a3b8" : "#64748b", mt: 0.6, fontWeight: 700 }}>
+                    {stat.label}
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: "10px",
+                    bgcolor: stat.bg,
+                    color: stat.color,
+                    display: "grid",
+                    placeItems: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  {stat.icon}
+                </Box>
               </Box>
-            </Box>
-          ))}
+            );
+          })}
         </Box>
 
         {/* Search + Filter Row */}

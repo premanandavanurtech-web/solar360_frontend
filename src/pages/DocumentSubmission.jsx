@@ -2595,8 +2595,13 @@ const EditLeadModal = ({
         });
       }, 500);
 
+      const targetLeadId = lead?._id || lead?.id || lead?.leadId || lead?.lead?._id || lead?.lead?.id;
+      if (!targetLeadId) {
+        throw new Error("Lead ID is missing. Please refresh the page.");
+      }
+
       const response = await fetchAPI(
-        `/lead/upload/${lead._id}/upload-documents`,
+        `/lead/upload/${targetLeadId}/upload-documents`,
         {
           method: "PUT",
           body: formDataToSend,

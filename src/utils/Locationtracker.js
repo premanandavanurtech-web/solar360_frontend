@@ -20,34 +20,62 @@ function distanceMetres(lat1, lng1, lat2, lng2) {
 }
 
 async function reverseGeocode(lat, lng) {
+  const numLat = Number(lat);
+  const numLng = Number(lng);
+
+  if (!Number.isFinite(numLat) || !Number.isFinite(numLng) || (Math.abs(numLat) < 0.001 && Math.abs(numLng) < 0.001)) {
+    return { name: "Location Unavailable", address: "Location data unavailable" };
+  }
+
+  // 1. Try BigDataCloud API (fast, reliable CORS, no strict rate limit)
   try {
-    const res  = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`,
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${numLat}&longitude=${numLng}&localityLanguage=en`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data) {
+        const parts = [
+          data.locality || data.city || data.name,
+          data.principalSubdivision || data.state,
+          data.countryName,
+        ].filter(Boolean);
+        if (parts.length > 0) {
+          const full = parts.join(", ");
+          return { name: data.locality || data.city || full, address: full };
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 2. Fallback to OpenStreetMap Nominatim
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${numLat}&lon=${numLng}&format=json&zoom=18&addressdetails=1`,
       { headers: { "Accept-Language": "en" } }
     );
-    const data = await res.json();
-    if (data) {
-      const a         = data.address || {};
-      const name      = data.name || data.namedetails?.name || null;
-      const placeName = name || a.office || a.company || a.shop || a.amenity || a.tourism || a.leisure || a.building || null;
-      const fullAddress = [
-        a.house_number && a.road ? `${a.house_number} ${a.road}` : (a.road || a.pedestrian || a.footway),
-        a.suburb || a.neighbourhood || a.quarter,
-        a.city || a.town || a.village || a.county,
-        a.state, a.postcode, a.country,
-      ].filter(Boolean).join(", ");
-      const shortName =
-        placeName ||
-        [a.road || a.pedestrian, a.suburb || a.neighbourhood, a.city || a.town || a.village]
-          .filter(Boolean).join(", ") ||
-        data.display_name?.split(",").slice(0, 2).join(",").trim() ||
-        `${lat.toFixed(4)}°, ${lng.toFixed(4)}°`;
-      return { name: shortName, address: fullAddress || data.display_name || shortName };
+    if (res.ok) {
+      const data = await res.json();
+      if (data) {
+        const a = data.address || {};
+        const street = a.road || a.pedestrian || a.street || "";
+        const area = a.suburb || a.neighbourhood || a.quarter || a.residential || a.village || "";
+        const city = a.city || a.town || a.county || a.state_district || "";
+        const state = a.state || "";
+        const postcode = a.postcode || "";
+
+        const locationParts = [street, area, city, state, postcode].filter(Boolean);
+        const fullAddress = locationParts.length >= 2 ? locationParts.join(", ") : data.display_name;
+        const shortName = street || area || city || fullAddress?.split(",")[0] || "Stop Location";
+
+        if (fullAddress) {
+          return { name: shortName, address: fullAddress };
+        }
+      }
     }
-  } catch (e) {
-    console.warn("[Tracker] Reverse geocode failed:", e.message);
-  }
-  return { name: `Stop at ${lat.toFixed(4)}°, ${lng.toFixed(4)}°`, address: "" };
+  } catch (e) {}
+
+  return { name: `Stop at ${numLat.toFixed(4)}°, ${numLng.toFixed(4)}°`, address: `${numLat.toFixed(6)}, ${numLng.toFixed(6)}` };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────

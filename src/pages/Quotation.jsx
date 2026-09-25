@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import {
   Sun,
@@ -37,6 +37,7 @@ import {
   Copy,
   MessageCircle,
   ArrowLeft,
+  Star,
 } from "lucide-react"
 import "./Quotation.css"
 import { toBackendAssetUrl } from "../utils/backendAssetUrl"
@@ -281,8 +282,51 @@ let terms = [
     ],
   },
 ]
+export const defaultTestimonials = [
+  {
+    name: "Binapani Panda",
+    scheme: "PM-Suryaghar Scheme",
+    location: "Bidyadharapur, Cuttack",
+    rating: 5,
+    systemCapacity: "RTS On-Grid 4kW",
+    structureType: "Ballast Type Structure",
+    text: "RTS On-Grid 4KW Installation done under PM-Suryaghar Scheme with Ballast Type Structure at her Bidyadharapur, Cuttack residence.",
+    image: "/solar-rooftop-cover-4k.png",
+  },
+  {
+    name: "ULA- Paper",
+    scheme: "ULA Model",
+    location: "Kurujanga, Salipur, Odisha",
+    rating: 5,
+    systemCapacity: "ULA-1kW Model",
+    structureType: "Affordable Rooftop Solar",
+    text: "First Solar EPC Integrator & Vendor of Odisha to launch ULA-1kw Model In Odisha. TPCODL brings affordable rooftop solar to Kurujanga village under ULA Model.",
+    image: "/solar-rooftop-cover-4k.png",
+  },
+  {
+    name: "Nayana Mohanty",
+    scheme: "PM-Suryaghar Scheme",
+    location: "Tulasipur, Cuttack",
+    rating: 5,
+    systemCapacity: "RTS On-Grid 4.5kW",
+    structureType: "High Rise Structure",
+    text: "RTS On-Grid 4.5KW Installation done under PM-Suryaghar Scheme with High Rise Structure at her Tulasipur, Cuttack residence.",
+    image: "/solar-rooftop-cover-4k.png",
+  },
+]
+let testimonials = defaultTestimonials
+let showTestimonials = true
+
+let showSiteSurveyPhoto = true
+let siteSurveyPhotos = []
 let siteSurveyPhotoUrl = ""
 let threeDDesignCaptureUrl = ""
+let layoutDesignTitle = "Solar panel layout design will be prepared after site survey."
+let layoutDesignNote = ""
+let shadowFreeNote = "Optimised for your location's latitude for maximum solar capture throughout the year."
+let elevatedMountingNote = ""
+let sunPathNote = "No obstructions within the critical 9 AM – 3 PM window. Shadow loss < 2%."
+let showRooftopLayout = true
 
 const defaultQuotationData = {
   company,
@@ -297,13 +341,24 @@ const defaultQuotationData = {
   warranties,
   paymentSchedule,
   terms,
+  testimonials,
+  showTestimonials,
+  showSiteSurveyPhoto,
+  siteSurveyPhotos,
   siteSurveyPhotoUrl,
   threeDDesignCaptureUrl,
+  layoutDesignTitle,
+  layoutDesignNote,
+  shadowFreeNote,
+  elevatedMountingNote,
+  sunPathNote,
+  showRooftopLayout,
 }
 
 const safeNumber = (value, fallback = 0) => {
+  if (value === "" || value === null || value === undefined) return fallback
   const number = Number(value)
-  return Number.isFinite(number) ? number : fallback
+  return Number.isFinite(number) && !Number.isNaN(number) ? number : fallback
 }
 
 const loadSavedQuotation = (locationState, search = "", shareToken = "") => {
@@ -344,7 +399,22 @@ const buildQuotationData = (saved) => {
   if (!saved?.form) return defaultQuotationData
 
   const form = saved.form
-  const siteSurveyPhotoUrl = getSiteSurveyPhotoUrl(saved.lead)
+  const rawSurveyPhotos = getAllSiteSurveyPhotos(saved.lead)
+  const isSurveyPhotoExplicitlyHidden = form.showSiteSurveyPhoto === false || form.siteSurveyPhotoUrl === "none"
+
+  let siteSurveyPhotos = []
+  if (!isSurveyPhotoExplicitlyHidden) {
+    if (Array.isArray(form.siteSurveyPhotos) && form.siteSurveyPhotos.length > 0) {
+      siteSurveyPhotos = form.siteSurveyPhotos.filter((p) => p && p !== "none")
+    } else if (form.siteSurveyPhotoUrl && form.siteSurveyPhotoUrl !== "none") {
+      siteSurveyPhotos = [form.siteSurveyPhotoUrl]
+    } else if (rawSurveyPhotos.length > 0) {
+      siteSurveyPhotos = rawSurveyPhotos
+    }
+  }
+
+  const showSiteSurveyPhoto = !isSurveyPhotoExplicitlyHidden && siteSurveyPhotos.length > 0
+  const siteSurveyPhotoUrl = siteSurveyPhotos[0] || ""
   const threeDDesignCaptureUrl = getThreeDDesignCaptureUrl(saved.lead)
   const paymentMilestones = Array.isArray(saved.paymentMilestones) ? saved.paymentMilestones : []
   const installationSteps = Array.isArray(saved.installationSteps) ? saved.installationSteps : []
@@ -353,17 +423,20 @@ const buildQuotationData = (saved) => {
   const panelCount = safeNumber(form.panelQty, defaultQuotationData.system.panelCount)
   const panelWattage = safeNumber(form.wattPeak, defaultQuotationData.system.panelWattage)
   const totalCost = safeNumber(form.totalCost, defaultQuotationData.financials.totalProjectCost)
-  const subsidy = safeNumber(form.subsidyAmount, defaultQuotationData.financials.subsidy)
+  const subsidy = safeNumber(form.subsidyAmount, 0)
   const generationPerKw = safeNumber(form.generationPerKw, 1500)
-  const annualGenerationUnits = Math.round(systemSize * generationPerKw)
+  const annualGenerationUnits = Math.round(systemSize * (generationPerKw || 1500))
   const tariff = safeNumber(form.electricityTariff, 8)
-  const annualSavings = Math.round(annualGenerationUnits * tariff)
+  const annualSavings = Math.round(annualGenerationUnits * (tariff || 8))
   const preGst = Math.round(totalCost / 1.138)
   const gstAmount = Math.max(0, totalCost - preGst)
   const issueDate = saved.savedAt || saved.createdAt || new Date().toISOString()
-  const validUntil = addDays(issueDate, safeNumber(saved.validityDays, 14))
-  const leadPhone = saved.lead?.phone || saved.lead?.mobile || saved.lead?.whatsappNumber || defaultQuotationData.client.phone
-  const leadAddress = [
+  const validityDays = safeNumber(form.validityDays, safeNumber(saved.validityDays, 14))
+  const validUntil = addDays(issueDate, validityDays)
+
+  const clientName = form.customerName || saved.quotationTitle || (saved.lead?.customerName || saved.lead?.name || saved.lead?.fullName) || defaultQuotationData.client.name
+  const leadPhone = form.customerPhone || saved.lead?.phone || saved.lead?.mobile || saved.lead?.whatsappNumber || defaultQuotationData.client.phone
+  const rawLeadAddress = [
     saved.lead?.address,
     saved.lead?.city,
     saved.lead?.state,
@@ -371,31 +444,88 @@ const buildQuotationData = (saved) => {
   ]
     .filter(Boolean)
     .join(", ")
+  const clientAddress = form.customerAddress || rawLeadAddress || defaultQuotationData.client.address
+
+  const companyName = form.companyName || defaultQuotationData.company.name
+  const companyPhone = form.companyPhone || defaultQuotationData.company.phone
+  const companyEmail = form.companyEmail || defaultQuotationData.company.email
+  const companyLocation = form.companyLocation || defaultQuotationData.company.location
+
+  const monthFactors = [
+    { month: "JAN", factor: 0.0816, peak: false },
+    { month: "FEB", factor: 0.0816, peak: false },
+    { month: "MAR", factor: 0.0918, peak: true },
+    { month: "APR", factor: 0.0918, peak: true },
+    { month: "MAY", factor: 0.1020, peak: true },
+    { month: "JUN", factor: 0.0714, peak: false },
+    { month: "JUL", factor: 0.0612, peak: false },
+    { month: "AUG", factor: 0.0714, peak: false },
+    { month: "SEP", factor: 0.0816, peak: false },
+    { month: "OCT", factor: 0.0918, peak: true },
+    { month: "NOV", factor: 0.0918, peak: true },
+    { month: "DEC", factor: 0.0816, peak: false },
+  ]
+  const dynamicMonthlyGeneration = monthFactors.map((m) => ({
+    month: m.month,
+    units: Math.round(annualGenerationUnits * m.factor),
+    peak: m.peak,
+  }))
+
+  const degradation = safeNumber(form.panelDegradation, 0.5) / 100
+  const escalation = safeNumber(form.tariffEscalation, 3.0) / 100
+  const yearsCount = Math.max(1, safeNumber(form.projectionYears, 5))
+
+  let cumulativeSavings = 0
+  const dynamicYearProjection = Array.from({ length: yearsCount }, (_, i) => {
+    const yearNum = i + 1
+    const gen = Math.round(annualGenerationUnits * Math.pow(1 - degradation, i))
+    const t = (tariff * Math.pow(1 + escalation, i)).toFixed(2)
+    const sav = Math.round(gen * Number(t))
+    cumulativeSavings += sav
+    return {
+      year: `Year ${yearNum}`,
+      generation: `${gen.toLocaleString("en-IN")} Units`,
+      tariff: t,
+      annualSavings: sav,
+      cumulativeSavings,
+    }
+  })
 
   return {
     ...defaultQuotationData,
+    company: {
+      ...defaultQuotationData.company,
+      name: companyName,
+      phone: companyPhone,
+      email: companyEmail,
+      location: companyLocation,
+    },
     quote: {
       ...defaultQuotationData.quote,
       number: saved.quotationNumber || defaultQuotationData.quote.number,
       date: formatQuotationDate(issueDate),
       validFrom: formatQuotationDate(issueDate),
       validUntil: formatQuotationDate(validUntil),
+      proposalTitle: form.proposalTitle || "",
+      proposalDescription: form.proposalDescription || "",
     },
     client: {
       ...defaultQuotationData.client,
-      name: saved.quotationTitle || defaultQuotationData.client.name,
+      name: clientName,
       phone: leadPhone,
-      address: leadAddress || defaultQuotationData.client.address,
+      address: clientAddress,
     },
     system: {
       ...defaultQuotationData.system,
-      type: `${form.systemType || "On-grid"} Rooftop`,
+      type: `${form.systemType || "Off-grid"} Rooftop`,
       sizeKw: systemSize,
       panelCount,
       panelWattage,
-      inverter: `${form.inverterSize || systemSize} kW ${form.inverterBrand || "Inverter"}`,
+      inverter: `${form.inverterSize || systemSize} kW ${form.inverterBrand || "Havells Solar"}`,
       annualGenerationUnits,
-      mounting: `${form.structureSize || ""} ${form.structureType || "Structure"}`.trim(),
+      orientation: form.orientation || defaultQuotationData.system.orientation || "South Facing",
+      tilt: form.tilt || defaultQuotationData.system.tilt || "Optimal Tilt",
+      mounting: `${form.structureSize || "80*40"} ${form.structureBrand || ""} ${form.structureType || "Elevated Structure"}`.trim(),
     },
     financials: {
       ...defaultQuotationData.financials,
@@ -408,49 +538,75 @@ const buildQuotationData = (saved) => {
       annualSavings,
       lifetimeSavings: annualSavings * 25,
     },
+    monthlyGeneration: dynamicMonthlyGeneration,
+    yearProjection: dynamicYearProjection,
     techSpecs: [
       {
         group: "Solar Panels",
         rows: [
-          { label: "Type", value: form.panelCategory || "Bifacial" },
+          { label: "Category", value: form.panelCategory || "Bifacial" },
           { label: "Wattage", value: `${panelWattage} Wp` },
           { label: "Quantity", value: `${panelCount} Panels` },
-          { label: "Brand", value: form.panelBrand || "Solar Panel" },
+          { label: "Brand", value: form.panelBrand || "Waaree Energies" },
+          { label: "Total Power", value: `${((panelCount * panelWattage) / 1000).toFixed(1)} kWp` },
         ],
       },
       {
         group: "Inverter",
         rows: [
-          { label: "Brand", value: form.inverterBrand || "Inverter" },
+          { label: "Brand", value: form.inverterBrand || "Havells Solar" },
           { label: "Rated Power", value: `${form.inverterSize || systemSize} kW` },
-          { label: "Phase", value: form.phase || "Single Phase" },
+          { label: "Phase", value: form.phase || "Three Phase" },
           { label: "Type", value: form.inverterType || "String" },
         ],
       },
       {
         group: "Mounting Structure",
         rows: [
-          { label: "Brand", value: form.structureBrand || "Structure" },
-          { label: "Size", value: form.structureSize || "As per design" },
+          { label: "Brand", value: form.structureBrand || "Apollo" },
+          { label: "Size", value: form.structureSize || "120*40" },
           { label: "Capacity", value: `${form.structureCapacity || systemSize} kW` },
-          { label: "Type", value: form.structureType || "Roof Mount" },
+          { label: "Type", value: form.structureType || "GI Elevated Tilt" },
         ],
       },
       {
-        group: "Cables & Protection",
+        group: "DC & AC Cables",
         rows: [
+          { label: "Brand", value: form.cableBrand || "Havells" },
           { label: "DC Cable", value: form.dcCableSpec || "4 sq mm" },
           { label: "AC Cable", value: form.acCableSpec || "As per design" },
-          { label: "ACDB / DCDB", value: form.dcdbAcdb || "Reputed Make" },
-          { label: "Earthing", value: form.earthing || "Reputed Make" },
+          { label: "Certification", value: "BIS / IS 16169" },
         ],
+      },
+      {
+        group: "ACDB / DCDB & Protection",
+        rows: [
+          { label: "ACDB / DCDB", value: form.dcdbAcdb || "Reputed Make" },
+          { label: "Earthing", value: form.earthing || "Reputed Make — 3 Nos." },
+          { label: "Lightning Protection", value: form.lightningArrestor || "Reputed Make — 1 No." },
+          { label: "Net Solar Meter", value: form.netSolarMeter || "As per DISCOM" },
+        ],
+      },
+      {
+        group: "Battery Storage",
+        rows: form.batteryBackup
+          ? [
+              { label: "Brand", value: form.batteryBrand || "Luminous" },
+              { label: "Capacity", value: `${form.batteryCapacity || "200"} Ah/kWh` },
+              { label: "Type", value: form.batteryType || "LFP" },
+              { label: "Quantity", value: `${form.batteryQty || "200"} Units` },
+            ]
+          : [
+              { label: "Status", value: "Not Included" },
+              { label: "System", value: `${form.systemType || "On-grid"} Rooftop` },
+            ],
       },
     ],
     warranties: [
-      { component: "Solar Panels", brand: form.panelBrand || "Solar Panel", product: `${form.panelWarrantyYears || 12} Years`, performance: "25 Years" },
-      { component: "Inverter", brand: form.inverterBrand || "Inverter", product: `${form.inverterWarrantyYears || 7} Years`, performance: "As per brand policy" },
-      { component: "Mounting Structure", brand: `${form.structureBrand || "Structure"} (${form.structureSize || "As per design"})`, product: `${form.bosWarrantyYears || 5} Years`, performance: "As per brand policy" },
-      { component: "DC / AC Cables", brand: form.cableBrand || "Cable", product: `${form.cableWarrantyYears || 1} Year`, performance: "As per brand policy" },
+      { component: "Solar Panels", brand: form.panelBrand || "Waaree Energies", product: `${form.panelWarrantyYears || 12} Years`, performance: "25 Years" },
+      { component: "Inverter", brand: form.inverterBrand || "Havells Solar", product: `${form.inverterWarrantyYears || 7} Years`, performance: "As per brand policy" },
+      { component: "Mounting Structure", brand: `${form.structureBrand || "Apollo"} (${form.structureSize || "120*40"})`, product: `${form.bosWarrantyYears || 5} Years`, performance: "As per brand policy" },
+      { component: "DC / AC Cables", brand: form.cableBrand || "Havells", product: `${form.cableWarrantyYears || 1} Year`, performance: "As per brand policy" },
       { component: "Installation Work", brand: defaultQuotationData.company.name, product: "5 Years", performance: "As per policy" },
     ],
     paymentSchedule: paymentMilestones.length
@@ -470,22 +626,46 @@ const buildQuotationData = (saved) => {
         }))
       : defaultQuotationData.installSteps,
     terms: termsGroups.length ? termsGroups : defaultQuotationData.terms,
+    testimonials: Array.isArray(saved.testimonials) && saved.testimonials.length > 0
+      ? saved.testimonials
+      : (Array.isArray(form.testimonials) && form.testimonials.length > 0 ? form.testimonials : defaultTestimonials),
+    showTestimonials: form.showTestimonials !== false && saved.showTestimonials !== false,
+    showSiteSurveyPhoto,
+    siteSurveyPhotos,
     siteSurveyPhotoUrl,
-    threeDDesignCaptureUrl,
+    threeDDesignCaptureUrl:
+      (form.rooftopLayoutImage && form.rooftopLayoutImage !== "none" ? form.rooftopLayoutImage : "") ||
+      (form.threeDDesignCaptureUrl && form.threeDDesignCaptureUrl !== "none" ? form.threeDDesignCaptureUrl : "") ||
+      threeDDesignCaptureUrl ||
+      "/solar-rooftop-cover-4k.png",
+    layoutDesignTitle: form.layoutDesignTitle || "Solar panel layout design will be prepared after site survey.",
+    layoutDesignNote: form.layoutDesignNote || `${panelCount} panels x ${panelWattage}Wp planned for the proposed ${systemSize} kWp system.`,
+    shadowFreeNote: form.shadowFreeNote || "Optimised for your location's latitude for maximum solar capture throughout the year.",
+    elevatedMountingNote: form.elevatedMountingNote || `${form.structureSize || "120*40"} ${form.structureBrand || "Apollo"} Elevated Structure with adequate clearance and waterproofed penetrations.`,
+    sunPathNote: form.sunPathNote || "No obstructions within the critical 9 AM – 3 PM window. Shadow loss < 2%.",
+    showRooftopLayout: form.showRooftopLayout !== false,
   }
 }
 
 const getThreeDDesignCaptureUrl = (lead) =>
   typeof lead?.threeDDesign?.captureImage === "string" ? lead.threeDDesign.captureImage : ""
 
-const getSiteSurveyPhotoUrl = (lead) => {
+const getAllSiteSurveyPhotos = (lead) => {
   const photos = Array.isArray(lead?.siteSurvey?.photos) ? lead.siteSurvey.photos : []
-  const firstPhoto = photos[0]
-  const photoUrl =
-    typeof firstPhoto === "string"
-      ? firstPhoto
-      : firstPhoto?.url || firstPhoto?.uri || firstPhoto?.path || firstPhoto?.location || firstPhoto?.src || ""
-  return toBackendAssetUrl(photoUrl) || ""
+  return photos
+    .map((photo) => {
+      const photoUrl =
+        typeof photo === "string"
+          ? photo
+          : photo?.url || photo?.uri || photo?.path || photo?.location || photo?.src || ""
+      return toBackendAssetUrl(photoUrl) || ""
+    })
+    .filter(Boolean)
+}
+
+const getSiteSurveyPhotoUrl = (lead) => {
+  const all = getAllSiteSurveyPhotos(lead)
+  return all[0] || ""
 }
 
 const applyQuotationData = (data) => {
@@ -501,8 +681,22 @@ const applyQuotationData = (data) => {
   warranties = data.warranties
   paymentSchedule = data.paymentSchedule
   terms = data.terms
-  siteSurveyPhotoUrl = data.siteSurveyPhotoUrl || ""
+  testimonials = Array.isArray(data.testimonials) && data.testimonials.length > 0
+    ? data.testimonials
+    : defaultTestimonials
+  showTestimonials = data.showTestimonials !== false
+  siteSurveyPhotos = Array.isArray(data.siteSurveyPhotos)
+    ? data.siteSurveyPhotos
+    : (data.siteSurveyPhotoUrl ? [data.siteSurveyPhotoUrl] : [])
+  showSiteSurveyPhoto = data.showSiteSurveyPhoto !== false && siteSurveyPhotos.length > 0
+  siteSurveyPhotoUrl = siteSurveyPhotos[0] || data.siteSurveyPhotoUrl || ""
   threeDDesignCaptureUrl = data.threeDDesignCaptureUrl || ""
+  layoutDesignTitle = data.layoutDesignTitle || "Solar panel layout design will be prepared after site survey."
+  layoutDesignNote = data.layoutDesignNote || ""
+  shadowFreeNote = data.shadowFreeNote || "Optimised for your location's latitude for maximum solar capture throughout the year."
+  elevatedMountingNote = data.elevatedMountingNote || ""
+  sunPathNote = data.sunPathNote || "No obstructions within the critical 9 AM – 3 PM window. Shadow loss < 2%."
+  showRooftopLayout = data.showRooftopLayout !== false
 }
 
 /* ----------------------------------------------------------------------------
@@ -648,18 +842,16 @@ function DownloadButton({ targetId }) {
 
 function ProjectOverviewSection() {
   return (
-    <section>
+    <section id="quote-step-1">
       <SectionTitle index="01" title="Project Overview" subtitle="Customer, site and proposal summary" />
 
       <div className="rounded-lg bg-primary p-6 text-primary-foreground">
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent">Solar rooftop proposal</p>
         <h3 className="mt-3 text-2xl font-extrabold leading-tight">
-          {system.sizeKw} kWp {system.type} solar power system for {client.name}
+          {quote.proposalTitle || `${system.sizeKw} kWp ${system.type} solar power system for ${client.name}`}
         </h3>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-primary-foreground/75">
-          This proposal covers design, supply, installation, testing, commissioning and net metering support for
-          the proposed rooftop solar plant at {client.address}. The system is planned to reduce grid electricity
-          dependency and deliver long-term savings through clean energy generation.
+          {quote.proposalDescription || `This proposal covers design, supply, installation, testing, commissioning and net metering support for the proposed rooftop solar plant at ${client.address}. The system is planned to reduce grid electricity dependency and deliver long-term savings through clean energy generation.`}
         </p>
       </div>
 
@@ -755,7 +947,7 @@ function QuotationDocument() {
   return (
     <div id="quotation-document" className="quotation-document mx-auto w-full max-w-[820px] text-card-foreground">
       {/* COVER */}
-      <section className="quotation-page-sheet quotation-cover-page relative overflow-hidden bg-primary px-10 py-12 text-primary-foreground">
+      <section id="quote-step-1" className="quotation-page-sheet quotation-cover-page relative overflow-hidden bg-primary px-10 py-12 text-primary-foreground">
         <div className="relative z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -887,14 +1079,14 @@ function QuotationDocument() {
         </section>
 
         {/* SYSTEM CONFIGURATION */}
-        <section>
+        <section id="quote-step-2">
           <SectionTitle index="02" title="System Configuration" subtitle="Lifetime savings opportunity over a 25-year lifespan" />
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {[
               { icon: Zap, label: "System Capacity", value: `${system.sizeKw} kWp` },
               { icon: Gauge, label: "Annual Generation", value: `${fmtNum(system.annualGenerationUnits)} Units` },
               { icon: Sun, label: "Solar Modules", value: `${system.panelCount} Panels` },
-              { icon: BatteryCharging, label: "Inverter", value: "Sungrow" },
+              { icon: BatteryCharging, label: "Inverter", value: system.inverter },
             ].map((s) => (
               <div key={s.label} className="rounded-lg border border-border p-4">
                 <s.icon className="h-5 w-5 text-accent" aria-hidden="true" />
@@ -930,209 +1122,161 @@ function QuotationDocument() {
               <p className="text-3xl font-extrabold text-foreground">{inr(financials.annualSavings)}</p>
             </div>
           </div>
-          <div className="mt-8">
-            <div className="mb-4 flex items-start gap-3 border-b border-border pb-3">
-              <span className="mt-1 h-3 w-3 rounded-full bg-accent" />
-              <div>
-                <h3 className="text-2xl font-extrabold leading-tight text-foreground">Site Survey Photo</h3>
-                <p className="text-sm text-muted-foreground">Photograph captured during the site assessment visit</p>
+          {showSiteSurveyPhoto && siteSurveyPhotos.length > 0 && (
+            <div className="mt-6">
+              <div className="mb-3 flex items-start gap-2.5 border-b border-border pb-2">
+                <span className="mt-1 h-2.5 w-2.5 rounded-full bg-accent" />
+                <div>
+                  <h3 className="text-base font-extrabold leading-tight text-foreground">
+                    {siteSurveyPhotos.length > 1 ? "Site Survey Photos" : "Site Survey Photo"}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">Photographs captured during the site assessment visit</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 w-full">
+                {siteSurveyPhotos.map((photoUrl, idx) => (
+                  <div key={idx} className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                    <img
+                      src={photoUrl}
+                      alt={`Site survey reference ${idx + 1}`}
+                      className="h-28 sm:h-32 w-full object-cover"
+                      crossOrigin="anonymous"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "/solar-rooftop-cover-4k.png";
+                      }}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="mx-auto w-full max-w-2xl overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-              <img
-                src={siteSurveyPhotoUrl || "/solar-rooftop-cover-4k.png"}
-                alt="Site survey rooftop reference"
-                className="h-72 w-full object-cover"
-                crossOrigin="anonymous"
-              />
-            </div>
-          </div>
+          )}
         </section>
 
         {/* ROOFTOP LAYOUT */}
-        <section>
-          <SectionTitle index="03" title="Rooftop Layout & Design" subtitle="Panel placement, orientation and shadow analysis for optimal yield" />
-          <div className="mb-4 overflow-hidden rounded-xl bg-primary p-5 text-primary-foreground">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs font-extrabold uppercase tracking-[0.28em] text-accent">
-                Rooftop Plan - {system.sizeKw} kWp - {system.panelCount} Panels
-              </p>
-              <div className="flex items-center gap-4 text-[10px] uppercase tracking-wider text-primary-foreground/60">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-accent" />
-                  Solar Panel
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-primary-foreground/70" />
-                  Inverter
-                </span>
+        {showRooftopLayout && (
+          <section id="quote-step-layout">
+            <SectionTitle index="03" title="Rooftop Layout & Design" subtitle="Panel placement, orientation and shadow analysis for optimal yield" />
+            <div className="mb-4 overflow-hidden rounded-xl bg-primary p-5 text-primary-foreground">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs font-extrabold uppercase tracking-[0.28em] text-accent">
+                  Rooftop Plan - {system.sizeKw} kWp - {system.panelCount} Panels
+                </p>
+                <div className="flex items-center gap-4 text-[10px] uppercase tracking-wider text-primary-foreground/60">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-sm bg-accent" />
+                    Solar Panel
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-sm bg-primary-foreground/70" />
+                    Inverter
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[1fr_150px]">
+                <div className="overflow-hidden rounded-lg border border-primary-foreground/15 bg-primary-foreground/5">
+                  <img
+                    src={threeDDesignCaptureUrl || "/solar-rooftop-cover-4k.png"}
+                    alt="Rooftop solar layout preview"
+                    className="h-72 w-full object-cover"
+                    crossOrigin="anonymous"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = "/solar-rooftop-cover-4k.png";
+                    }}
+                  />
+                </div>
+                <div className="flex flex-col justify-center rounded-lg border border-primary-foreground/15 bg-primary-foreground/5 p-4">
+                  <p className="text-lg font-semibold leading-tight text-primary-foreground/85">
+                    {layoutDesignTitle || "Solar panel layout design will be prepared after site survey."}
+                  </p>
+                  <p className="mt-4 text-xs leading-relaxed text-primary-foreground/60">
+                    {layoutDesignNote || `${system.panelCount} panels x ${system.panelWattage}Wp planned for the proposed ${system.sizeKw} kWp system.`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  { label: "Total Panels", value: `${system.panelCount}` },
+                  { label: "Panel Wattage", value: `${system.panelWattage}W` },
+                  { label: "kWp Capacity", value: `${system.sizeKw}` },
+                  { label: "Orientation", value: system.orientation.replace(" Facing", "") },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-lg border border-primary-foreground/10 bg-primary-foreground/5 p-4 text-center">
+                    <p className="text-xl font-extrabold text-accent">{s.value}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-primary-foreground/45">{s.label}</p>
+                  </div>
+                ))}
               </div>
             </div>
-
-            <div className="grid gap-4 lg:grid-cols-[1fr_150px]">
-              <div className="overflow-hidden rounded-lg border border-primary-foreground/15 bg-primary-foreground/5">
-                <img
-                  src={threeDDesignCaptureUrl || "/solar-rooftop-cover-4k.png"}
-                  alt="Rooftop solar layout preview"
-                  className="h-72 w-full object-cover"
-                  crossOrigin="anonymous"
-                />
-              </div>
-              <div className="flex flex-col justify-center rounded-lg border border-primary-foreground/15 bg-primary-foreground/5 p-4">
-                <p className="text-lg font-semibold leading-tight text-primary-foreground/85">
-                  Solar panel layout design will be prepared after site survey.
-                </p>
-                <p className="mt-4 text-xs leading-relaxed text-primary-foreground/60">
-                  {system.panelCount} panels x {system.panelWattage}Wp planned for the proposed {system.sizeKw} kWp system.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
               {[
-                { label: "Total Panels", value: `${system.panelCount}` },
-                { label: "Panel Wattage", value: `${system.panelWattage}W` },
-                { label: "kWp Capacity", value: `${system.sizeKw}` },
-                { label: "Orientation", value: system.orientation.replace(" Facing", "") },
-              ].map((s) => (
-                <div key={s.label} className="rounded-lg border border-primary-foreground/10 bg-primary-foreground/5 p-4 text-center">
-                  <p className="text-xl font-extrabold text-accent">{s.value}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-primary-foreground/45">{s.label}</p>
+                { title: "Shadow-Free Zone", text: shadowFreeNote || "Optimised for your location's latitude for maximum solar capture throughout the year." },
+                { title: "Elevated Mounting", text: elevatedMountingNote || `${system.mounting} with adequate clearance and waterproofed penetrations.` },
+                { title: "Sun-Path Window", text: sunPathNote || "No obstructions within the critical 9 AM – 3 PM window. Shadow loss < 2%." },
+              ].map((c) => (
+                <div key={c.title} className="rounded-lg border border-border bg-secondary/40 p-4">
+                  <p className="font-semibold text-foreground">{c.title}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{c.text}</p>
                 </div>
               ))}
             </div>
-          </div>
-          <div className="hidden">
-            {[
-              { label: "Total Panels", value: `${system.panelCount}` },
-              { label: "Panel Wattage", value: `${system.panelWattage}W` },
-              { label: "Capacity", value: `${system.sizeKw} kWp` },
-              { label: "Orientation", value: system.orientation },
-            ].map((s) => (
-              <div key={s.label} className="rounded-lg border border-border p-4 text-center">
-                <p className="text-xl font-extrabold text-foreground">{s.value}</p>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{s.label}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {[
-              { title: "Shadow-Free Zone", text: "Optimised for your location's latitude for maximum solar capture throughout the year." },
-              { title: "Elevated Mounting", text: "80*40 mounting structure with adequate clearance and waterproofed penetrations." },
-              { title: "Sun-Path Window", text: "No obstructions within the critical 9 AM – 3 PM window. Shadow loss < 2%." },
-            ].map((c) => (
-              <div key={c.title} className="rounded-lg border border-border bg-secondary/40 p-4">
-                <p className="font-semibold text-foreground">{c.title}</p>
-                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{c.text}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* TECHNICAL SPECIFICATIONS */}
-        <section>
+        <section id="quote-step-2-specs">
           <SectionTitle index="04" title="Technical Specifications" subtitle="Premium components from globally certified manufacturers" />
-          <div className="grid gap-4 lg:grid-cols-3">
-            {[
-              {
-                icon: Sun,
-                title: "Solar Panels",
-                brand: "TATA POWER",
-                brandStyle: "text-primary",
-                rows: [
-                  ["Category", "Bifacial"],
-                  ["Wattage", "540 Wp"],
-                  ["Qty", `${system.panelCount} Panels`],
-                  ["Total", `${((system.panelCount * system.panelWattage) / 1000).toFixed(1)} kWp`],
-                ],
-              },
-              {
-                icon: BatteryCharging,
-                title: "Inverter",
-                brand: "SUNGROW",
-                brandStyle: "text-primary",
-                rows: [
-                  ["Rated Power", "100.00 kW"],
-                  ["Type", "Inverter"],
-                  ["Protection", "SPD"],
-                  ["Monitoring", "Wifi Enabled"],
-                ],
-              },
-              {
-                icon: Wrench,
-                title: "Mounting Structure",
-                brand: "Apollo",
-                brandStyle: "rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-accent",
-                rows: [
-                  ["Capacity", "100.00 kW"],
-                  ["Type", "80*40"],
-                  ["Size", "80*40"],
-                  ["Brand", "Apollo"],
-                ],
-              },
-              {
-                icon: Zap,
-                title: "DC & AC Cables",
-                brand: "KEI Wires & Cables",
-                brandStyle: "text-primary",
-                rows: [
-                  ["DC Cable", "4 sq mm"],
-                  ["AC Cable", "As per design"],
-                  ["Certification", "BIS"],
-                ],
-              },
-              {
-                icon: ShieldCheck,
-                title: "ACDB / DCDB",
-                brand: "Reputed Make",
-                brandStyle: "rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-accent",
-                rows: [
-                  ["DCDB", "Reputed Make"],
-                  ["ACDB", "Reputed Make"],
-                  ["Protection", "MCB / SPD"],
-                ],
-              },
-              {
-                icon: Gauge,
-                title: "Monitoring System",
-                brand: company.name,
-                brandStyle: "rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-accent",
-                rows: [
-                  ["Platform", `${company.name} Portal`],
-                  ["Data Logger", "Wifi Enabled"],
-                  ["App", "iOS & Android"],
-                  ["Reports", "Daily / Monthly PDF"],
-                ],
-              },
-            ].map((spec) => (
-              <div key={spec.title} className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-                <div className="flex items-center gap-3 bg-primary px-4 py-3 text-primary-foreground">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent/20 text-accent">
-                    <spec.icon className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <div>
-                    <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-primary-foreground/50">Component</p>
-                    <p className="text-sm font-extrabold leading-tight">{spec.title}</p>
-                  </div>
-                </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {techSpecs.map((spec) => {
+              const specIcon = spec.group.includes("Panel")
+                ? Sun
+                : spec.group.includes("Inverter")
+                ? BatteryCharging
+                : spec.group.includes("Structure")
+                ? Wrench
+                : spec.group.includes("Cable")
+                ? Zap
+                : spec.group.includes("Battery")
+                ? BatteryCharging
+                : ShieldCheck
 
-                <div className="min-h-[150px] p-4">
-                  <div className={`mb-3 inline-flex text-sm font-extrabold uppercase tracking-wide ${spec.brandStyle}`}>
-                    {spec.brand}
+              const brandRow = spec.rows.find((r) => r.label === "Brand") || spec.rows.find((r) => r.label === "Category") || spec.rows[0]
+
+              return (
+                <div key={spec.group} className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+                  <div className="flex items-center gap-3 bg-primary px-4 py-3 text-primary-foreground">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent/20 text-accent">
+                      {React.createElement(specIcon, { className: "h-5 w-5", "aria-hidden": "true" })}
+                    </span>
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-primary-foreground/50">Component</p>
+                      <p className="text-sm font-extrabold leading-tight">{spec.group}</p>
+                    </div>
                   </div>
-                  <table className="w-full text-xs">
-                    <tbody>
-                      {spec.rows.map(([label, value]) => (
-                        <tr key={label} className="border-b border-dashed border-border last:border-b-0">
-                          <td className="py-1.5 text-muted-foreground">{label}</td>
-                          <td className="py-1.5 text-right font-bold text-foreground">{value}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+
+                  <div className="min-h-[150px] p-4">
+                    {brandRow?.value && (
+                      <div className="mb-3 inline-flex text-sm font-extrabold uppercase tracking-wide text-primary">
+                        {brandRow.value}
+                      </div>
+                    )}
+                    <table className="w-full text-xs">
+                      <tbody>
+                        {spec.rows.map((row) => (
+                          <tr key={row.label} className="border-b border-dashed border-border last:border-b-0">
+                            <td className="py-1.5 text-muted-foreground">{row.label}</td>
+                            <td className="py-1.5 text-right font-bold text-foreground">{row.value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
           <div className="mt-5 rounded-lg border border-border bg-secondary/40 p-4">
             <div className="flex flex-wrap items-center gap-3">
@@ -1154,7 +1298,7 @@ function QuotationDocument() {
         </section>
 
         {/* ENERGY & FINANCIAL ANALYSIS */}
-        <section>
+        <section id="quote-step-4">
           <SectionTitle index="05" title="Energy Generation & Financial Summary" subtitle="Month-wise generation forecast and investment return analysis" />
 
           {/* Monthly generation chart */}
@@ -1292,7 +1436,7 @@ function QuotationDocument() {
         </section>
 
         {/* BENEFITS */}
-        <section>
+        <section id="quote-step-6">
           <SectionTitle index="06" title="Why Go Solar Today?" subtitle="Every sunrise is an opportunity to save money and protect our planet" />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {benefits.map((b) => (
@@ -1316,9 +1460,83 @@ function QuotationDocument() {
           </div>
         </section>
 
+        {/* TESTIMONIALS */}
+        {showTestimonials && (
+          <section id="quote-step-testimonials">
+            <SectionTitle
+              index="07"
+              title="Customer Testimonials & Verified Installations"
+              subtitle="Real installations and feedback from delighted solar homeowners"
+            />
+            <div className="space-y-4">
+              {testimonials.map((t, idx) => (
+                <div
+                  key={idx}
+                  className="overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-sm transition-all hover:shadow-md"
+                >
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    {/* Testimonial Photo */}
+                    <div className="relative h-44 w-full shrink-0 overflow-hidden rounded-xl border border-border bg-secondary/30 sm:h-36 sm:w-44">
+                      <img
+                        src={t.image || "/solar-rooftop-cover-4k.png"}
+                        alt={t.name || "Testimonial Photo"}
+                        className="h-full w-full object-cover"
+                        crossOrigin="anonymous"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null
+                          e.currentTarget.src = "/solar-rooftop-cover-4k.png"
+                        }}
+                      />
+                      {(t.systemCapacity || t.scheme) && (
+                        <span className="absolute bottom-1.5 left-1.5 rounded bg-primary/90 px-2 py-0.5 text-[10px] font-bold text-primary-foreground backdrop-blur-sm">
+                          {t.systemCapacity || t.scheme}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Testimonial Content */}
+                    <div className="flex-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h4 className="text-base font-extrabold text-foreground">
+                            {t.name}
+                          </h4>
+                          {(t.location || t.scheme) && (
+                            <p className="text-xs font-medium text-accent">
+                              {[t.location, t.scheme].filter(Boolean).join(" • ")}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 text-amber-500">
+                          {Array.from({ length: Number(t.rating) || 5 }).map((_, sIdx) => (
+                            <Star key={sIdx} className="h-4 w-4 fill-amber-400 text-amber-400" />
+                          ))}
+                        </div>
+                      </div>
+
+                      <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
+                        "{t.text}"
+                      </p>
+
+                      {t.structureType && (
+                        <div className="mt-3 flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-2.5 py-1 text-[11px] font-semibold text-secondary-foreground">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                            {t.structureType}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* INSTALLATION PROCESS */}
-        <section>
-          <SectionTitle index="07" title="Installation Process" subtitle="From site survey to grid connection — a seamless journey" />
+        <section id="quote-step-7">
+          <SectionTitle index="08" title="Installation Process" subtitle="From site survey to grid connection — a seamless journey" />
           <ol className="space-y-3">
             {installSteps.map((step, i) => (
               <li key={step.title} className="flex gap-4 rounded-lg border border-border p-4">
@@ -1335,8 +1553,8 @@ function QuotationDocument() {
         </section>
 
         {/* WARRANTY */}
-        <section>
-          <SectionTitle index="08" title="Warranty & After-Sales Support" subtitle="Industry-leading warranty coverage across all components" />
+        <section id="quote-step-3">
+          <SectionTitle index="09" title="Warranty & After-Sales Support" subtitle="Industry-leading warranty coverage across all components" />
           <div className="overflow-hidden rounded-lg border border-border">
             <table className="w-full text-left text-sm">
               <thead>
@@ -1362,8 +1580,8 @@ function QuotationDocument() {
         </section>
 
         {/* PAYMENT TERMS */}
-        <section>
-          <SectionTitle index="09" title="Payment Terms" subtitle="Milestone-based payment schedule" />
+        <section id="quote-step-5">
+          <SectionTitle index="10" title="Payment Terms" subtitle="Milestone-based payment schedule" />
           <div className="overflow-hidden rounded-lg border border-border">
             <table className="w-full text-left text-sm">
               <thead>
@@ -1393,7 +1611,7 @@ function QuotationDocument() {
         </section>
 
         {/* TERMS, SIGN-OFF & FOOTER */}
-        <section className="quotation-page-sheet space-y-5 rounded-[28px] border border-border bg-white p-6">
+        <section id="quote-step-8" className="quotation-page-sheet space-y-5 rounded-[28px] border border-border bg-white p-6">
           <div>
             <SectionTitle index="10" title="Terms & Conditions" subtitle="Please read these terms carefully before confirming your order" />
             <div className="grid gap-4 sm:grid-cols-2">
@@ -1722,5 +1940,196 @@ export default function Page() {
         </div>
       )}
     </main>
+  )
+}
+
+export { QuotationDocument, buildQuotationData, applyQuotationData, downloadQuotationPdf }
+
+export function LiveQuotationPane({ quotationRecord, activeStep = 1, onClose }) {
+  const quotationData = useMemo(() => buildQuotationData(quotationRecord), [quotationRecord])
+  applyQuotationData(quotationData)
+
+  const [downloading, setDownloading] = useState(false)
+  const scrollContainerRef = React.useRef(null)
+
+  useEffect(() => {
+    if (!activeStep) return
+    const timer = setTimeout(() => {
+      const targetElement = document.getElementById(`quote-step-${activeStep}`)
+      if (targetElement) {
+        targetElement.scrollIntoView({ behavior: "smooth", block: "start" })
+      }
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [activeStep])
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      await downloadQuotationPdf("quotation-split-preview")
+    } catch (e) {
+      console.log("PDF generation error:", e)
+      alert("PDF download failed. Please try again.")
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-slate-100/90 border-l border-slate-200">
+      {/* Header bar of split view */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-slate-200 shadow-sm shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-800 shrink-0">
+            Live Quotation Preview
+          </span>
+          <span className="hidden sm:inline text-xs text-slate-300">|</span>
+          <span className="truncate text-xs font-semibold text-slate-600">
+            {quotationData?.client?.name} ({quotationData?.system?.sizeKw} kWp)
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            title="Print Proposal"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Print</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={downloading}
+            title="Download PDF"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">{downloading ? "PDF..." : "PDF"}</span>
+          </button>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              title="Close Preview Pane"
+              className="inline-flex items-center justify-center h-7 w-7 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Scrollable document area */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 sm:p-5 scroll-smooth">
+        <div id="quotation-split-preview" className="mx-auto w-full max-w-[820px] rounded-xl overflow-hidden shadow-sm bg-white">
+          <QuotationDocument key={JSON.stringify(quotationData)} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function QuotationProposalPreview({
+  quotationRecord,
+  onBack,
+  onSave,
+  saveLabel = "Create quotation",
+}) {
+  const quotationData = useMemo(() => buildQuotationData(quotationRecord), [quotationRecord])
+  applyQuotationData(quotationData)
+
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [shareLink, setShareLink] = useState("")
+
+  const handleShareLink = () => {
+    if (!quotationRecord?.id) return
+    const nextQuotation = ensureQuotationShareToken(quotationRecord.id)
+    if (!nextQuotation?.shareToken) {
+      window.alert("Could not create a share link.")
+      return
+    }
+    setShareLink(`${window.location.origin}/q/${nextQuotation.shareToken}`)
+    setShareDialogOpen(true)
+  }
+
+  const handleCopyShareLink = async () => {
+    if (!shareLink) return
+    try {
+      await navigator.clipboard.writeText(shareLink)
+      window.alert("Quote link copied.")
+    } catch {
+      window.alert("Could not copy the quote link.")
+    }
+  }
+
+  const whatsappShareUrl = shareLink
+    ? `https://wa.me/?text=${encodeURIComponent(`Please view this quotation: ${shareLink}`)}`
+    : ""
+
+  return (
+    <div className="min-h-screen bg-slate-100/70 pb-16 pt-4">
+      <div className="mx-auto w-full max-w-[1320px] px-4">
+        {/* Sticky top action toolbar */}
+        <div className="sticky top-3 z-50 mb-6 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 px-5 py-3.5 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur-md">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              {onBack && (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-100 hover:shadow"
+                >
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                  Back to Editing
+                </button>
+              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                    Live Proposal Preview
+                  </span>
+                  <h2 className="text-base font-bold text-slate-800">
+                    {quotationData?.client?.name || "Quotation Preview"}
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-500">
+                  {quotationData?.system?.sizeKw} kWp · {quotationData?.quote?.number} · Real-time preview of your form edits
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-100"
+              >
+                <Printer className="h-4 w-4" aria-hidden="true" />
+                Print
+              </button>
+              <DownloadButton targetId="quotation-preview-container" />
+              {onSave && (
+                <button
+                  type="button"
+                  onClick={onSave}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700"
+                >
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                  {saveLabel}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div id="quotation-preview-container" className="mx-auto w-full max-w-[1320px]">
+          <QuotationDocument />
+        </div>
+      </div>
+    </div>
   )
 }

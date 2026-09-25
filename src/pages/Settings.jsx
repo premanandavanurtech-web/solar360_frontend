@@ -21,6 +21,7 @@ import {
   useTheme,
   Stack,
   Chip,
+  MenuItem,
 } from "@mui/material";
 import {
   AdminPanelSettings as AdminIcon,
@@ -43,7 +44,14 @@ import {
   Palette as PaletteIcon,
   Security as SecurityIcon,
   Check as CheckIcon,
+  Storage as StorageIcon,
+  AccessTime as AccessTimeIcon,
+  NotificationsActive as NotificationsActiveIcon,
+  Alarm as AlarmIcon,
+  Schedule as ScheduleIcon,
+  EventAvailable as EventAvailableIcon,
 } from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { API_BASE_URL } from "../utils/apiConfig";
 import { toBackendAssetUrl } from "../utils/backendAssetUrl";
@@ -56,12 +64,226 @@ const getToken = () =>
   localStorage.getItem("accessToken") ||
   "";
 
+const formatMinutesToAmPm = (minutes) => {
+  const h = Math.floor(minutes / 60) % 24;
+  const m = minutes % 60;
+  const suffix = h >= 12 ? "PM" : "AM";
+  const displayH = h % 12 || 12;
+  return `${displayH}:${String(m).padStart(2, "0")} ${suffix}`;
+};
+
+const parseTimeToMinutes = (value = "10:00") => {
+  const [hours, minutes] = String(value || "10:00").split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 600;
+  return hours * 60 + minutes;
+};
+
+const HOURS_12 = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
+const MINUTES_60 = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+
+const getClockParts12 = (timeStr = "10:00") => {
+  const [hStr, mStr] = String(timeStr || "10:00").split(":");
+  let h = parseInt(hStr, 10);
+  if (isNaN(h)) h = 10;
+  let m = parseInt(mStr, 10);
+  if (isNaN(m)) m = 0;
+  
+  const period = h >= 12 ? "PM" : "AM";
+  let hour12 = h % 12;
+  if (hour12 === 0) hour12 = 12;
+  
+  return {
+    hour: String(hour12).padStart(2, "0"),
+    minute: String(m).padStart(2, "0"),
+    period,
+  };
+};
+
+const clockPartsTo24 = (hour12, minute, period) => {
+  let h = parseInt(hour12, 10) || 12;
+  const m = String(parseInt(minute, 10) || 0).padStart(2, "0");
+  if (period === "PM" && h < 12) h += 12;
+  if (period === "AM" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${m}`;
+};
+
+const Time12HourInput = ({ label, value, onChange, color = "#f59e0b", isDark, presets = [] }) => {
+  const { hour, minute, period } = getClockParts12(value);
+
+  const handleHourChange = (newHour) => {
+    onChange(clockPartsTo24(newHour, minute, period));
+  };
+
+  const handleMinuteChange = (newMin) => {
+    onChange(clockPartsTo24(hour, newMin, period));
+  };
+
+  const handlePeriodChange = (newPeriod) => {
+    onChange(clockPartsTo24(hour, minute, newPeriod));
+  };
+
+  return (
+    <Box>
+      <Typography variant="caption" fontWeight={700} sx={{ color: isDark ? "#94a3b8" : "#475569", mb: 0.75, display: "block" }}>
+        {label}
+      </Typography>
+
+      {/* ── 12-Hour Selector Box ── */}
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          p: 1,
+          borderRadius: "14px",
+          bgcolor: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
+          border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0"}`,
+        }}
+      >
+        {/* Hour Dropdown */}
+        <TextField
+          select
+          size="small"
+          label="Hour"
+          value={hour}
+          onChange={(e) => handleHourChange(e.target.value)}
+          sx={{
+            flex: 1,
+            "& .MuiOutlinedInput-root": {
+              borderRadius: "10px",
+              bgcolor: isDark ? "#0f172a" : "#ffffff",
+              fontWeight: 800,
+            },
+          }}
+          SelectProps={{
+            MenuProps: { PaperProps: { sx: { maxHeight: 260 } } },
+          }}
+        >
+          {HOURS_12.map((h) => (
+            <MenuItem key={h} value={h} sx={{ fontWeight: 700 }}>
+              {h}
+            </MenuItem>
+          ))}
+        </TextField>
+
+        <Typography sx={{ fontWeight: 900, fontSize: "1.2rem", color: color }}>:</Typography>
+
+        {/* Minute Dropdown */}
+        <TextField
+          select
+          size="small"
+          label="Minute"
+          value={minute}
+          onChange={(e) => handleMinuteChange(e.target.value)}
+          sx={{
+            flex: 1,
+            "& .MuiOutlinedInput-root": {
+              borderRadius: "10px",
+              bgcolor: isDark ? "#0f172a" : "#ffffff",
+              fontWeight: 800,
+            },
+          }}
+          SelectProps={{
+            MenuProps: { PaperProps: { sx: { maxHeight: 260 } } },
+          }}
+        >
+          {MINUTES_60.map((m) => (
+            <MenuItem key={m} value={m} sx={{ fontWeight: 700 }}>
+              {m}
+            </MenuItem>
+          ))}
+        </TextField>
+
+        {/* AM / PM Segmented Buttons */}
+        <Box
+          sx={{
+            display: "flex",
+            borderRadius: "10px",
+            p: "3px",
+            bgcolor: isDark ? "#0f172a" : "#e2e8f0",
+            border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "#cbd5e1"}`,
+          }}
+        >
+          <Button
+            size="small"
+            onClick={() => handlePeriodChange("AM")}
+            sx={{
+              minWidth: 46,
+              height: 36,
+              borderRadius: "8px",
+              fontSize: "0.8rem",
+              fontWeight: 900,
+              bgcolor: period === "AM" ? color : "transparent",
+              color: period === "AM" ? "#ffffff" : isDark ? "#94a3b8" : "#475569",
+              boxShadow: period === "AM" ? "0 2px 8px rgba(0,0,0,0.25)" : "none",
+              "&:hover": {
+                bgcolor: period === "AM" ? color : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+              },
+            }}
+          >
+            AM
+          </Button>
+          <Button
+            size="small"
+            onClick={() => handlePeriodChange("PM")}
+            sx={{
+              minWidth: 46,
+              height: 36,
+              borderRadius: "8px",
+              fontSize: "0.8rem",
+              fontWeight: 900,
+              bgcolor: period === "PM" ? color : "transparent",
+              color: period === "PM" ? "#ffffff" : isDark ? "#94a3b8" : "#475569",
+              boxShadow: period === "PM" ? "0 2px 8px rgba(0,0,0,0.25)" : "none",
+              "&:hover": {
+                bgcolor: period === "PM" ? color : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+              },
+            }}
+          >
+            PM
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Preset Chips + Formatted Text */}
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mt: 0.8, flexWrap: "wrap", gap: 0.5 }}>
+        <Typography variant="caption" sx={{ color: color, fontWeight: 800 }}>
+          Formatted: {formatMinutesToAmPm(parseTimeToMinutes(value))}
+        </Typography>
+        {presets.length > 0 && (
+          <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+            {presets.map((preset) => (
+              <Button
+                key={preset.value}
+                size="small"
+                onClick={() => onChange(preset.value)}
+                sx={{
+                  p: "2px 6px",
+                  fontSize: "0.68rem",
+                  minWidth: "auto",
+                  borderRadius: "6px",
+                  bgcolor: value === preset.value ? color : isDark ? "#1e293b" : "#f1f5f9",
+                  color: value === preset.value ? "#ffffff" : "inherit",
+                  fontWeight: 700,
+                }}
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
 const Settings = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const { user, updateLocalUser } = useAuth();
   const isDark = theme.palette.mode === "dark";
 
-  // Modal control state: null | 'profile' | 'password' | 'theme'
+  // Modal control state: null | 'profile' | 'password' | 'theme' | 'attendance_timings'
   const [activeModal, setActiveModal] = useState(null);
 
   // Dark Mode State
@@ -94,8 +316,85 @@ const Settings = () => {
   const [avatarPreview, setAvatarPreview] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Attendance & Notification Timings state
+  const [attendanceTimings, setAttendanceTimings] = useState({
+    officePunchInTime: "10:00",
+    officePunchOutTime: "19:00",
+    punchInReminderStartTime: "10:30",
+    punchInReminderCount: 3,
+    punchInReminderIntervalMinutes: 5,
+    autoPunchOutEnabled: true,
+    blockEarlyPunchIn: false,
+  });
+  const [loadingTimings, setLoadingTimings] = useState(false);
+  const [savingTimings, setSavingTimings] = useState(false);
+
   // Snackbar Toast State
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+
+  const fetchAttendanceTimings = async () => {
+    try {
+      setLoadingTimings(true);
+      const token = getToken();
+      const res = await fetch(`${API}/attendance/settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await res.json();
+      if (payload?.data || payload?.result) {
+        const data = payload.data || payload.result;
+        setAttendanceTimings({
+          officePunchInTime: data.officePunchInTime || "10:00",
+          officePunchOutTime: data.officePunchOutTime || "19:00",
+          punchInReminderStartTime: data.punchInReminderStartTime || "10:30",
+          punchInReminderCount: Number(data.punchInReminderCount || 3),
+          punchInReminderIntervalMinutes: Number(data.punchInReminderIntervalMinutes || 5),
+          autoPunchOutEnabled: Boolean(data.autoPunchOutEnabled),
+          blockEarlyPunchIn: Boolean(data.blockEarlyPunchIn),
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch attendance settings:", err);
+    } finally {
+      setLoadingTimings(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAttendanceTimings();
+  }, []);
+
+  const handleSaveAttendanceTimings = async (e) => {
+    if (e) e.preventDefault();
+    try {
+      setSavingTimings(true);
+      const token = getToken();
+      const res = await fetch(`${API}/attendance/settings`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(attendanceTimings),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.message || "Failed to update attendance timings");
+
+      setSnackbar({
+        open: true,
+        message: "Punch-in & punch-out timings saved! Reminders and notifications will follow this schedule.",
+        severity: "success",
+      });
+      setActiveModal(null);
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: err.message || "Failed to update attendance timings",
+        severity: "error",
+      });
+    } finally {
+      setSavingTimings(false);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -233,6 +532,12 @@ const Settings = () => {
       subtitle: "Manage profile photo, name, email & phone",
     },
     {
+      key: "attendance_timings",
+      icon: <AccessTimeIcon sx={{ fontSize: 30, color: "#f59e0b" }} />,
+      title: "Punch In & Out Timings",
+      subtitle: "Set office working hours & automatic notification triggers",
+    },
+    {
       key: "password",
       icon: <LockIcon sx={{ fontSize: 30, color: "#1e40af" }} />,
       title: "Password & Security",
@@ -248,6 +553,14 @@ const Settings = () => {
       title: "Dark Mode Theme",
       subtitle: "Toggle light and dark theme mode",
     },
+    {
+      key: "database",
+      icon: <StorageIcon sx={{ fontSize: 30, color: "#10b981" }} />,
+      title: "Database Storage",
+      subtitle: "MongoDB capacity, collection sizes & free space cleaners",
+      isRoute: true,
+      path: "/database-settings",
+    },
   ];
 
   return (
@@ -258,17 +571,17 @@ const Settings = () => {
           Settings & Configuration
         </Typography>
         <Typography variant="body2" sx={{ color: theme.palette.text.secondary, mt: 0.5, fontSize: "0.9rem" }}>
-          Manage admin profile credentials, security password, and application theme appearance.
+          Manage admin profile credentials, security password, database metrics, and application appearance.
         </Typography>
       </Box>
 
       {/* Grid Cards Section */}
       <Grid container spacing={3}>
         {cards.map((card) => (
-          <Grid item xs={12} sm={6} md={4} key={card.key}>
+          <Grid item xs={12} sm={6} md={3} key={card.key}>
             <Paper
               elevation={0}
-              onClick={() => setActiveModal(card.key)}
+              onClick={() => (card.isRoute ? navigate(card.path) : setActiveModal(card.key))}
               sx={{
                 p: 3.5,
                 height: "100%",
@@ -941,6 +1254,327 @@ const Settings = () => {
             Done
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* ── MODAL: PUNCH IN & OUT TIMINGS / AUTOMATIC NOTIFICATIONS ── */}
+      <Dialog
+        open={activeModal === "attendance_timings"}
+        onClose={() => setActiveModal(null)}
+        fullWidth
+        maxWidth="md"
+        PaperProps={{
+          sx: {
+            borderRadius: "24px",
+            bgcolor: theme.palette.background.paper,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.2)",
+            overflow: "hidden",
+            maxHeight: "90vh",
+            display: "flex",
+            flexDirection: "column",
+          },
+        }}
+      >
+        {/* Modal Header */}
+        <Box
+          sx={{
+            p: 2.5,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            borderBottom: `1px solid ${isDark ? "#334155" : "#f1f5f9"}`,
+            bgcolor: isDark ? "#0f172a" : "#ffffff",
+            flexShrink: 0,
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <Box
+              sx={{
+                width: 44,
+                height: 44,
+                borderRadius: "14px",
+                background: "linear-gradient(135deg, #d97706 0%, #f59e0b 100%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#ffffff",
+                boxShadow: "0 4px 12px rgba(245, 158, 11, 0.35)",
+              }}
+            >
+              <AccessTimeIcon />
+            </Box>
+            <Box>
+              <Typography variant="h6" fontWeight={800} sx={{ color: theme.palette.text.primary, lineHeight: 1.2 }}>
+                Punch In & Out Timings
+              </Typography>
+              <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                Set working hours, grace periods, and automatic reminder notification alarms
+              </Typography>
+            </Box>
+          </Box>
+          <IconButton
+            onClick={() => setActiveModal(null)}
+            sx={{
+              bgcolor: isDark ? "#1e293b" : "#f1f5f9",
+              color: theme.palette.text.secondary,
+              "&:hover": { bgcolor: isDark ? "#334155" : "#e2e8f0" },
+            }}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+
+        <Box component="form" onSubmit={handleSaveAttendanceTimings} sx={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+          <DialogContent sx={{ p: { xs: 2, sm: 3 }, overflowY: "auto", flex: 1 }}>
+            {loadingTimings ? (
+              <Box sx={{ py: 6, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                <CircularProgress size={36} sx={{ color: "#f59e0b" }} />
+                <Typography variant="body2" color="text.secondary">
+                  Loading attendance timing settings...
+                </Typography>
+              </Box>
+            ) : (
+              <Grid container spacing={2.5}>
+                {/* ── Working Hours Section ── */}
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" fontWeight={800} sx={{ color: theme.palette.text.primary, mb: 0.5, display: "flex", alignItems: "center", gap: 1 }}>
+                    <ScheduleIcon sx={{ fontSize: 18, color: "#f59e0b" }} /> Standard Office Working Hours
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                    Official daily punch-in and punch-out shift schedule for employees.
+                  </Typography>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <Time12HourInput
+                    label="Standard Punch-In Time"
+                    value={attendanceTimings.officePunchInTime}
+                    color="#f59e0b"
+                    isDark={isDark}
+                    onChange={(val) => {
+                      setAttendanceTimings((prev) => ({
+                        ...prev,
+                        officePunchInTime: val,
+                        punchInReminderStartTime: val,
+                      }));
+                    }}
+                    presets={[
+                      { label: "9:00 AM", value: "09:00" },
+                      { label: "10:00 AM", value: "10:00" },
+                      { label: "11:00 AM", value: "11:00" },
+                      { label: "12:30 PM", value: "12:30" },
+                      { label: "02:30 PM", value: "14:30" },
+                    ]}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <Time12HourInput
+                    label="Standard Punch-Out Time"
+                    value={attendanceTimings.officePunchOutTime}
+                    color="#3b82f6"
+                    isDark={isDark}
+                    onChange={(val) => {
+                      setAttendanceTimings((prev) => ({
+                        ...prev,
+                        officePunchOutTime: val,
+                      }));
+                    }}
+                    presets={[
+                      { label: "5:00 PM", value: "17:00" },
+                      { label: "6:00 PM", value: "18:00" },
+                      { label: "7:00 PM", value: "19:00" },
+                      { label: "8:00 PM", value: "20:00" },
+                      { label: "9:00 PM", value: "21:00" },
+                    ]}
+                  />
+                </Grid>
+
+                {/* Divider */}
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 0.5, borderColor: isDark ? "#334155" : "#f1f5f9" }} />
+                </Grid>
+
+                {/* ── Automatic Reminder Alarms Section ── */}
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" fontWeight={800} sx={{ color: theme.palette.text.primary, mb: 0.5, display: "flex", alignItems: "center", gap: 1 }}>
+                    <AlarmIcon sx={{ fontSize: 18, color: "#ef4444" }} /> Punch-In Grace Period & Alarm Notifications
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                    Reminders automatically start at your <strong>Punch-In Time ({formatMinutesToAmPm(parseTimeToMinutes(attendanceTimings.officePunchInTime))})</strong> for employees who have not clocked in.
+                  </Typography>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" fontWeight={700} sx={{ color: theme.palette.text.secondary, mb: 0.75, display: "block" }}>
+                    Reminder Interval (Minutes)
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    size="small"
+                    value={attendanceTimings.punchInReminderIntervalMinutes}
+                    onChange={(e) => setAttendanceTimings((prev) => ({ ...prev, punchInReminderIntervalMinutes: Math.max(1, Number(e.target.value) || 5) }))}
+                    InputProps={{ inputProps: { min: 1, max: 60 } }}
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: "12px",
+                        bgcolor: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
+                      },
+                    }}
+                  />
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                    Gap between each notification (default: 5 mins)
+                  </Typography>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" fontWeight={700} sx={{ color: theme.palette.text.secondary, mb: 0.75, display: "block" }}>
+                    Total Reminders (Before Auto-Absent)
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    size="small"
+                    value={attendanceTimings.punchInReminderCount}
+                    onChange={(e) => setAttendanceTimings((prev) => ({ ...prev, punchInReminderCount: Math.max(1, Math.min(10, Number(e.target.value) || 3)) }))}
+                    InputProps={{ inputProps: { min: 1, max: 10 } }}
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: "12px",
+                        bgcolor: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
+                      },
+                    }}
+                  />
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                    Total warning alerts sent before locking (default: 3 alerts)
+                  </Typography>
+                </Grid>
+
+                {/* ── Live Schedule Preview Card ── */}
+                <Grid item xs={12}>
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 2,
+                      borderRadius: "14px",
+                      bgcolor: isDark ? "rgba(239, 68, 68, 0.08)" : "#fef2f2",
+                      border: `1px solid ${isDark ? "rgba(239, 68, 68, 0.25)" : "#fecaca"}`,
+                    }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                      <NotificationsActiveIcon sx={{ color: "#dc2626", fontSize: 20 }} />
+                      <Typography variant="subtitle2" fontWeight={800} sx={{ color: "#991b1b" }}>
+                        Live Notification & Absence Timeline Schedule
+                      </Typography>
+                    </Box>
+
+                    <Stack spacing={0.75}>
+                      {Array.from({ length: Number(attendanceTimings.punchInReminderCount) || 3 }).map((_, idx) => {
+                        const startMin = parseTimeToMinutes(attendanceTimings.officePunchInTime);
+                        const interval = Number(attendanceTimings.punchInReminderIntervalMinutes) || 5;
+                        const alertMin = startMin + idx * interval;
+                        const isFinal = idx === (Number(attendanceTimings.punchInReminderCount) || 3) - 1;
+                        return (
+                          <Box key={idx} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            <Chip
+                              size="small"
+                              label={`Alert #${idx + 1}`}
+                              sx={{
+                                bgcolor: isFinal ? "#dc2626" : "#f59e0b",
+                                color: "#ffffff",
+                                fontWeight: 800,
+                                fontSize: "0.65rem",
+                                height: 20,
+                              }}
+                            />
+                            <Typography variant="caption" fontWeight={700} sx={{ color: isDark ? "#fca5a5" : "#7f1d1d" }}>
+                              {formatMinutesToAmPm(alertMin)}: {isFinal ? `Final Warning (${interval} min left to avoid Absent)` : "Push Notification Reminder sent to employee"}
+                            </Typography>
+                          </Box>
+                        );
+                      })}
+
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, pt: 0.5 }}>
+                        <Chip
+                          size="small"
+                          label="Auto-Absent"
+                          sx={{
+                            bgcolor: "#111827",
+                            color: "#ffffff",
+                            fontWeight: 800,
+                            fontSize: "0.65rem",
+                            height: 20,
+                          }}
+                        />
+                        <Typography variant="caption" fontWeight={800} sx={{ color: "#b91c1c" }}>
+                          {formatMinutesToAmPm(
+                            parseTimeToMinutes(attendanceTimings.officePunchInTime) +
+                              (Number(attendanceTimings.punchInReminderCount) || 3) *
+                                (Number(attendanceTimings.punchInReminderIntervalMinutes) || 5)
+                          )}
+                          : Automatically marked ABSENT for the day (Admin can still change to Present).
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Paper>
+                </Grid>
+
+                {/* ── Auto Punch-Out & Options ── */}
+                <Grid item xs={12}>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", p: 1.75, borderRadius: "12px", bgcolor: isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}` }}>
+                    <Box>
+                      <Typography variant="body2" fontWeight={700} sx={{ color: theme.palette.text.primary, fontSize: "0.85rem" }}>
+                        Automatic Punch-Out at End of Shift
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Automatically closes open attendance shifts after {formatMinutesToAmPm(parseTimeToMinutes(attendanceTimings.officePunchOutTime))}
+                      </Typography>
+                    </Box>
+                    <Switch
+                      checked={attendanceTimings.autoPunchOutEnabled}
+                      onChange={(e) => setAttendanceTimings((prev) => ({ ...prev, autoPunchOutEnabled: e.target.checked }))}
+                      color="primary"
+                    />
+                  </Box>
+                </Grid>
+              </Grid>
+            )}
+          </DialogContent>
+
+          <DialogActions sx={{ px: 3, py: 2, borderTop: `1px solid ${isDark ? "#334155" : "#f1f5f9"}`, flexShrink: 0, bgcolor: isDark ? "#0f172a" : "#ffffff" }}>
+            <Button
+              onClick={() => setActiveModal(null)}
+              variant="outlined"
+              sx={{
+                borderRadius: "10px",
+                borderColor: isDark ? "#475569" : "#cbd5e1",
+                color: theme.palette.text.secondary,
+                fontWeight: 700,
+                textTransform: "none",
+                px: 2.5,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={savingTimings || loadingTimings}
+              variant="contained"
+              startIcon={savingTimings ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+              sx={{
+                background: "linear-gradient(135deg, #d97706 0%, #f59e0b 100%)",
+                borderRadius: "10px",
+                px: 3,
+                py: 0.85,
+                fontWeight: 700,
+                textTransform: "none",
+                boxShadow: "0 4px 14px rgba(245, 158, 11, 0.4)",
+              }}
+            >
+              {savingTimings ? "Saving..." : "Save Timings & Schedule"}
+            </Button>
+          </DialogActions>
+        </Box>
       </Dialog>
 
       {/* Toast Alert */}

@@ -22,10 +22,10 @@ if (typeof window !== "undefined") {
 }
 
 const API  = API_ORIGIN;
-const GKEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyDQYrvUxQPWUrpqWIy-tLg4f3DGrr4GTlg";
+const GKEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyBtLSQIyNMFIy5PzrnzP3pGstDkLViwxiw";
 
-const MIN_MOVE_METRES = 12;
-const MIN_STATIONARY_MOVE_METRES = 25; // 25 meters (0.025 km) minimum threshold to start counting travel distance
+const MIN_MOVE_METRES = 15;
+const MIN_STATIONARY_MOVE_METRES = 50; // 50 meters (0.05 km) minimum threshold to ignore indoor drift
 const SNAP_TO_ROADS_MAX_POINTS = 100;
 const SNAP_TO_ROADS_MAX_GAP_METRES = 500;
 const MAX_COUNTED_SEGMENT_METRES = 1000;
@@ -86,15 +86,21 @@ const extractLocationPoints = (payload) => {
   return candidates.find(Array.isArray) || [];
 };
 
-const filterPointsFromPunchInTime = (points = [], punchInTime = null) => {
-  if (!Array.isArray(points) || !points.length || !punchInTime) return points;
+const filterPointsFromPunchInTime = (points = [], punchInTime = null, punchOutTime = null) => {
+  if (!Array.isArray(points) || !points.length) return [];
+  if (!punchInTime) return [];
 
   const punchInMs = new Date(punchInTime).getTime();
-  if (!Number.isFinite(punchInMs)) return points;
+  if (!Number.isFinite(punchInMs)) return [];
+
+  const punchOutMs = punchOutTime ? new Date(punchOutTime).getTime() : null;
 
   return points.filter((point) => {
     const pointMs = new Date(point?.recordedAt || point?.time || 0).getTime();
-    return !Number.isFinite(pointMs) || pointMs >= punchInMs;
+    if (!Number.isFinite(pointMs)) return false;
+    if (pointMs < punchInMs) return false;
+    if (punchOutMs && Number.isFinite(punchOutMs) && pointMs > punchOutMs) return false;
+    return true;
   });
 };
 
@@ -106,14 +112,17 @@ const extractVisitTrailPoints = (visits = [], punchInLocation = null) => {
     const lat = Number(latValue);
     const lng = Number(lngValue);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    if (Math.abs(lat) < 0.1 && Math.abs(lng) < 0.1) return; // Guard against Null Island / (0, 0)
     const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
     if (seen.has(key)) return;
     seen.add(key);
     points.push({ lat, lng, ...extra });
   };
 
-  if (punchInLocation) {
-    pushPoint(punchInLocation.lat, punchInLocation.lng, { source: "punch-in" });
+  if (punchInLocation && Number.isFinite(Number(punchInLocation.lat)) && Number.isFinite(Number(punchInLocation.lng))) {
+    if (!(Math.abs(Number(punchInLocation.lat)) < 0.1 && Math.abs(Number(punchInLocation.lng)) < 0.1)) {
+      pushPoint(punchInLocation.lat, punchInLocation.lng, { source: "punch-in" });
+    }
   }
 
   [...visits]
@@ -145,9 +154,23 @@ const extractVisitTrailPoints = (visits = [], punchInLocation = null) => {
 
 const ensureTrailStartsAtPunchIn = (points = [], punchInLocation = null) => {
   if (!punchInLocation?.lat || !punchInLocation?.lng) return points;
+  const pLat = Number(punchInLocation.lat);
+  const pLng = Number(punchInLocation.lng);
+  if (!Number.isFinite(pLat) || !Number.isFinite(pLng) || (Math.abs(pLat) < 0.1 && Math.abs(pLng) < 0.1)) {
+    return points;
+  }
+  if (!Array.isArray(points) || points.length === 0) {
+    return [{
+      lat: pLat,
+      lng: pLng,
+      accuracy: Number(punchInLocation.accuracy ?? 0),
+      source: "punch-in",
+    }];
+  }
+
   const punchPoint = {
-    lat: Number(punchInLocation.lat),
-    lng: Number(punchInLocation.lng),
+    lat: pLat,
+    lng: pLng,
     accuracy: Number(punchInLocation.accuracy ?? 0),
     source: "punch-in",
   };
@@ -157,16 +180,109 @@ const ensureTrailStartsAtPunchIn = (points = [], punchInLocation = null) => {
   }
 
   const first = points[0];
-  if (
-    first &&
-    Math.abs(Number(first.lat) - punchPoint.lat) < 0.00001 &&
-    Math.abs(Number(first.lng) - punchPoint.lng) < 0.00001
-  ) {
+  const d = distMetres(punchPoint.lat, punchPoint.lng, first.lat, first.lng);
+  
+  // If punch-in is within 40m of first GPS point, keep first GPS point as it's already aligned with movement
+  if (d <= 40) {
     return points;
   }
 
-  return [punchPoint, ...points];
+  // If points are valid GPS points recorded after punch-in, do not insert artificial straight chords
+  return points;
 };
+
+const roadSnapCache = new Map();
+
+async function snapPointsToRoads(points = []) {
+  if (!Array.isArray(points) || points.length < 2) return points;
+
+  // 1. Filter redundant stationary/jitter points (< 10m)
+  const simplified = [];
+  for (let i = 0; i < points.length; i++) {
+    const pt = points[i];
+    if (simplified.length === 0) {
+      simplified.push(pt);
+      continue;
+    }
+    const prev = simplified[simplified.length - 1];
+    const d = distMetres(prev.lat, prev.lng, pt.lat, pt.lng);
+    if (d >= 10 || i === points.length - 1) {
+      simplified.push(pt);
+    }
+  }
+
+  if (simplified.length < 2) return points;
+
+  // 2. Check in-memory cache
+  const cacheKey = simplified.length + "_" + 
+    simplified[0].lat.toFixed(4) + "," + simplified[0].lng.toFixed(4) + "_" +
+    simplified[simplified.length - 1].lat.toFixed(4) + "," + simplified[simplified.length - 1].lng.toFixed(4);
+  
+  if (roadSnapCache.has(cacheKey)) {
+    return roadSnapCache.get(cacheKey);
+  }
+
+  const snappedResult = [];
+  // Small chunk size (8 to 10 points) is 100% reliable on public OSRM without 400 Bad Request
+  const chunkSize = 10;
+
+  for (let i = 0; i < simplified.length; i += chunkSize - 1) {
+    const chunk = simplified.slice(i, i + chunkSize);
+    if (chunk.length < 2) break;
+
+    let chunkSnapped = null;
+
+    try {
+      const coords = chunk
+        .map((p) => `${Number(p.lng).toFixed(6)},${Number(p.lat).toFixed(6)}`)
+        .join(";");
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      const rRes = await fetch(
+        `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&continue_straight=true&steps=false`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeoutId);
+
+      if (rRes.ok) {
+        const rData = await rRes.json();
+        if (rData.code === "Ok" && rData.routes && rData.routes[0]?.geometry?.coordinates?.length > 1) {
+          chunkSnapped = rData.routes[0].geometry.coordinates.map(([lng, lat]) => ({
+            lat,
+            lng,
+          }));
+        }
+      }
+    } catch {
+      // Graceful fallback to original chunk points if network/server is busy
+    }
+
+    if (chunkSnapped && chunkSnapped.length > 0) {
+      if (snappedResult.length > 0) {
+        snappedResult.push(...chunkSnapped.slice(1));
+      } else {
+        snappedResult.push(...chunkSnapped);
+      }
+    } else {
+      if (snappedResult.length > 0) {
+        snappedResult.push(...chunk.slice(1));
+      } else {
+        snappedResult.push(...chunk);
+      }
+    }
+  }
+
+  const finalSnapped = snappedResult.length >= 2 ? snappedResult : points;
+  if (roadSnapCache.size > 50) {
+    const firstKey = roadSnapCache.keys().next().value;
+    roadSnapCache.delete(firstKey);
+  }
+  roadSnapCache.set(cacheKey, finalSnapped);
+
+  return finalSnapped;
+}
 
 function appendSequentialPoint(points, point, minDuplicateMetres = 2) {
   const lat = Number(point?.lat);
@@ -208,6 +324,17 @@ function orderPointsByTime(points = []) {
     .map(({ point }) => point);
 }
 
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const dLat = ((Number(lat2) - Number(lat1)) * Math.PI) / 180;
+  const dLng = ((Number(lng2) - Number(lng1)) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((Number(lat1) * Math.PI) / 180) *
+    Math.cos((Number(lat2) * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function calcKm(points) {
   if (!points || points.length < 2) return 0;
   const R = 6371;
@@ -239,7 +366,7 @@ function calcFilteredKm(points) {
     const accuracy = Number(pt.accuracy ?? 0);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
     if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) continue; // Filter out zero (0, 0) coordinates
-    if (accuracy && accuracy > 100) continue; // Filter out low-accuracy (> 100m)
+    if (accuracy && accuracy > 50) continue; // Filter out low-accuracy (> 50m)
 
     if (!anchor) {
       anchor = { lat, lng, time: pt.time || pt.recordedAt };
@@ -407,6 +534,7 @@ export default function LiveTrackingMap({
   visits          = [],
   preferVisitTrail = false,
   punchInPopupTrigger = 0,
+  onReplayUpdate = null,
 }) {
   const mapDivRef  = useRef(null);
   const gMapRef    = useRef(null);
@@ -432,6 +560,7 @@ export default function LiveTrackingMap({
   const [sockAck,    setSockAck]    = useState(null);
   const [totalKm,    setTotalKm]    = useState(0);
   const [pointCount, setPointCount] = useState(0);
+  const [replayPointsVersion, setReplayPointsVersion] = useState(0);
   const [gpsDotCount, setGpsDotCount] = useState(0);
   const [routeMode, setRouteMode] = useState(ROUTE_MODE_ROAD);
   const [roadTravel, setRoadTravel] = useState({
@@ -453,65 +582,25 @@ export default function LiveTrackingMap({
   const [geofenceAlerts, setGeofenceAlerts] = useState([]);
   const fenceLayersRef = useRef({});
 
-  const syncStartMarker = useCallback((points = allPtsRef.current) => {
-    const lMap = leafletMapRef.current;
-    if (!mapLoaded || !lMap) return;
+  const onDistanceChangeRef = useRef(onDistanceChange);
+  const onPointsChangeRef = useRef(onPointsChange);
+  const onCurrentLocationChangeRef = useRef(onCurrentLocationChange);
+  const onReplayUpdateRef = useRef(onReplayUpdate);
+  const lastDistanceStatsRef = useRef({ totalKm: null, totalPoints: null });
 
-    const resolvedPunchIn = resolvePunchInMarkerPosition(
-      punchInLocationRef.current,
-      points
-    );
-
-    if (!resolvedPunchIn?.lat || !resolvedPunchIn?.lng) {
-      if (startMkRef.current) {
-        startMkRef.current.remove();
-        startMkRef.current = null;
-      }
-      return;
-    }
-
-    const pos = [resolvedPunchIn.lat, resolvedPunchIn.lng];
-
-    if (!userAdjustedViewportRef.current) {
-      withProgrammaticViewport(() => {
-        lMap.setView(pos, 15);
-      });
-    }
-
-    const punchInIcon = L.divIcon({
-      className: "",
-      html: `<div style="
-        width:22px;height:22px;border-radius:50%;
-        background:#2563eb;border:3px solid #ffffff;
-        box-shadow:0 2px 8px rgba(37,99,235,0.5);
-        cursor:pointer;
-      "></div>`,
-      iconSize: [22, 22],
-      iconAnchor: [11, 11],
-    });
-
-    if (!startMkRef.current) {
-      startMkRef.current = L.marker(pos, { icon: punchInIcon, zIndexOffset: 500, title: "Punch-in Location" })
-        .addTo(lMap)
-        .on("click", () => setPunchInPopupOpen(true));
-    } else {
-      startMkRef.current.setLatLng(pos);
-    }
-  }, [mapLoaded]);
+  useEffect(() => { onDistanceChangeRef.current = onDistanceChange; }, [onDistanceChange]);
+  useEffect(() => { onPointsChangeRef.current = onPointsChange; }, [onPointsChange]);
+  useEffect(() => { onCurrentLocationChangeRef.current = onCurrentLocationChange; }, [onCurrentLocationChange]);
+  useEffect(() => { onReplayUpdateRef.current = onReplayUpdate; }, [onReplayUpdate]);
 
   const isTodaySelected =
-    !selectedDate || selectedDate === new Date().toISOString().split("T")[0];
+    !selectedDate || selectedDate === "today" || selectedDate === new Date().toISOString().split("T")[0];
+  const hasValidPunchIn = Boolean(
+    isPunchedIn ||
+    hasPunchedOut ||
+    (punchInLocation && (punchInLocation.lat || punchInLocation.latitude))
+  );
   const isLive = isPunchedIn && !hasPunchedOut && isTodaySelected;
-
-  const updateDistanceStats = useCallback((km, points = 0) => {
-    const normalizedKm = Number.isFinite(Number(km)) ? Number(km) : 0;
-    const normalizedPoints = Number.isFinite(Number(points)) ? Number(points) : 0;
-    setTotalKm(normalizedKm);
-    setPointCount(normalizedPoints);
-    if (typeof onDistanceChange === "function") {
-      onDistanceChange({ totalKm: normalizedKm, totalPoints: normalizedPoints });
-    }
-  }, [onDistanceChange]);
 
   const withProgrammaticViewport = useCallback((fn) => {
     suppressViewportEventsRef.current = true;
@@ -519,6 +608,444 @@ export default function LiveTrackingMap({
     window.setTimeout(() => {
       suppressViewportEventsRef.current = false;
     }, 0);
+  }, []);
+
+  // ── Route Replay Simulator ──────────────────────────────────────────────
+  const replayMarkerRef = useRef(null);
+  const replayPolyRef = useRef(null);
+  const [isReplaying, setIsReplaying] = useState(false);
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [replaySpeed, setReplaySpeed] = useState(1);
+
+  const cumulativeDistancesRef = useRef([]);
+  const lastReplayEmitTimeRef = useRef(0);
+  const replayMarkerHeadingRef = useRef(0);
+
+  const getSegmentHeading = (p1, p2) => {
+    if (!p1 || !p2) return 0;
+    const lat1 = (Number(p1.lat) * Math.PI) / 180;
+    const lat2 = (Number(p2.lat) * Math.PI) / 180;
+    const dLng = ((Number(p2.lng) - Number(p1.lng)) * Math.PI) / 180;
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    const brng = (Math.atan2(y, x) * 180) / Math.PI;
+    return (brng + 360) % 360;
+  };
+
+  const moveReplay = useCallback((index, points = allPtsRef.current) => {
+    const lMap = leafletMapRef.current;
+    if (!lMap || !Array.isArray(points) || points.length === 0) return;
+
+    const clampedIdx = Math.max(0, Math.min(index, points.length - 1));
+    const targetPt = points[clampedIdx];
+    if (!targetPt || !Number.isFinite(Number(targetPt.lat)) || !Number.isFinite(Number(targetPt.lng))) return;
+
+    const latlng = [Number(targetPt.lat), Number(targetPt.lng)];
+
+    // Compute heading / road orientation
+    let heading = replayMarkerHeadingRef.current;
+    if (clampedIdx > 0 && points[clampedIdx - 1]) {
+      heading = getSegmentHeading(points[clampedIdx - 1], targetPt);
+      replayMarkerHeadingRef.current = heading;
+    } else if (points.length > 1 && points[1]) {
+      heading = getSegmentHeading(targetPt, points[1]);
+      replayMarkerHeadingRef.current = heading;
+    }
+
+    const timeLabel = targetPt.recordedAt || targetPt.time
+      ? new Date(targetPt.recordedAt || targetPt.time).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true })
+      : "";
+    const speedVal = Number(targetPt.speed || 0);
+    const speedLabel = speedVal > 0 ? `${Math.round(speedVal * 3.6)} km/h` : "Driving";
+    
+    let pointLocationName = "Moving on route";
+    if (clampedIdx === 0) {
+      pointLocationName = "Punch In";
+    } else if (clampedIdx >= points.length - 1) {
+      pointLocationName = hasPunchedOut ? "Punch Out" : "Current Location";
+    } else {
+      const currentVisits = visitsRef.current || [];
+      const matchedVisit = currentVisits.find((v) => {
+        const vLat = Number(v.lat || v.coordinates?.lat || v.location?.lat);
+        const vLng = Number(v.lng || v.coordinates?.lng || v.location?.lng);
+        if (Number.isFinite(vLat) && Number.isFinite(vLng)) {
+          return distMetres(targetPt.lat, targetPt.lng, vLat, vLng) < 80;
+        }
+        return false;
+      });
+      if (matchedVisit) {
+        pointLocationName = matchedVisit.partyName || matchedVisit.locationName || "Stop";
+      } else {
+        pointLocationName = `Stop #${clampedIdx + 1}`;
+      }
+    }
+
+    if (!replayMarkerRef.current) {
+      const vehicleHtml = `
+        <div style="position:relative; width:48px; height:48px; display:flex; align-items:center; justify-content:center;">
+          <div style="
+            position:absolute; width:48px; height:48px; border-radius:50%;
+            background: radial-gradient(circle, rgba(56,189,248,0.4) 0%, rgba(37,99,235,0.15) 50%, rgba(37,99,235,0) 75%);
+          "></div>
+          <div id="replay-car-pointer" style="
+            width:36px; height:36px; border-radius:50%;
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #38bdf8 100%);
+            border: 2.5px solid #ffffff;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.6), 0 2px 4px rgba(0,0,0,0.25);
+            display: flex; align-items: center; justify-content: center;
+            transform: rotate(${Math.round(heading)}deg);
+            transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
+          ">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#ffffff" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));">
+              <path d="M12 2L4 20L12 16.5L20 20L12 2Z"/>
+            </svg>
+          </div>
+        </div>
+      `;
+
+      const vehicleIcon = L.divIcon({
+        className: "replay-car-icon",
+        html: vehicleHtml,
+        iconSize: [48, 48],
+        iconAnchor: [24, 24],
+      });
+
+      const hudHtml = `
+        <div style="
+          background: rgba(15, 23, 42, 0.94);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          color: #ffffff;
+          border-radius: 20px;
+          padding: 5px 14px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-size: 11px;
+          font-weight: 700;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.2);
+          border: 1px solid rgba(255,255,255,0.18);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          white-space: nowrap;
+        ">
+          <span id="replay-hud-loc" style="color:#38bdf8; display:flex; align-items:center; gap:3px;">
+            📍 ${pointLocationName}
+          </span>
+          <span style="color:rgba(255,255,255,0.25);">•</span>
+          <span id="replay-hud-time" style="color:#fde047; display:flex; align-items:center; gap:3px;">
+            🕒 ${timeLabel || "Punch In"}
+          </span>
+          <span style="color:rgba(255,255,255,0.25);">•</span>
+          <span id="replay-hud-spd" style="color:#4ade80; display:flex; align-items:center; gap:3px;">
+            ⚡ ${speedLabel}
+          </span>
+        </div>
+      `;
+
+      replayMarkerRef.current = L.marker(latlng, { icon: vehicleIcon, zIndexOffset: 1000 })
+        .addTo(lMap)
+        .bindTooltip(hudHtml, { permanent: true, direction: "top", offset: [0, -26], className: "custom-clean-tooltip", opacity: 1 });
+    } else {
+      replayMarkerRef.current.setLatLng(latlng);
+      
+      // Update heading and HUD via lightweight DOM updates without destroying Leaflet icon
+      const pointer = document.getElementById("replay-car-pointer");
+      if (pointer) pointer.style.transform = `rotate(${Math.round(heading)}deg)`;
+
+      const hudLoc = document.getElementById("replay-hud-loc");
+      if (hudLoc) hudLoc.innerHTML = `📍 ${pointLocationName}`;
+      const hudTime = document.getElementById("replay-hud-time");
+      if (hudTime) hudTime.innerHTML = `🕒 ${timeLabel || "Punch In"}`;
+      const hudSpd = document.getElementById("replay-hud-spd");
+      if (hudSpd) hudSpd.innerHTML = `⚡ ${speedLabel}`;
+    }
+
+    // Step polyline efficiently
+    const coveredLatLngs = points.slice(0, clampedIdx + 1).map((p) => [Number(p.lat), Number(p.lng)]);
+    if (!replayPolyRef.current) {
+      replayPolyRef.current = L.polyline(coveredLatLngs, {
+        color: "#0284c7",
+        weight: 6,
+        opacity: 0.95,
+        lineCap: "round",
+        lineJoin: "round",
+      }).addTo(lMap);
+    } else {
+      replayPolyRef.current.setLatLngs(coveredLatLngs);
+      replayPolyRef.current.setStyle({ color: "#0284c7" });
+    }
+
+    // Smooth viewport keeping: Only pan when marker nears the map edge
+    try {
+      const bounds = lMap.getBounds();
+      if (!bounds.pad(-0.12).contains(latlng)) {
+        withProgrammaticViewport(() => {
+          lMap.panTo(latlng, { animate: false });
+        });
+      }
+    } catch {}
+  }, [withProgrammaticViewport]);
+
+  useEffect(() => {
+    if (!isReplaying) return;
+    const points = allPtsRef.current;
+    if (!Array.isArray(points) || points.length < 2) {
+      setIsReplaying(false);
+      return;
+    }
+
+    // Frame rate: 60fps pacing
+    const intervalMs = Math.max(25, Math.floor(180 / replaySpeed));
+    const timer = setInterval(() => {
+      setReplayIndex((prev) => {
+        const next = prev + 1;
+        if (next >= points.length) {
+          setIsReplaying(false);
+          return points.length - 1;
+        }
+        moveReplay(next, points);
+        return next;
+      });
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [isReplaying, replaySpeed, moveReplay]);
+
+  const toggleReplay = useCallback(() => {
+    const points = allPtsRef.current;
+    if (!Array.isArray(points) || points.length < 2) {
+      toast.error("Not enough route points to simulate replay");
+      return;
+    }
+
+    if (isReplaying) {
+      setIsReplaying(false);
+    } else {
+      if (replayIndex >= points.length - 1) {
+        setReplayIndex(0);
+        moveReplay(0, points);
+      } else {
+        moveReplay(replayIndex, points);
+      }
+      setIsReplaying(true);
+    }
+  }, [isReplaying, replayIndex, moveReplay]);
+
+  const handleSliderSeek = useCallback((percentage) => {
+    const points = allPtsRef.current;
+    if (!Array.isArray(points) || points.length < 2) return;
+
+    const targetIdx = Math.round((percentage / 100) * (points.length - 1));
+    setReplayIndex(targetIdx);
+    moveReplay(targetIdx, points);
+  }, [moveReplay]);
+
+  const stepReplay = useCallback((direction = 1) => {
+    const points = allPtsRef.current;
+    if (!Array.isArray(points) || points.length < 2) return;
+    const nextIdx = Math.max(0, Math.min(points.length - 1, replayIndex + direction));
+    setReplayIndex(nextIdx);
+    moveReplay(nextIdx, points);
+  }, [replayIndex, moveReplay]);
+
+  // Throttled Replay Updates to Parent (Eliminates React rendering bottlenecks)
+  const toggleReplayRef = useRef(toggleReplay);
+  toggleReplayRef.current = toggleReplay;
+  const handleSliderSeekRef = useRef(handleSliderSeek);
+  handleSliderSeekRef.current = handleSliderSeek;
+  const stepReplayRef = useRef(stepReplay);
+  stepReplayRef.current = stepReplay;
+  const setReplaySpeedRef = useRef(setReplaySpeed);
+  setReplaySpeedRef.current = setReplaySpeed;
+
+  const stableToggleReplay = useCallback(() => toggleReplayRef.current(), []);
+  const stableSeek = useCallback((p) => handleSliderSeekRef.current(p), []);
+  const stableSetSpeed = useCallback((s) => setReplaySpeedRef.current(s), []);
+  const stableStepForward = useCallback(() => stepReplayRef.current(1), []);
+  const stableStepBackward = useCallback(() => stepReplayRef.current(-1), []);
+
+  useEffect(() => {
+    if (typeof onReplayUpdateRef.current !== "function") return;
+
+    const now = Date.now();
+    const isPlaybackBoundary = !isReplaying || replayIndex === 0 || replayIndex >= (allPtsRef.current?.length || 1) - 1;
+    
+    // Emit instantly on boundary/pause/seek, or throttled every 120ms during playback
+    if (!isPlaybackBoundary && (now - lastReplayEmitTimeRef.current) < 120) {
+      return;
+    }
+    lastReplayEmitTimeRef.current = now;
+
+    const points = allPtsRef.current || [];
+    const currentPt = points[replayIndex] || points[0] || null;
+    const progress = points.length > 1 ? Math.round((replayIndex / (points.length - 1)) * 100) : 0;
+    const timeStr = currentPt?.recordedAt || currentPt?.time
+      ? new Date(currentPt.recordedAt || currentPt?.time).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true })
+      : "00:00";
+    
+    const officialTotalKm = Number(totalKm > 0 ? totalKm : lastDistanceStatsRef.current.totalKm || 0);
+    const precalcKm = cumulativeDistancesRef.current[replayIndex];
+    let resolvedKm = 0;
+    if (precalcKm != null) {
+      resolvedKm = precalcKm;
+    } else if (officialTotalKm > 0 && points.length > 1) {
+      resolvedKm = (replayIndex / (points.length - 1)) * officialTotalKm;
+    } else {
+      resolvedKm = officialTotalKm;
+    }
+    if (officialTotalKm > 0 && (replayIndex >= points.length - 1 || resolvedKm > officialTotalKm)) {
+      resolvedKm = officialTotalKm;
+    }
+    const kmStr = `${resolvedKm.toFixed(2)} km`;
+
+    let waypointLabel = "Point A";
+    if (replayIndex === 0) {
+      waypointLabel = "Punch In";
+    } else if (replayIndex >= points.length - 1) {
+      waypointLabel = hasPunchedOut ? "Punch Out" : "Point B";
+    } else if (currentPt) {
+      const currentVisits = visitsRef.current || [];
+      const matchedVisit = currentVisits.find((v) => {
+        const vLat = Number(v.lat || v.coordinates?.lat || v.location?.lat);
+        const vLng = Number(v.lng || v.coordinates?.lng || v.location?.lng);
+        if (Number.isFinite(vLat) && Number.isFinite(vLng)) {
+          return distMetres(currentPt.lat, currentPt.lng, vLat, vLng) < 80;
+        }
+        return false;
+      });
+      if (matchedVisit) {
+        waypointLabel = matchedVisit.partyName || matchedVisit.locationName || "Stop";
+      } else {
+        waypointLabel = `Point ${String.fromCharCode(65 + Math.min(25, Math.floor((replayIndex / Math.max(1, points.length)) * 5)))}`;
+      }
+    }
+
+    onReplayUpdateRef.current({
+      isReplaying,
+      replayIndex,
+      replaySpeed,
+      replayTimeStr: timeStr,
+      replayKmStr: kmStr,
+      replayWaypointLabel: waypointLabel,
+      replayProgress: progress,
+      totalPoints: points.length,
+      hasPoints: points.length >= 1,
+      toggleReplay: stableToggleReplay,
+      seek: stableSeek,
+      setSpeed: stableSetSpeed,
+      stepForward: stableStepForward,
+      stepBackward: stableStepBackward,
+    });
+  }, [
+    isReplaying,
+    replayIndex,
+    replaySpeed,
+    hasPunchedOut,
+    replayPointsVersion,
+    stableToggleReplay,
+    stableSeek,
+    stableSetSpeed,
+    stableStepForward,
+    stableStepBackward,
+  ]);
+
+  const syncStartMarker = useCallback((points = allPtsRef.current) => {
+    const lMap = leafletMapRef.current;
+    if (!mapLoaded || !lMap) return;
+
+    let pos = null;
+    if (punchInLocationRef.current?.lat && punchInLocationRef.current?.lng) {
+      const pLat = Number(punchInLocationRef.current.lat);
+      const pLng = Number(punchInLocationRef.current.lng);
+      if (Number.isFinite(pLat) && Number.isFinite(pLng) && !(Math.abs(pLat) < 0.1 && Math.abs(pLng) < 0.1)) {
+        pos = [pLat, pLng];
+      }
+    } else if (Array.isArray(points) && points.length > 0) {
+      const firstValid = points.find(p => p && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !(Math.abs(Number(p.lat)) < 0.1 && Math.abs(Number(p.lng)) < 0.1));
+      if (firstValid) {
+        pos = [Number(firstValid.lat), Number(firstValid.lng)];
+      }
+    }
+
+    if (!pos || (!hasValidPunchIn && (!points || points.length === 0))) {
+      if (startMkRef.current) {
+        startMkRef.current.remove();
+        startMkRef.current = null;
+      }
+      return;
+    }
+
+    if (!userAdjustedViewportRef.current && isTodaySelected && !points?.length) {
+      withProgrammaticViewport(() => {
+        lMap.setView(pos, 15);
+      });
+    }
+
+    const punchInDotHtml = `
+      <div class="marker-dot" style="
+        width:22px;height:22px;border-radius:50%;background:#16a34a;
+        border:3.5px solid #ffffff;box-shadow:0 3px 10px rgba(0,0,0,0.35);
+        cursor:pointer;
+      "></div>
+    `;
+
+    const punchInIcon = L.divIcon({
+      className: "clean-circle-marker",
+      html: punchInDotHtml,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+
+    const tooltipHtml = `
+      <div style="
+        background:#16a34a;color:#ffffff;font-size:11px;font-weight:800;
+        padding:4px 10px;border-radius:20px;box-shadow:0 4px 14px rgba(22,163,74,0.45);
+        border:2px solid #ffffff;white-space:nowrap;display:flex;align-items:center;gap:5px;
+      ">
+        <span style="width:6px;height:6px;border-radius:50%;background:#ffffff;"></span>
+        PUNCH IN
+      </div>
+    `;
+
+    if (!startMkRef.current) {
+      startMkRef.current = L.marker(pos, { icon: punchInIcon, zIndexOffset: 500, title: "Punch-in Location" })
+        .addTo(lMap)
+        .bindTooltip(tooltipHtml, { permanent: false, direction: "top", offset: [0, -12], className: "custom-clean-tooltip", opacity: 1 })
+        .on("click", () => setPunchInPopupOpen(true));
+    } else {
+      startMkRef.current.setLatLng(pos);
+      startMkRef.current.setIcon(punchInIcon);
+      startMkRef.current.unbindTooltip().bindTooltip(tooltipHtml, { permanent: false, direction: "top", offset: [0, -12], className: "custom-clean-tooltip", opacity: 1 });
+    }
+  }, [mapLoaded, hasValidPunchIn, isTodaySelected, withProgrammaticViewport]);
+
+  const updateDistanceStats = useCallback((km, points = 0) => {
+    const normalizedKm = Number.isFinite(Number(km)) ? Number(km) : 0;
+    const normalizedPoints = Number.isFinite(Number(points)) ? Number(points) : 0;
+    
+    if (
+      lastDistanceStatsRef.current.totalKm === normalizedKm &&
+      lastDistanceStatsRef.current.totalPoints === normalizedPoints
+    ) {
+      return;
+    }
+    lastDistanceStatsRef.current = { totalKm: normalizedKm, totalPoints: normalizedPoints };
+
+    // Align cumulative replay distances so the simulator exactly matches the official attendance distance
+    if (normalizedKm > 0 && Array.isArray(cumulativeDistancesRef.current) && cumulativeDistancesRef.current.length > 0) {
+      const distArr = cumulativeDistancesRef.current;
+      const rawEnd = distArr[distArr.length - 1] || 0;
+      if (rawEnd > 0) {
+        const scale = normalizedKm / rawEnd;
+        cumulativeDistancesRef.current = distArr.map((v) => Math.round(v * scale * 100) / 100);
+      }
+    }
+
+    setTotalKm(normalizedKm);
+    setPointCount(normalizedPoints);
+    if (typeof onDistanceChangeRef.current === "function") {
+      onDistanceChangeRef.current({ totalKm: normalizedKm, totalPoints: normalizedPoints });
+    }
   }, []);
 
   useEffect(() => {
@@ -711,7 +1238,20 @@ export default function LiveTrackingMap({
     const lMap = leafletMapRef.current;
     if (!mapLoaded || !lMap) return;
 
-    if (!hasPunchedOut || !punchOutLocationRef.current?.lat || !punchOutLocationRef.current?.lng) {
+    let pos = null;
+    let isExplicitPunchOut = false;
+
+    if (punchOutLocationRef.current?.lat && punchOutLocationRef.current?.lng) {
+      pos = [Number(punchOutLocationRef.current.lat), Number(punchOutLocationRef.current.lng)];
+      isExplicitPunchOut = true;
+    } else if (!isLive && Array.isArray(points) && points.length >= 2) {
+      const lastPt = points[points.length - 1];
+      if (lastPt?.lat && lastPt?.lng) {
+        pos = [Number(lastPt.lat), Number(lastPt.lng)];
+      }
+    }
+
+    if (!pos || (!hasPunchedOut && isLive)) {
       if (endMkRef.current) {
         endMkRef.current.remove();
         endMkRef.current = null;
@@ -719,30 +1259,43 @@ export default function LiveTrackingMap({
       return;
     }
 
-    const pos = [
-      Number(punchOutLocationRef.current.lat),
-      Number(punchOutLocationRef.current.lng),
-    ];
+    const labelText = isExplicitPunchOut || hasPunchedOut ? "PUNCH OUT" : "END POINT";
+    const punchOutDotHtml = `
+      <div class="marker-dot" style="
+        width:22px;height:22px;border-radius:50%;background:#dc2626;
+        border:3.5px solid #ffffff;box-shadow:0 3px 10px rgba(0,0,0,0.35);
+        cursor:pointer;
+      "></div>
+    `;
 
     const punchOutIcon = L.divIcon({
-      className: "",
-      html: `<div style="
-        width:22px;height:22px;border-radius:50%;
-        background:#ef4444;border:3px solid #ffffff;
-        box-shadow:0 2px 8px rgba(239,68,68,0.5);
-      "></div>`,
+      className: "clean-circle-marker",
+      html: punchOutDotHtml,
       iconSize: [22, 22],
       iconAnchor: [11, 11],
     });
 
+    const tooltipHtml = `
+      <div style="
+        background:#dc2626;color:#ffffff;font-size:11px;font-weight:800;
+        padding:4px 10px;border-radius:20px;box-shadow:0 4px 14px rgba(220,38,38,0.45);
+        border:2px solid #ffffff;white-space:nowrap;display:flex;align-items:center;gap:5px;
+      ">
+        <span style="width:6px;height:6px;border-radius:50%;background:#ffffff;"></span>
+        ${labelText}
+      </div>
+    `;
+
     if (!endMkRef.current) {
-      endMkRef.current = L.marker(pos, { icon: punchOutIcon, zIndexOffset: 450, title: "Punch-out Location" })
+      endMkRef.current = L.marker(pos, { icon: punchOutIcon, zIndexOffset: 450, title: labelText })
         .addTo(lMap)
-        .bindTooltip("Punch-out", { permanent: false, direction: "top" });
+        .bindTooltip(tooltipHtml, { permanent: false, direction: "top", offset: [0, -12], className: "custom-clean-tooltip", opacity: 1 });
     } else {
       endMkRef.current.setLatLng(pos);
+      endMkRef.current.setIcon(punchOutIcon);
+      endMkRef.current.unbindTooltip().bindTooltip(tooltipHtml, { permanent: false, direction: "top", offset: [0, -12], className: "custom-clean-tooltip", opacity: 1 });
     }
-  }, [hasPunchedOut, mapLoaded]);
+  }, [hasPunchedOut, isLive, mapLoaded]);
 
   function clearGpsDots() {
     dotsRef.current.forEach((d) => d.remove());
@@ -760,20 +1313,20 @@ export default function LiveTrackingMap({
   function getLineStyle(mode) {
     if (mode === ROUTE_MODE_RAW) {
       return {
-        casingColor: "#ffffff",
-        casingWeight: 8,
-        mainColor: "#2563eb",
-        mainWeight: 4,
+        casingColor: "rgba(255, 255, 255, 0.8)",
+        casingWeight: 4.5,
+        mainColor: "#38bdf8",
+        mainWeight: 3,
         mainOpacity: 0.9,
       };
     }
 
     return {
       casingColor: "#ffffff",
-      casingWeight: 10,
+      casingWeight: 7,
       mainColor: "#2563eb",
-      mainWeight: 6,
-      mainOpacity: 1,
+      mainWeight: 4.5,
+      mainOpacity: 0.95,
     };
   }
 
@@ -785,7 +1338,7 @@ export default function LiveTrackingMap({
     dotsRef.current = [];
 
     if (routeMode !== ROUTE_MODE_RAW) {
-      setGpsDotCount(0);
+      setGpsDotCount(prev => (prev === 0 ? prev : 0));
       return;
     }
 
@@ -798,17 +1351,56 @@ export default function LiveTrackingMap({
     dotsRef.current = visiblePoints.map((p, idx) => {
       const isLatest = idx === visiblePoints.length - 1;
       const dotColor = getGpsDotColor(p.accuracy);
-      const radius = isLatest ? 5 : 3.5;
-      return L.circleMarker([p.lat, p.lng], {
+      const radius = isLatest ? 6 : 4;
+      const marker = L.circleMarker([p.lat, p.lng], {
         radius,
         color: "#ffffff",
-        weight: isLatest ? 1.5 : 1,
+        weight: isLatest ? 2 : 1,
         fillColor: dotColor,
-        fillOpacity: isLatest ? 0.95 : 0.7,
+        fillOpacity: isLatest ? 0.95 : 0.75,
       }).addTo(lMap);
+
+      const timeStr = p.recordedAt || p.time
+        ? new Date(p.recordedAt || p.time).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true })
+        : "Point #" + (idx + 1);
+      const speedStr = p.speed ? `${Math.round(p.speed * 3.6)} km/h` : "--";
+      const accStr = p.accuracy ? `±${Math.round(p.accuracy)}m` : "--";
+
+      const popupHtml = `
+        <div style="font-family:sans-serif;padding:6px;min-width:180px">
+          <div style="font-size:12px;font-weight:800;color:#2563eb;margin-bottom:4px;display:flex;align-items:center;gap:4px">
+            <span>📍 Road Location Ping</span>
+          </div>
+          <div style="font-size:11px;color:#1e293b;font-weight:700;margin-bottom:2px">
+            🕒 Time: <span style="font-weight:600">${timeStr}</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;display:flex;gap:8px;margin-top:4px">
+            <span>🚗 Speed: ${speedStr}</span>
+            <span>🎯 Acc: ${accStr}</span>
+          </div>
+          <div id="dot-addr-${idx}" style="font-size:10.5px;color:#475569;margin-top:6px;border-top:1px solid #e2e8f0;padding-top:4px">
+            Loading street name...
+          </div>
+        </div>
+      `;
+
+      marker.bindPopup(popupHtml);
+      marker.on("click", async () => {
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${p.lat}&lon=${p.lng}&zoom=18&addressdetails=1`);
+          if (res.ok) {
+            const data = await res.json();
+            const addr = data.display_name || data.name || "Street Location";
+            const el = document.getElementById(`dot-addr-${idx}`);
+            if (el) el.innerText = addr;
+          }
+        } catch {}
+      });
+
+      return marker;
     });
 
-    setGpsDotCount(candidatePoints.length);
+    setGpsDotCount(prev => (prev === candidatePoints.length ? prev : candidatePoints.length));
   }
 
   function drawTrail(points, options = {}) {
@@ -816,38 +1408,102 @@ export default function LiveTrackingMap({
     const lMap = leafletMapRef.current;
     if (!lMap) return;
 
-    allPtsRef.current = points;
-    if (typeof onPointsChange === "function") onPointsChange(points);
+    const effectivePoints = (hasValidPunchIn ? points : []).filter(
+      (p) =>
+        p &&
+        Number.isFinite(Number(p.lat)) &&
+        Number.isFinite(Number(p.lng)) &&
+        !(Math.abs(Number(p.lat)) < 0.1 && Math.abs(Number(p.lng)) < 0.1)
+    );
+    allPtsRef.current = effectivePoints;
+    setReplayPointsVersion((prev) => prev + 1);
+
+    const arr = [0];
+    let cum = 0;
+    for (let i = 1; i < effectivePoints.length; i++) {
+      const p1 = effectivePoints[i - 1];
+      const p2 = effectivePoints[i];
+      if (p1 && p2 && Number.isFinite(p1.lat) && Number.isFinite(p2.lat)) {
+        cum += haversineKm(p1.lat, p1.lng, p2.lat, p2.lng);
+      }
+      arr.push(Math.round(cum * 100) / 100);
+    }
+    cumulativeDistancesRef.current = arr;
+
+    if (typeof onPointsChangeRef.current === "function") onPointsChangeRef.current(effectivePoints);
 
     const lineStyle = getLineStyle(routeMode);
-    const latlngs = points.map((p) => [p.lat, p.lng]);
-    const shouldDrawLine = latlngs.length >= 2;
+    const latlngs = effectivePoints.map((p) => [p.lat, p.lng]);
+    const shouldDrawLine = hasValidPunchIn && latlngs.length >= 2;
 
     if (shouldDrawLine) {
       if (!polyRef.current.casing) {
-        polyRef.current = {
-          casing: L.polyline(latlngs, {
-            color: lineStyle.casingColor,
-            weight: lineStyle.casingWeight,
-            opacity: 1,
-          }).addTo(lMap),
-          main: L.polyline(latlngs, {
-            color: lineStyle.mainColor,
-            weight: lineStyle.mainWeight,
-            opacity: lineStyle.mainOpacity,
-          }).addTo(lMap),
-        };
+        const casing = L.polyline(latlngs, {
+          color: lineStyle.casingColor,
+          weight: lineStyle.casingWeight,
+          opacity: 0.9,
+          lineCap: "round",
+          lineJoin: "round",
+          smoothFactor: 1.0,
+        }).addTo(lMap);
+
+        const main = L.polyline(latlngs, {
+          color: lineStyle.mainColor,
+          weight: lineStyle.mainWeight,
+          opacity: lineStyle.mainOpacity,
+          lineCap: "round",
+          lineJoin: "round",
+          smoothFactor: 1.0,
+        }).addTo(lMap);
+
+        main.on("click", async (e) => {
+          const clickLat = e.latlng.lat;
+          const clickLng = e.latlng.lng;
+          const pop = L.popup()
+            .setLatLng(e.latlng)
+            .setContent(`
+              <div style="font-family:sans-serif;padding:6px;min-width:180px">
+                <div style="font-size:12px;font-weight:800;color:#2563eb;margin-bottom:4px">
+                  🛣️ Traveled Road Path
+                </div>
+                <div id="route-click-addr" style="font-size:11px;color:#1e293b;font-weight:600">
+                  Loading street details...
+                </div>
+                <div style="font-size:10px;color:#64748b;margin-top:4px">
+                  Lat: ${clickLat.toFixed(5)}, Lng: ${clickLng.toFixed(5)}
+                </div>
+              </div>
+            `)
+            .openOn(lMap);
+
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${clickLat}&lon=${clickLng}&zoom=18&addressdetails=1`);
+            if (res.ok) {
+              const data = await res.json();
+              const addr = data.display_name || data.name || "Street Location";
+              const el = document.getElementById("route-click-addr");
+              if (el) el.innerText = addr;
+            }
+          } catch {}
+        });
+
+        polyRef.current = { casing, main };
       } else {
         polyRef.current.casing.setLatLngs(latlngs);
         polyRef.current.main.setLatLngs(latlngs);
         polyRef.current.casing.setStyle({
           color: lineStyle.casingColor,
           weight: lineStyle.casingWeight,
+          opacity: 0.9,
+          lineCap: "round",
+          lineJoin: "round",
         });
         polyRef.current.main.setStyle({
           color: lineStyle.mainColor,
           opacity: lineStyle.mainOpacity,
           weight: lineStyle.mainWeight,
+          lineCap: "round",
+          lineJoin: "round",
         });
       }
     } else {
@@ -856,9 +1512,9 @@ export default function LiveTrackingMap({
       polyRef.current = { casing: null, main: null };
     }
 
-    drawGpsDots(rawPoints);
+    drawGpsDots(hasValidPunchIn ? rawPoints : []);
 
-    const last = points[points.length - 1];
+    const last = effectivePoints[effectivePoints.length - 1];
     if (last) {
       const prevLoc = lastEmittedLocationRef.current;
       if (
@@ -895,17 +1551,155 @@ export default function LiveTrackingMap({
       if (isLive && autoPanLive && !userAdjustedViewportRef.current) {
         withProgrammaticViewport(() => lMap.panTo([last.lat, last.lng]));
       }
+    } else {
+      if (liveMkRef.current) {
+        liveMkRef.current.remove();
+        liveMkRef.current = null;
+      }
     }
 
-    syncEndMarker(points);
-    syncStartMarker(points);
+    syncEndMarker(effectivePoints);
+    syncStartMarker(effectivePoints);
 
     if (shouldDrawLine && !isLive && autoFit && !userAdjustedViewportRef.current) {
       withProgrammaticViewport(() => lMap.fitBounds(latlngs, { padding: [40, 40] }));
     }
 
-    const km = calcFilteredKm(points);
-    updateDistanceStats(km, points.length);
+    const km = hasValidPunchIn ? calcFilteredKm(effectivePoints) : 0;
+    const targetKm = (lastDistanceStatsRef.current.totalKm > 0 ? lastDistanceStatsRef.current.totalKm : km);
+    
+    // Calibrate cumulative replay distance to match verified official distance
+    const rawTotal = arr[arr.length - 1] || 0;
+    if (targetKm > 0 && rawTotal > 0) {
+      const scale = targetKm / rawTotal;
+      cumulativeDistancesRef.current = arr.map((v) => Math.round(v * scale * 100) / 100);
+    }
+
+    if (!isLive && effectivePoints.length >= 2 && !replayMarkerRef.current) {
+      moveReplay(0, effectivePoints);
+    }
+
+    updateDistanceStats(km, effectivePoints.length);
+  }
+
+  function perpendicularDistance(pt, lineStart, lineEnd) {
+    const dx = lineEnd.lng - lineStart.lng;
+    const dy = lineEnd.lat - lineStart.lat;
+    if (dx === 0 && dy === 0) {
+      return distMetres(pt.lat, pt.lng, lineStart.lat, lineStart.lng);
+    }
+    const meanLat = (lineStart.lat + lineEnd.lat + pt.lat) / 3;
+    const kx = 111320 * Math.cos((meanLat * Math.PI) / 180);
+    const ky = 110540;
+
+    const x = pt.lng * kx;
+    const y = pt.lat * ky;
+    const x1 = lineStart.lng * kx;
+    const y1 = lineStart.lat * ky;
+    const x2 = lineEnd.lng * kx;
+    const y2 = lineEnd.lat * ky;
+
+    const num = Math.abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1);
+    const den = Math.sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2);
+    return den === 0 ? 0 : num / den;
+  }
+
+  function ramerDouglasPeucker(points = [], epsilonMetres = 16) {
+    if (!Array.isArray(points) || points.length <= 2) return points;
+
+    let dmax = 0;
+    let index = 0;
+    const end = points.length - 1;
+
+    for (let i = 1; i < end; i++) {
+      const d = perpendicularDistance(points[i], points[0], points[end]);
+      if (d > dmax) {
+        index = i;
+        dmax = d;
+      }
+    }
+
+    if (dmax > epsilonMetres) {
+      const recResults1 = ramerDouglasPeucker(points.slice(0, index + 1), epsilonMetres);
+      const recResults2 = ramerDouglasPeucker(points.slice(index), epsilonMetres);
+      return [...recResults1.slice(0, recResults1.length - 1), ...recResults2];
+    } else {
+      return [points[0], points[end]];
+    }
+  }
+
+  function pruneRetracingSpurs(points = []) {
+    if (!Array.isArray(points) || points.length < 5) return points;
+    const result = [];
+    let i = 0;
+    while (i < points.length) {
+      let spurFound = false;
+      for (let k = 3; k <= Math.min(14, points.length - i - 1); k++) {
+        const startPt = points[i];
+        const endPt = points[i + k];
+        const d = distMetres(startPt.lat, startPt.lng, endPt.lat, endPt.lng);
+        if (d < 18) {
+          let maxDetour = 0;
+          for (let j = i + 1; j < i + k; j++) {
+            maxDetour = Math.max(maxDetour, distMetres(startPt.lat, startPt.lng, points[j].lat, points[j].lng));
+          }
+          if (maxDetour < 70) {
+            result.push(startPt);
+            i = i + k;
+            spurFound = true;
+            break;
+          }
+        }
+      }
+      if (!spurFound) {
+        result.push(points[i]);
+        i++;
+      }
+    }
+    return result;
+  }
+
+  function removeLateralSpikes(points = []) {
+    if (!Array.isArray(points) || points.length < 3) return points;
+
+    let current = [...points];
+    let changed = true;
+    let iterations = 0;
+
+    while (changed && iterations < 3) {
+      changed = false;
+      iterations++;
+      const filtered = [current[0]];
+
+      for (let i = 1; i < current.length - 1; i++) {
+        const prev = filtered[filtered.length - 1];
+        const curr = current[i];
+        const next = current[i + 1];
+
+        const dPrevCurr = distMetres(prev.lat, prev.lng, curr.lat, curr.lng);
+        const dCurrNext = distMetres(curr.lat, curr.lng, next.lat, next.lng);
+        const dPrevNext = distMetres(prev.lat, prev.lng, next.lat, next.lng);
+
+        const totalDetour = dPrevCurr + dCurrNext;
+        const isAcuteSpike = totalDetour >= 12 && dPrevNext < totalDetour * 0.6;
+
+        const prevTime = new Date(prev.recordedAt || prev.time || 0).getTime();
+        const nextTime = new Date(next.recordedAt || next.time || 0).getTime();
+        const timeSpanSec = (nextTime - prevTime) / 1000;
+
+        if (isAcuteSpike && (!Number.isFinite(timeSpanSec) || timeSpanSec < 180)) {
+          changed = true;
+          continue;
+        }
+
+        filtered.push(curr);
+      }
+
+      filtered.push(current[current.length - 1]);
+      current = filtered;
+    }
+
+    return pruneRetracingSpurs(current);
   }
 
   function cleanPoints(raw, options = {}) {
@@ -961,11 +1755,14 @@ export default function LiveTrackingMap({
       cleaned.push({ lat, lng, accuracy, distanceFromPrevious, recordedAt });
     }
 
-    return cleaned;
+    return removeLateralSpikes(cleaned);
   }
 
   const fetchRoadTravelDistance = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !hasValidPunchIn) {
+      setRoadTravel({ totalKm: null, segmentCount: 0, loading: false });
+      return;
+    }
     setRoadTravel((prev) => ({ ...prev, loading: true }));
     try {
       const dateParam = getLocalDateString(selectedDate);
@@ -993,10 +1790,13 @@ export default function LiveTrackingMap({
     } catch {
       setRoadTravel({ totalKm: null, segmentCount: 0, loading: false });
     }
-  }, [userId, selectedDate]);
+  }, [userId, selectedDate, hasValidPunchIn]);
 
   const fetchBackendDistanceStats = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !hasValidPunchIn) {
+      updateDistanceStats(0, 0);
+      return;
+    }
     try {
       const dateParam = getLocalDateString(selectedDate);
       const res = await fetch(
@@ -1018,12 +1818,21 @@ export default function LiveTrackingMap({
       const finalPoints = dbPoints > 0 ? dbPoints : allPtsRef.current.length;
       updateDistanceStats(finalKm, finalPoints);
     } catch { /* non-fatal */ }
-  }, [userId, selectedDate, updateDistanceStats]);
+  }, [userId, selectedDate, updateDistanceStats, hasValidPunchIn]);
 
   const loadTrailFromDB = useCallback(async (options = {}) => {
     const { autoFit = false } = options;
     if (!userId || !mapLoaded) return;
     if (preferVisitTrail) return;
+
+    if (!hasValidPunchIn) {
+      rawPtsRef.current = [];
+      allPtsRef.current = [];
+      drawTrail([], { autoFit: false, rawPoints: [] });
+      updateDistanceStats(0, 0);
+      return;
+    }
+
     try {
       let since, until;
       if (selectedDate && selectedDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
@@ -1036,35 +1845,41 @@ export default function LiveTrackingMap({
         until = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
       }
 
-      const url = `${API}/api/v1/location/today?salesmanId=${userId}&startTime=${since.toISOString()}&endTime=${until.toISOString()}`;
+      const dateParam = getLocalDateString(selectedDate);
+      const url = `${API}/api/v1/location/today?salesmanId=${userId}&date=${dateParam}&startTime=${since.toISOString()}&endTime=${until.toISOString()}`;
 
       const res     = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
       const data    = await res.json();
 
       const raw = extractLocationPoints(data);
-      const rawAfterPunchIn = filterPointsFromPunchInTime(
-        raw,
-        punchInLocationRef.current?.time || null
-      );
-      rawPtsRef.current = rawAfterPunchIn;
+      const validRaw = (Array.isArray(raw) ? raw : [])
+        .map((p) => ({
+          lat: Number(p.lat ?? p.latitude),
+          lng: Number(p.lng ?? p.longitude),
+          accuracy: Number(p.accuracy ?? 0),
+          speed: Number(p.speed ?? 0),
+          recordedAt: p.recordedAt || p.time || null,
+        }))
+        .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && !(Math.abs(p.lat) < 0.001 && Math.abs(p.lng) < 0.001));
+
+      rawPtsRef.current = validRaw;
       const preserveDetail = routeMode === ROUTE_MODE_RAW;
-      const cleaned = cleanPoints(rawAfterPunchIn, { preserveDetail });
-      const sparseCleaned = cleaned.length >= 2
-        ? cleaned
-        : cleanPoints(rawAfterPunchIn, { allowSparse: true, preserveDetail });
+      const cleaned = cleanPoints(validRaw, { preserveDetail, allowSparse: true });
+      const finalTrail = cleaned.length >= 2 ? cleaned : validRaw;
+
       const visitFallbackTrail = extractVisitTrailPoints(
         visitsRef.current,
         punchInLocationRef.current
       );
 
-      const shouldUseVisitFallback =
-        sparseCleaned.length < 2 && visitFallbackTrail.length >= 2;
-
-      const baseTrail = shouldUseVisitFallback
-        ? visitFallbackTrail
-        : sparseCleaned.length > 0
-          ? sparseCleaned
-          : visitFallbackTrail;
+      const baseTrail =
+        finalTrail.length >= 2
+          ? finalTrail
+          : visitFallbackTrail.length >= 2
+            ? visitFallbackTrail
+            : finalTrail.length > 0
+              ? finalTrail
+              : visitFallbackTrail;
 
       if (baseTrail.length > 0) {
         const merged = ensureTrailStartsAtPunchIn(
@@ -1076,36 +1891,50 @@ export default function LiveTrackingMap({
             appendSequentialPoint(merged, lp);
           }
         }
-        drawTrail(merged, { autoFit, autoPanLive: isLive, rawPoints: rawAfterPunchIn });
+        if (routeMode === ROUTE_MODE_ROAD && merged.length >= 2) {
+          const corridorSimplified = ramerDouglasPeucker(merged, 16);
+          const snapped = await snapPointsToRoads(corridorSimplified.length >= 2 ? corridorSimplified : merged);
+          const cleanRoute = pruneRetracingSpurs(snapped);
+          drawTrail(cleanRoute.length >= 2 ? cleanRoute : snapped, { autoFit, autoPanLive: isLive, rawPoints: validRaw });
+        } else {
+          drawTrail(merged, { autoFit, autoPanLive: isLive, rawPoints: validRaw });
+        }
         fetchBackendDistanceStats();
       } else {
-        if (isLive && allPtsRef.current.length > 0) {
-          drawTrail(allPtsRef.current, { autoFit: false, autoPanLive: true, rawPoints: rawPtsRef.current });
-        } else {
-          drawTrail([], { autoFit: false, rawPoints: [] });
-          updateDistanceStats(0, 0);
-        }
+        drawTrail([], { autoFit: false, rawPoints: [] });
+        fetchBackendDistanceStats();
       }
     } catch (err) {
       toast.error(err.message, { title: "Error Fetching Trail" });
     }
-  }, [userId, mapLoaded, isLive, isTodaySelected, preferVisitTrail, routeMode, selectedDate, updateDistanceStats, fetchBackendDistanceStats]);
+  }, [userId, mapLoaded, isLive, isTodaySelected, preferVisitTrail, routeMode, selectedDate, updateDistanceStats, fetchBackendDistanceStats, hasValidPunchIn]);
+
+  const loadTrailFromDBRef = useRef(loadTrailFromDB);
+  loadTrailFromDBRef.current = loadTrailFromDB;
 
   useEffect(() => {
     if (!mapLoaded) return;
 
     if (preferVisitTrail) {
+      const currentVisits = visitsRef.current || [];
+      if (!hasValidPunchIn && currentVisits.length === 0) {
+        rawPtsRef.current = [];
+        allPtsRef.current = [];
+        drawTrail([], { autoFit: false, rawPoints: [] });
+        updateDistanceStats(0, 0);
+        return;
+      }
       const visitTrail = ensureTrailStartsAtPunchIn(
-        extractVisitTrailPoints(visits, punchInLocation),
-        punchInLocation
+        extractVisitTrailPoints(currentVisits, punchInLocationRef.current),
+        punchInLocationRef.current
       );
       rawPtsRef.current = visitTrail;
       drawTrail(visitTrail, { autoFit: true, rawPoints: visitTrail });
       return;
     }
 
-    loadTrailFromDB({ autoFit: true });
-  }, [mapLoaded, userId, selectedDate, visits, preferVisitTrail, routeMode, loadTrailFromDB, punchInLocation]);
+    loadTrailFromDBRef.current({ autoFit: true });
+  }, [mapLoaded, userId, selectedDate, preferVisitTrail, routeMode, hasValidPunchIn]);
 
   useEffect(() => {
     if (routeMode === ROUTE_MODE_ROAD) {
@@ -1222,14 +2051,11 @@ export default function LiveTrackingMap({
               ? 3
               : getEffectiveMoveThreshold(acc, lastTrailPt.accuracy);
             if (moved >= minMoveRequired && moved <= MAX_LIVE_SEGMENT_METRES) {
-              const merged = [...allPtsRef.current, livePoint];
-              const finalTrail = cleanPoints(merged, { preserveDetail: routeMode === ROUTE_MODE_RAW });
-              allPtsRef.current = finalTrail;
-              drawTrail(finalTrail, { autoFit: false, autoPanLive: false, rawPoints: rawPtsRef.current });
-            } else {
-              if (isLive && !userAdjustedViewportRef.current) {
-                withProgrammaticViewport(() => lMap.panTo([lat, lng]));
-              }
+              const updated = appendSequentialPoint([...allPtsRef.current], livePoint);
+              allPtsRef.current = updated;
+              drawTrail(updated, { autoFit: false, autoPanLive: false, rawPoints: rawMerged });
+            } else if (!userAdjustedViewportRef.current) {
+              withProgrammaticViewport(() => lMap.panTo([lat, lng]));
             }
           } else {
             if (!userAdjustedViewportRef.current) {
@@ -1386,6 +2212,42 @@ export default function LiveTrackingMap({
       ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
       : null;
 
+  const replayPoints = allPtsRef.current || [];
+  const currentReplayPoint = replayPoints[replayIndex] || replayPoints[0] || null;
+  const replayProgress = replayPoints.length > 1 ? Math.round((replayIndex / (replayPoints.length - 1)) * 100) : 0;
+
+  const replayTimeStr = currentReplayPoint?.recordedAt || currentReplayPoint?.time
+    ? new Date(currentReplayPoint.recordedAt || currentReplayPoint.time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })
+    : "00:00";
+
+  const replayKmStr = replayPoints.length > 1
+    ? `${calcFilteredKm(replayPoints.slice(0, replayIndex + 1)).toFixed(2)} km`
+    : "0.00 km";
+
+  let replayWaypointLabel = "Point A";
+  if (replayIndex === 0) {
+    replayWaypointLabel = "Punch In";
+  } else if (replayIndex >= replayPoints.length - 1) {
+    replayWaypointLabel = hasPunchedOut ? "Punch Out" : "Point B";
+  } else {
+    const pt = replayPoints[replayIndex];
+    if (pt) {
+      const matchedVisit = (visits || []).find((v) => {
+        const vLat = Number(v.lat || v.coordinates?.lat || v.location?.lat);
+        const vLng = Number(v.lng || v.coordinates?.lng || v.location?.lng);
+        if (Number.isFinite(vLat) && Number.isFinite(vLng)) {
+          return distMetres(pt.lat, pt.lng, vLat, vLng) < 80;
+        }
+        return false;
+      });
+      if (matchedVisit) {
+        replayWaypointLabel = matchedVisit.partyName || matchedVisit.locationName || "Stop";
+      } else {
+        replayWaypointLabel = `Point ${String.fromCharCode(65 + Math.min(25, Math.floor((replayIndex / Math.max(1, replayPoints.length)) * 5)))}`;
+      }
+    }
+  }
+
   return (
     <div style={{
       position: isMapFullscreen ? "fixed" : "relative",
@@ -1423,20 +2285,24 @@ export default function LiveTrackingMap({
         zIndex: 1000, background: "rgba(255,255,255,0.97)", borderRadius: 999,
         padding: "5px 16px", fontSize: 12, fontWeight: 700,
         boxShadow: "0 2px 10px rgba(0,0,0,0.12)", display: "flex", alignItems: "center", gap: 7,
-        border: `1px solid ${isLive ? "#bbf7d0" : hasPunchedOut ? "#fde68a" : "#e2e8f0"}`,
-        color: isLive ? "#16a34a" : hasPunchedOut ? "#d97706" : "#94a3b8",
+        border: `1px solid ${isLive ? "#bbf7d0" : hasPunchedOut ? "#fde68a" : (hasValidPunchIn && (allPtsRef.current.length > 0 || isPunchedIn)) ? "#bfdbfe" : "#e2e8f0"}`,
+        color: isLive ? "#16a34a" : hasPunchedOut ? "#d97706" : (hasValidPunchIn && (allPtsRef.current.length > 0 || isPunchedIn)) ? "#2563eb" : "#94a3b8",
         pointerEvents: "none",
       }}>
         <span style={{
           width: 7, height: 7, borderRadius: "50%", display: "inline-block",
-          background: isLive ? "#22c55e" : hasPunchedOut ? "#f59e0b" : "#cbd5e1",
+          background: isLive ? "#22c55e" : hasPunchedOut ? "#f59e0b" : (hasValidPunchIn && (allPtsRef.current.length > 0 || isPunchedIn)) ? "#2563eb" : "#cbd5e1",
           animation: isLive ? "livePulse 1.5s ease-in-out infinite" : "none",
         }} />
         {isLive
           ? `Live Tracking${connected ? "" : " (socket offline)"}`
           : hasPunchedOut
           ? "Day Completed"
-          : "Punch in to start tracking"}
+          : isPunchedIn
+          ? "Punch In Active"
+          : (hasValidPunchIn && allPtsRef.current.length > 0)
+          ? "Route Tracked"
+          : "Not Punched In"}
       </div>
 
       {/* ── Punch-in Info Popup Card ─────────────────────────────────── */}
@@ -1619,7 +2485,7 @@ export default function LiveTrackingMap({
 
       {sockAck && (
         <div style={{
-          position: "absolute", bottom: 10, right: 10, zIndex: 1000,
+          position: "absolute", bottom: 10, right: 10, zIndex: 999,
           background: "rgba(255,255,255,0.95)", borderRadius: 6,
           padding: "4px 10px", fontSize: 10, color: "#16a34a",
           boxShadow: "0 1px 4px rgba(0,0,0,0.08)", pointerEvents: "none",
@@ -1629,7 +2495,7 @@ export default function LiveTrackingMap({
       )}
 
       <div style={{
-        position: "absolute", bottom: 10, left: 10, zIndex: 1000,
+        position: "absolute", bottom: 10, left: 10, zIndex: 999,
         background: "rgba(255,255,255,0.97)", borderRadius: 10,
         padding: "8px 12px", fontSize: 12, fontWeight: 700, color: "#0f172a",
         boxShadow: "0 2px 10px rgba(0,0,0,0.12)", pointerEvents: "none",
@@ -1695,6 +2561,26 @@ export default function LiveTrackingMap({
         }
         .punch-in-popup .leaflet-popup-tip {
           background: #fff;
+        }
+        .leaflet-tooltip.custom-clean-tooltip {
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          pointer-events: none !important;
+        }
+        .leaflet-tooltip.custom-clean-tooltip::before,
+        .leaflet-tooltip.custom-clean-tooltip::after {
+          display: none !important;
+        }
+        .clean-circle-marker .marker-dot {
+          transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.18s ease;
+          pointer-events: auto;
+        }
+        .clean-circle-marker:hover .marker-dot {
+          transform: scale(1.25);
+          box-shadow: 0 4px 14px rgba(0,0,0,0.45);
         }
       `}</style>
     </div>

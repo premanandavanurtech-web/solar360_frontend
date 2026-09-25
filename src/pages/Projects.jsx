@@ -487,16 +487,13 @@ const RegistrationProjectRow = ({ project, highlight, onView, onEdit, onUpload, 
           </Avatar>
           <Box sx={{ minWidth: 0 }}>
             <Typography variant="subtitle1" fontWeight={800} color={isDark ? "#f8fafc" : NAVY} noWrap>
-              {project.projectCode || "Project"}
-            </Typography>
-            <Typography variant="caption" fontWeight={800} color="#8b5cf6" noWrap sx={{ display: "block", mt: 0.2 }}>
               {getProjectName(project)}
             </Typography>
-            <Typography variant="h6" fontWeight={700} color={isDark ? "#f8fafc" : NAVY_LT} sx={{ lineHeight: 1.15 }}>
-              {[project.firstName, project.lastName].filter(Boolean).join(" ") || "—"}
+            <Typography variant="body2" fontWeight={700} color={isDark ? "#93c5fd" : NAVY_LT} sx={{ lineHeight: 1.25, mt: 0.2 }}>
+              {[project.firstName, project.lastName].filter(Boolean).join(" ") || project.consumerName || "—"}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {project.phone || "No phone"}
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.2 }}>
+              {[project.phone, project.city].filter(Boolean).join(" · ") || project.phone || "No phone"}
             </Typography>
           </Box>
         </Stack>
@@ -621,13 +618,13 @@ const ProjectCard = ({ project, onOpen, onCall, onEdit }) => {
         </Avatar>
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography variant="subtitle2" fontWeight={800} noWrap color={isDark ? "#f8fafc" : NAVY}>
-            {project.projectCode || "Project"}
-          </Typography>
-          <Typography variant="caption" fontWeight={800} color={stage.color} noWrap sx={{ display: "block", mt: 0.2 }}>
             {getProjectName(project)}
           </Typography>
-          <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"} noWrap>
-            {[project.firstName, project.lastName].filter(Boolean).join(" ") || "—"}
+          <Typography variant="body2" fontWeight={700} color={stage.color} noWrap sx={{ display: "block", mt: 0.15 }}>
+            {[project.firstName, project.lastName].filter(Boolean).join(" ") || project.consumerName || "—"}
+          </Typography>
+          <Typography variant="caption" color={isDark ? "#94a3b8" : "text.secondary"} noWrap sx={{ display: "block" }}>
+            {[project.phone, project.city].filter(Boolean).join(" · ") || project.phone || "No phone"}
           </Typography>
         </Box>
         {stuck && (
@@ -1046,27 +1043,13 @@ function Projects() {
         </Stack>
       </Paper>
 
-      {/* ── KPI Cards ── */}
-      <Grid container spacing={1.5} sx={{ mb: 1.5 }}>
-        {[
-          { icon: <FilterAlt sx={{ fontSize: 20 }} />,    label: "Stuck > 5 days", value: summary.stuck, note: "Projects awaiting movement", color: RED },
-          { icon: <Workspaces sx={{ fontSize: 20 }} />,   label: "Installations this week", value: summary.thisWeek, note: "Scheduled or completed", color: BLUE },
-          { icon: <Bolt sx={{ fontSize: 20 }} />,         label: "Awaiting commissioning", value: summary.awaitingComm, note: "Installation still in progress", color: AMBER },
-          { icon: <AssignmentTurnedIn sx={{ fontSize: 20 }} />, label: "Ready for handover", value: summary.readyHandover, note: "Net meter stage reached", color: EMERALD },
-        ].map((c) => (
-          <Grid item xs={12} sm={6} lg={3} key={c.label}>
-            <MetricCard {...c} />
-          </Grid>
-        ))}
-      </Grid>
-
       {/* ── Pipeline stages (with icons) ── */}
       <Box sx={{ mb: 1.5 }}>
-        <Typography variant="caption" fontWeight={900} color={isDark ? "#94a3b8" : NAVY} sx={{ mb: 0.5, display: "block", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <Typography variant="caption" fontWeight={900} color={isDark ? "#94a3b8" : NAVY} sx={{ mb: 0.75, display: "block", textTransform: "uppercase", letterSpacing: "0.05em" }}>
           Project Type
         </Typography>
-        <Box sx={{ width: "100%", overflowX: "auto", pb: 0.75 }}>
-          <Stack direction="row" spacing={1} alignItems="stretch" sx={{ minWidth: 960 }}>
+        <Box sx={{ width: "100%", overflowX: "auto", pt: 0.5, pb: 0.75 }}>
+          <Stack direction="row" spacing={1.25} alignItems="stretch" sx={{ minWidth: 960 }}>
             {PROJECT_TYPE_FILTERS.map((type) => {
               const active = selectedProjectType === type.key;
               const TypeIcon = type.icon;
@@ -1077,9 +1060,9 @@ function Projects() {
                   onClick={() => { setSelectedProjectType(type.key); setSelectedStage("all"); setSelectedSection("all"); setPage(0); }}
                   sx={{
                     flex: 1,
-                    minHeight: 52,
+                    minHeight: 58,
                     px: 1.5,
-                    py: 0.75,
+                    py: 1,
                     borderRadius: "12px",
                     cursor: "pointer",
                     border: active
@@ -1091,30 +1074,17 @@ function Projects() {
                           : `linear-gradient(135deg, ${type.color} 0%, ${alpha(type.color, 0.85)} 100%)`)
                       : (isDark ? "#0b0e1a" : "#fff"),
                     boxShadow: active
-                      ? `0 8px 24px ${alpha(type.color, isDark ? 0.35 : 0.25)}`
-                      : "0 2px 8px rgba(0,0,0,0.04)",
+                      ? `0 6px 18px ${alpha(type.color, isDark ? 0.35 : 0.25)}`
+                      : "0 2px 6px rgba(0,0,0,0.03)",
                     transition: "all 0.2s ease",
-                    position: "relative",
                     "&:hover": {
                       transform: "translateY(-2px)",
                       borderColor: type.color,
-                      boxShadow: `0 8px 20px ${alpha(type.color, 0.25)}`,
+                      boxShadow: `0 6px 16px ${alpha(type.color, 0.2)}`,
                     },
-                    "&::after": active ? {
-                      content: '""',
-                      position: "absolute",
-                      left: "50%",
-                      bottom: 6,
-                      width: 36,
-                      height: 3,
-                      borderRadius: 99,
-                      bgcolor: type.color,
-                      boxShadow: `0 0 10px ${type.color}`,
-                      transform: "translateX(-50%)",
-                    } : {},
                   }}
                 >
-                  <Stack spacing={0.75} alignItems="center" justifyContent="center">
+                  <Stack spacing={0.5} alignItems="center" justifyContent="center">
                     <Stack direction="row" spacing={0.8} alignItems="center" justifyContent="center" sx={{ width: "100%" }}>
                       <Box
                         sx={{
@@ -1134,7 +1104,7 @@ function Projects() {
                         {type.label}
                       </Typography>
                     </Stack>
-                    <Typography variant="h6" fontWeight={900} color={active ? "#fff" : (isDark ? type.color : NAVY)} sx={{ lineHeight: 1 }}>
+                    <Typography variant="h6" fontWeight={900} color={active ? "#fff" : (isDark ? type.color : NAVY)} sx={{ lineHeight: 1.1 }}>
                       {count}
                     </Typography>
                   </Stack>
@@ -1728,10 +1698,10 @@ function Projects() {
                               <Stack direction="row" spacing={0.75} alignItems="center">
                                 <Box sx={{ minWidth: 0 }}>
                                   <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : NAVY} noWrap>
-                                    {project.projectCode || "Project"}
-                                  </Typography>
-                                  <Typography variant="caption" fontWeight={800} color={stage.color} noWrap sx={{ display: "block", mt: 0.15 }}>
                                     {getProjectName(project)}
+                                  </Typography>
+                                  <Typography variant="body2" fontWeight={700} color={stage.color} noWrap sx={{ display: "block", mt: 0.15 }}>
+                                    {[project.firstName, project.lastName].filter(Boolean).join(" ") || project.consumerName || "—"}
                                   </Typography>
                                 </Box>
                                 {highlight && <Chip label="New" size="small" color="success" sx={{ height: 18, fontSize: 10 }} />}
@@ -1741,11 +1711,8 @@ function Projects() {
                                   </Tooltip>
                                 )}
                               </Stack>
-                              <Typography variant="body2" fontWeight={600} color={isDark ? "#f8fafc" : alpha(NAVY, 0.75)}>
-                                {[project.firstName, project.lastName].filter(Boolean).join(" ") || "—"}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {[project.city, project.phone].filter(Boolean).join(" · ") || "No location"}
+                              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.2 }}>
+                                {[project.phone, project.city].filter(Boolean).join(" · ") || project.phone || "No phone"}
                               </Typography>
                             </Box>
                           </Stack>

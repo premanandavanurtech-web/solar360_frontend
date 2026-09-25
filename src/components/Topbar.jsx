@@ -160,8 +160,21 @@ const Topbar = ({
   }, []);
   
   const handleLogout = useCallback(async () => {
+    if (!window.confirm('Are you sure you want to log out?')) {
+      return;
+    }
     try {
       setLoggingOut(true);
+      const token = getToken();
+      if (token) {
+        await fetch(`${API}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }).catch((err) => console.warn('Logout API failed:', err.message));
+      }
       handleClose();
       logout();
       navigate('/login', { replace: true });
@@ -348,7 +361,8 @@ const Topbar = ({
           top: 0,
           width: '100%',
           height: 'auto',
-          backgroundColor: '#ffffff',
+          backgroundColor: isDark ? '#0e1628' : '#ffffff',
+          color: isDark ? '#f8fafc' : 'inherit',
           borderBottomLeftRadius: 16,
           borderBottomRightRadius: 16,
         },
@@ -357,11 +371,11 @@ const Topbar = ({
       <Box sx={{ p: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
           <Tooltip title="Back" arrow>
-            <IconButton onClick={() => setMobileSearchOpen(false)}>
+            <IconButton onClick={() => setMobileSearchOpen(false)} sx={{ color: isDark ? '#f8fafc' : 'inherit' }}>
               <ArrowBackIcon />
             </IconButton>
           </Tooltip>
-          <Typography variant="h6" fontWeight={600}>Search</Typography>
+          <Typography variant="h6" fontWeight={600} color={isDark ? '#f8fafc' : 'inherit'}>Search</Typography>
         </Box>
         <Paper
           component="form"
@@ -370,23 +384,23 @@ const Topbar = ({
             display: 'flex',
             alignItems: 'center',
             p: 1,
-            bgcolor: '#f5f5f5',
+            bgcolor: isDark ? '#080c14' : '#f5f5f5',
             borderRadius: 2,
-            border: '1px solid #e0e0e0',
+            border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid #e0e0e0',
           }}
         >
-          <SearchIcon sx={{ color: '#999', mx: 1 }} />
+          <SearchIcon sx={{ color: isDark ? '#64748b' : '#999', mx: 1 }} />
           <InputBase
             placeholder="Search leads, customers, reports..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             autoFocus
             fullWidth
-            sx={{ fontSize: '0.95rem' }}
+            sx={{ fontSize: '0.95rem', color: isDark ? '#f8fafc' : 'inherit' }}
           />
           {searchQuery && (
             <Tooltip title="Clear Search" arrow>
-              <IconButton size="small" onClick={() => setSearchQuery('')}>
+              <IconButton size="small" onClick={() => setSearchQuery('')} sx={{ color: isDark ? '#94a3b8' : 'inherit' }}>
                 <CloseIcon fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -395,7 +409,7 @@ const Topbar = ({
         
         {/* Recent Searches */}
         <Box sx={{ mt: 3 }}>
-          <Typography variant="subtitle2" color="#666" gutterBottom>
+          <Typography variant="subtitle2" color={isDark ? '#94a3b8' : '#666'} gutterBottom>
             Recent Searches
           </Typography>
           {['John Doe', 'Loan Application', 'Bangalore Leads'].map((item, index) => (
@@ -405,9 +419,9 @@ const Topbar = ({
                 setSearchQuery(item);
                 handleSearch({ preventDefault: () => {} });
               }}
-              sx={{ borderRadius: 1, my: 0.5 }}
+              sx={{ borderRadius: 1, my: 0.5, color: isDark ? '#f8fafc' : 'inherit' }}
             >
-              <ListItemIcon>
+              <ListItemIcon sx={{ color: isDark ? '#60a5fa' : 'inherit' }}>
                 <SearchIcon fontSize="small" />
               </ListItemIcon>
               <ListItemText primary={item} />
@@ -622,8 +636,9 @@ const Topbar = ({
             maxWidth: { xs: '100%', sm: 280 },
             mt: 1,
             borderRadius: { xs: 0, sm: '8px' },
-            border: { xs: 'none', sm: '1px solid #e0e0e0' },
-            boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0, 0, 0, 0.08)' },
+            bgcolor: isDark ? '#0e1628' : '#ffffff',
+            border: { xs: 'none', sm: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e0e0e0' },
+            boxShadow: isDark ? '0 4px 20px rgba(0, 0, 0, 0.5)' : '0 4px 12px rgba(0, 0, 0, 0.08)',
             position: { xs: 'fixed', sm: 'absolute' },
             top: { xs: '56px', sm: 'auto' },
             left: { xs: 0, sm: 'auto' },
@@ -634,7 +649,7 @@ const Topbar = ({
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
         {/* User Info */}
-        <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
+        <Box sx={{ p: 2, borderBottom: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e0e0e0' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Avatar
               src={avatarSrc}
@@ -642,7 +657,7 @@ const Topbar = ({
                 onError: () => setAvatarLoadFailed(true),
               }}
               sx={{
-                bgcolor: avatarSrc ? 'transparent' : '#0f1f3d',
+                bgcolor: avatarSrc ? 'transparent' : (isDark ? '#2563eb' : '#0f1f3d'),
                 color: '#ffffff',
                 width: 48,
                 height: 48,
@@ -653,13 +668,13 @@ const Topbar = ({
               {!avatarSrc && userInitials}
             </Avatar>
             <Box>
-              <Typography fontWeight={600} fontSize="0.95rem" color="#333333">
+              <Typography fontWeight={600} fontSize="0.95rem" color={isDark ? '#f8fafc' : '#333333'}>
                 {fullName}
               </Typography>
-              <Typography fontSize="0.8rem" color="#666666" mb={0.5}>
+              <Typography fontSize="0.8rem" color={isDark ? '#94a3b8' : '#666666'} mb={0.5}>
                 {userRole}
               </Typography>
-              <Typography fontSize="0.75rem" color="#999">
+              <Typography fontSize="0.75rem" color={isDark ? '#64748b' : '#999'}>
                 {user?.email || ''}
               </Typography>
             </Box>
@@ -673,8 +688,12 @@ const Topbar = ({
               handleClose();
               setProfileOpen(true);
             }}
+            sx={{
+              color: isDark ? '#f8fafc' : 'inherit',
+              '&:hover': { bgcolor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)' },
+            }}
           >
-            <ListItemIcon>
+            <ListItemIcon sx={{ color: isDark ? '#60a5fa' : 'inherit' }}>
               <PersonIcon fontSize="small" />
             </ListItemIcon>
             <ListItemText
@@ -685,8 +704,8 @@ const Topbar = ({
           <MenuItem 
             onClick={handleLogout} 
             sx={{ 
-              color: '#ff4444',
-              '&:hover': { bgcolor: alpha('#ff4444', 0.05) }
+              color: '#ef4444',
+              '&:hover': { bgcolor: isDark ? 'rgba(239, 68, 68, 0.15)' : alpha('#ff4444', 0.05) }
             }}
             disabled={loggingOut}
           >
@@ -845,85 +864,103 @@ const Topbar = ({
             maxWidth: 360,
             mt: 1,
             borderRadius: 3,
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 18px 40px rgba(15, 23, 42, 0.14)',
+            bgcolor: isDark ? '#0b101c' : '#ffffff',
+            border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e2e8f0',
+            boxShadow: isDark ? '0 18px 40px rgba(0, 0, 0, 0.5)' : '0 18px 40px rgba(15, 23, 42, 0.14)',
             overflow: 'hidden',
           }
         }}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
-        <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: isDark ? '#0e1628' : '#ffffff' }}>
           <Box>
-            <Typography fontWeight={700} fontSize="0.95rem" color="#0f172a">
+            <Typography fontWeight={700} fontSize="0.95rem" color={isDark ? '#f8fafc' : '#0f172a'}>
               Notifications
             </Typography>
-            <Typography fontSize="0.76rem" color="#64748b">
+            <Typography fontSize="0.76rem" color={isDark ? '#94a3b8' : '#64748b'}>
               {unreadCount > 0 ? `${unreadCount} unread updates` : 'All caught up'}
             </Typography>
           </Box>
           {unreadCount > 0 && (
-            <Button size="small" onClick={handleMarkAllAsRead} sx={{ color: '#0f1f3d', fontWeight: 700 }}>
+            <Button size="small" onClick={handleMarkAllAsRead} sx={{ color: isDark ? '#60a5fa' : '#0f1f3d', fontWeight: 700 }}>
               Mark all read
             </Button>
           )}
         </Box>
-        <Divider />
+        <Divider sx={{ borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#e2e8f0' }} />
         <Box sx={{ maxHeight: 360, overflowY: 'auto' }}>
           {notifications.length === 0 ? (
             <Box sx={{ px: 2, py: 4, textAlign: 'center' }}>
-              <NotificationsIcon sx={{ color: '#cbd5e1', fontSize: 28, mb: 1 }} />
-              <Typography fontSize="0.88rem" fontWeight={600} color="#334155">
+              <NotificationsIcon sx={{ color: isDark ? '#475569' : '#cbd5e1', fontSize: 28, mb: 1 }} />
+              <Typography fontSize="0.88rem" fontWeight={600} color={isDark ? '#cbd5e1' : '#334155'}>
                 No notifications yet
               </Typography>
-              <Typography fontSize="0.78rem" color="#94a3b8">
+              <Typography fontSize="0.78rem" color={isDark ? '#64748b' : '#94a3b8'}>
                 New alerts will appear here.
               </Typography>
             </Box>
           ) : (
-            notifications.map((notification) => (
-              <MenuItem
-                key={notification.id}
-                onClick={() => handleMarkAsRead(notification.id)}
-                sx={{
-                  alignItems: 'flex-start',
-                  gap: 1.25,
-                  px: 2,
-                  py: 1.5,
-                  whiteSpace: 'normal',
-                  bgcolor: notification.read ? '#ffffff' : alpha('#0f1f3d', 0.045),
-                  borderLeft: notification.read ? '3px solid transparent' : '3px solid #0f1f3d',
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 0, mt: 0.35, color: notification.read ? '#94a3b8' : '#0f1f3d' }}>
-                  <NotificationsIcon fontSize="small" />
-                </ListItemIcon>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography fontSize="0.85rem" fontWeight={700} color="#0f172a" sx={{ mb: 0.25 }}>
-                    {notification.title}
-                  </Typography>
-                  <Typography fontSize="0.78rem" color="#475569" sx={{ lineHeight: 1.5 }}>
-                    {notification.message}
-                  </Typography>
-                  <Typography fontSize="0.72rem" color="#94a3b8" sx={{ mt: 0.6 }}>
-                    {notification.time}
-                  </Typography>
-                </Box>
-              </MenuItem>
-            ))
+            notifications.map((notification) => {
+              const isLogout = String(`${notification.type} ${notification.title} ${notification.message}`).toLowerCase().includes('logout');
+              return (
+                <MenuItem
+                  key={notification.id}
+                  onClick={() => handleMarkAsRead(notification.id)}
+                  sx={{
+                    alignItems: 'flex-start',
+                    gap: 1.25,
+                    px: 2,
+                    py: 1.5,
+                    whiteSpace: 'normal',
+                    bgcolor: isLogout
+                      ? (isDark ? 'rgba(239, 68, 68, 0.12)' : 'rgba(254, 242, 242, 0.95)')
+                      : notification.read
+                      ? (isDark ? '#0b101c' : '#ffffff')
+                      : (isDark ? 'rgba(59, 130, 246, 0.12)' : alpha('#0f1f3d', 0.045)),
+                    borderLeft: isLogout
+                      ? '4px solid #ef4444'
+                      : notification.read
+                      ? '3px solid transparent'
+                      : `3px solid ${isDark ? '#3b82f6' : '#0f1f3d'}`,
+                    '&:hover': {
+                      bgcolor: isLogout
+                        ? (isDark ? 'rgba(239, 68, 68, 0.18)' : 'rgba(254, 226, 226, 0.98)')
+                        : isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)',
+                    }
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 0, mt: 0.35, color: isLogout ? '#ef4444' : notification.read ? (isDark ? '#64748b' : '#94a3b8') : (isDark ? '#60a5fa' : '#0f1f3d') }}>
+                    {isLogout ? <LogoutIcon fontSize="small" sx={{ color: '#ef4444' }} /> : <NotificationsIcon fontSize="small" />}
+                  </ListItemIcon>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography fontSize="0.85rem" fontWeight={700} color={isLogout ? '#ef4444' : (isDark ? '#f8fafc' : '#0f172a')} sx={{ mb: 0.25 }}>
+                      {notification.title}
+                    </Typography>
+                    <Typography fontSize="0.78rem" color={isDark ? '#cbd5e1' : '#475569'} sx={{ lineHeight: 1.5 }}>
+                      {notification.message}
+                    </Typography>
+                    <Typography fontSize="0.72rem" color={isDark ? '#64748b' : '#94a3b8'} sx={{ mt: 0.6 }}>
+                      {notification.time}
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              );
+            })
           )}
         </Box>
-        <Divider />
-        <Box sx={{ p: 1.25 }}>
+        <Divider sx={{ borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#e2e8f0' }} />
+        <Box sx={{ p: 1.25, bgcolor: isDark ? '#0e1628' : '#ffffff' }}>
           <Button
             fullWidth
             variant="contained"
             onClick={handleNotificationCenter}
             sx={{
-              bgcolor: '#0f1f3d',
+              bgcolor: isDark ? '#2563eb' : '#0f1f3d',
+              color: '#ffffff',
               borderRadius: 2.5,
               fontWeight: 700,
-              '&:hover': { bgcolor: '#3a5ac8' },
+              '&:hover': { bgcolor: isDark ? '#1d4ed8' : '#3a5ac8' },
             }}
           >
             View All Notifications

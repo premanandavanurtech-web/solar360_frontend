@@ -51,158 +51,80 @@ import {
   Print,
   ContentCopy,
   ExpandMore,
+  AccessTime,
+  Phone,
+  Email,
+  BadgeOutlined,
+  FiberManualRecord,
+  PhoneAndroid,
+  TouchApp,
 } from "@mui/icons-material";
 import { useAttendance } from "../hooks/useAttendance";
 import { format } from "date-fns";
 import { toBackendAssetUrl } from "../utils/backendAssetUrl";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const PRIMARY = "#0f1f3d";
-const SECONDARY = "#1a237e";
-const SUCCESS = "#22c55e";
-const DANGER = "#ef4444";
-const WARNING = "#f59e0b";
-
+// ─── Status Configuration ─────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-  present: { bg: alpha(SUCCESS, 0.1), color: SUCCESS, icon: <CheckCircle sx={{ fontSize: 15 }} />, label: "Present" },
-  absent: { bg: alpha(DANGER, 0.1), color: DANGER, icon: <ErrorIcon sx={{ fontSize: 15 }} />, label: "Absent" },
-  late: { bg: alpha(WARNING, 0.1), color: WARNING, icon: <Warning sx={{ fontSize: 15 }} />, label: "Late" },
-  leave: { bg: alpha("#a855f7", 0.1), color: "#a855f7", icon: <Person sx={{ fontSize: 15 }} />, label: "Leave" },
-  holiday: { bg: alpha("#3b82f6", 0.1), color: "#3b82f6", icon: <CalendarToday sx={{ fontSize: 15 }} />, label: "Holiday" },
+  present: { bg: "rgba(16, 185, 129, 0.15)", color: "#10b981", icon: <CheckCircle sx={{ fontSize: 15 }} />, label: "Present" },
+  punch_in: { bg: "rgba(16, 185, 129, 0.2)", color: "#10b981", icon: <TouchApp sx={{ fontSize: 15 }} />, label: "Punch In (Mobile)" },
+  absent: { bg: "rgba(239, 68, 68, 0.15)", color: "#ef4444", icon: <ErrorIcon sx={{ fontSize: 15 }} />, label: "Absent" },
+  late: { bg: "rgba(245, 158, 11, 0.15)", color: "#f59e0b", icon: <Warning sx={{ fontSize: 15 }} />, label: "Late" },
+  leave: { bg: "rgba(168, 85, 247, 0.15)", color: "#a855f7", icon: <Person sx={{ fontSize: 15 }} />, label: "Leave" },
+  holiday: { bg: "rgba(59, 130, 246, 0.15)", color: "#3b82f6", icon: <CalendarToday sx={{ fontSize: 15 }} />, label: "Holiday" },
+  upcoming: { bg: "rgba(148, 163, 184, 0.15)", color: "#94a3b8", icon: <CalendarToday sx={{ fontSize: 15 }} />, label: "Upcoming" },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const fmtDate = (ts) =>
+export const fmtDate = (ts) =>
   !ts ? "—" : new Date(ts).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
-const fmtTime = (ts) =>
-  !ts ? "—" : new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+export const fmtTime = (ts) => {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return typeof ts === "string" ? ts : "—";
+  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+};
 
-const fmtShortDate = (ts) => !ts ? "N/A" : new Date(ts).toLocaleDateString();
-const fmtShortTime = (ts) => !ts ? "N/A" : new Date(ts).toLocaleTimeString();
-const fmtDateTime = (ts) => !ts ? "N/A" : new Date(ts).toLocaleString();
+export const fmtShortDate = (ts) => (!ts ? "N/A" : new Date(ts).toLocaleDateString());
+export const fmtShortTime = (ts) => (!ts ? "N/A" : new Date(ts).toLocaleTimeString());
+export const fmtDateTime = (ts) => (!ts ? "N/A" : new Date(ts).toLocaleString());
 
-const resolveAddress = (addr) => {
-  if (!addr) return "N/A";
+export const resolveAddress = (addr) => {
+  if (!addr) return null;
   if (typeof addr === "string") return addr;
-  return addr.full || addr.short || "N/A";
+  return addr.full || addr.short || addr.formattedAddress || null;
 };
 
 // ─── StatusChip ───────────────────────────────────────────────────────────────
 const StatusChip = ({ status }) => {
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.present;
+  const normKey = String(status || "present").toLowerCase();
+  const cfg = STATUS_CONFIG[normKey] || STATUS_CONFIG.present;
   return (
     <Chip
       size="small"
       label={cfg.label}
       icon={cfg.icon}
       sx={{
-        background: "#fff",
+        bgcolor: cfg.bg,
         color: cfg.color,
-        fontWeight: 700,
-        borderRadius: 1,
-        border: `1px solid ${alpha(cfg.color, 0.3)}`,
-        "& .MuiChip-icon": { color: cfg.color },
+        fontWeight: 800,
+        borderRadius: "999px",
+        height: 26,
+        fontSize: "0.75rem",
+        border: `1px solid ${alpha(cfg.color, 0.35)}`,
+        "& .MuiChip-icon": { color: `${cfg.color} !important`, fontSize: 15 },
       }}
     />
   );
 };
 
-// ─── InfoRow ──────────────────────────────────────────────────────────────────
-const InfoRow = ({ label, value, color }) => (
-  <Box
-    sx={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      py: 1,
-      borderBottom: `1px solid ${alpha(PRIMARY, 0.06)}`,
-      "&:last-child": { border: "none", pb: 0 },
-    }}
-  >
-    <Typography variant="caption" color="text.secondary" fontWeight={600}
-      sx={{ textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.68rem" }}
-    >
-      {label}
-    </Typography>
-    <Typography variant="body2" fontWeight={600} color={color || "text.primary"}>
-      {value}
-    </Typography>
-  </Box>
-);
-
-// ─── PunchBlock ───────────────────────────────────────────────────────────────
-const PunchBlock = ({ type, data }) => {
-  const isPunchIn = type === "in";
-  const color = isPunchIn ? SUCCESS : WARNING;
-  const absent = !data;
-
-  return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 2,
-        borderRadius: 3,
-        border: `1px solid ${alpha(color, absent ? 0.1 : 0.2)}`,
-        bgcolor: alpha(color, absent ? 0.02 : 0.05),
-        height: "100%",
-      }}
-    >
-      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1.5 }}>
-        <Box
-          sx={{
-            width: 34, height: 34, borderRadius: "50%",
-            bgcolor: alpha(color, 0.12),
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}
-        >
-          {isPunchIn ? <Login sx={{ fontSize: 18, color }} /> : <Logout sx={{ fontSize: 18, color }} />}
-        </Box>
-        <Box>
-          <Typography variant="caption" color="text.secondary" fontWeight={700}
-            sx={{ textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.68rem" }}
-          >
-            Punch {isPunchIn ? "In" : "Out"}
-          </Typography>
-          <Typography variant="h6" fontWeight={800} color={absent ? "text.disabled" : color} lineHeight={1.1}>
-            {absent ? (isPunchIn ? "Not recorded" : "Not punched out") : fmtTime(data?.time)}
-          </Typography>
-        </Box>
-      </Stack>
-
-      {data?.address && (
-        <Stack direction="row" spacing={0.75} alignItems="flex-start" sx={{ mb: 1 }}>
-          <LocationOn sx={{ fontSize: 14, color: "text.secondary", mt: 0.2, flexShrink: 0 }} />
-          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
-            {resolveAddress(data.address)}
-          </Typography>
-        </Stack>
-      )}
-
-      {data?.location && (
-        <Typography variant="caption" color="text.disabled" sx={{ fontSize: "0.65rem" }}>
-          {data.location.lat?.toFixed(5)}, {data.location.lng?.toFixed(5)}
-        </Typography>
-      )}
-
-      {data?.remarks && (
-        <Box sx={{ mt: 1, pt: 1, borderTop: `1px dashed ${alpha(color, 0.2)}` }}>
-          <Typography variant="caption" color="text.secondary">
-            <strong>Note:</strong> {data.remarks}
-          </Typography>
-        </Box>
-      )}
-    </Paper>
-  );
-};
-
-// ─── Export Utils ─────────────────────────────────────────────────────────────
+// ─── Export Utilities ─────────────────────────────────────────────────────────
 export const generateCSV = (records) => {
   const list = Array.isArray(records) ? records : [records];
 
   const headers = [
     "Record ID", "Employee Name", "Employee ID", "Employee Email", "Employee Phone",
-    "Date", "Status", "Work Hours", "Total Minutes",
+    "Date", "Status", "Work Hours",
     "Punch In Time", "Punch In Address", "Punch In Lat", "Punch In Lng",
     "Punch Out Time", "Punch Out Address", "Punch Out Lat", "Punch Out Lng",
     "Remarks", "Created At", "Updated At",
@@ -216,20 +138,19 @@ export const generateCSV = (records) => {
 
   const rows = list.map((a) => [
     a._id || a.id || "",
-    a.user?.name || "",
+    a.user?.name || `${a.user?.firstName || ""} ${a.user?.lastName || ""}`.trim() || "",
     a.user?.employeeId || "",
     a.user?.email || "",
-    a.user?.phone || "",
+    a.user?.phone || a.user?.phoneNumber || "",
     fmtShortDate(a.date),
     a.status || "",
-    a.workHoursFormatted || "",
-    a.workHours || "",
+    a.workHoursFormatted || a.workHours || "",
     fmtShortTime(a.punchIn?.time),
-    resolveAddress(a.punchIn?.address),
+    resolveAddress(a.punchIn?.address) || "",
     a.punchIn?.location?.lat || a.punchIn?.latitude || "",
     a.punchIn?.location?.lng || a.punchIn?.longitude || "",
     fmtShortTime(a.punchOut?.time),
-    resolveAddress(a.punchOut?.address),
+    resolveAddress(a.punchOut?.address) || "",
     a.punchOut?.location?.lat || a.punchOut?.latitude || "",
     a.punchOut?.location?.lng || a.punchOut?.longitude || "",
     a.remarks || "",
@@ -270,60 +191,57 @@ export const printRecord = (a) => {
   const win = window.open("", "_blank");
   if (!win) { alert("Please allow pop-ups to print"); return; }
 
+  const empName = a.user?.name || `${a.user?.firstName || ""} ${a.user?.lastName || ""}`.trim() || "Employee";
+
   win.document.write(`
     <html>
       <head>
-        <title>Attendance Record – ${a.user?.name || "Employee"}</title>
+        <title>Attendance Record – ${empName}</title>
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e; background: #fff; padding: 40px; }
-          h1 { font-size: 22px; color: #0f1f3d; margin-bottom: 4px; }
-          .sub { color: #888; font-size: 13px; margin-bottom: 24px; }
-          .card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; }
-          .card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 10px; font-weight: 700; }
-          .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #0f172a; background: #fff; padding: 40px; }
+          h1 { font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 4px; }
+          .sub { color: #64748b; font-size: 12px; margin-bottom: 24px; }
+          .card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; background: #fafafa; }
+          .card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; margin-bottom: 12px; font-weight: 800; }
+          .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
           .row:last-child { border-bottom: none; }
           .label { color: #64748b; font-weight: 600; }
-          .value { font-weight: 600; text-align: right; max-width: 60%; }
-          .punch-in { border-left: 4px solid #22c55e; }
+          .value { font-weight: 700; text-align: right; color: #0f172a; }
+          .punch-in { border-left: 4px solid #10b981; }
           .punch-out { border-left: 4px solid #f59e0b; }
-          .footer { margin-top: 24px; font-size: 11px; color: #aaa; }
+          .footer { margin-top: 30px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; }
         </style>
       </head>
       <body>
-        <h1>Attendance Record</h1>
-        <div class="sub">Exported on ${new Date().toLocaleString()}</div>
+        <h1>Attendance Details</h1>
+        <div class="sub">Generated on ${new Date().toLocaleString()}</div>
 
         <div class="card">
-          <div class="card-title">Employee & Summary</div>
-          <div class="row"><span class="label">Employee</span><span class="value">${a.user?.name || "N/A"}</span></div>
-          <div class="row"><span class="label">Employee ID</span><span class="value">${a.user?.employeeId || "N/A"}</span></div>
-          <div class="row"><span class="label">Email</span><span class="value">${a.user?.email || "N/A"}</span></div>
+          <div class="card-title">Employee & Attendance Summary</div>
+          <div class="row"><span class="label">Employee Name</span><span class="value">${empName}</span></div>
+          <div class="row"><span class="label">Email</span><span class="value">${a.user?.email || "—"}</span></div>
+          <div class="row"><span class="label">Phone</span><span class="value">${a.user?.phone || a.user?.phoneNumber || "—"}</span></div>
           <div class="row"><span class="label">Date</span><span class="value">${fmtDate(a.date)}</span></div>
-          <div class="row"><span class="label">Status</span><span class="value">${a.status || "N/A"}</span></div>
-          <div class="row"><span class="label">Work Hours</span><span class="value">${a.workHoursFormatted || "N/A"}</span></div>
+          <div class="row"><span class="label">Status</span><span class="value">${a.status || "—"}</span></div>
+          <div class="row"><span class="label">Work Hours</span><span class="value">${a.workHoursFormatted || a.workHours || "00:00"}</span></div>
         </div>
 
         <div class="card punch-in">
           <div class="card-title">Punch In</div>
           <div class="row"><span class="label">Time</span><span class="value">${fmtTime(a.punchIn?.time)}</span></div>
-          <div class="row"><span class="label">Address</span><span class="value">${resolveAddress(a.punchIn?.address)}</span></div>
-          ${a.punchIn?.location ? `<div class="row"><span class="label">Coordinates</span><span class="value">${a.punchIn.location.lat}, ${a.punchIn.location.lng}</span></div>` : ""}
+          <div class="row"><span class="label">Address</span><span class="value">${resolveAddress(a.punchIn?.address) || "—"}</span></div>
         </div>
 
         <div class="card punch-out">
           <div class="card-title">Punch Out</div>
           <div class="row"><span class="label">Time</span><span class="value">${fmtTime(a.punchOut?.time)}</span></div>
-          <div class="row"><span class="label">Address</span><span class="value">${resolveAddress(a.punchOut?.address)}</span></div>
-          ${a.punchOut?.location ? `<div class="row"><span class="label">Coordinates</span><span class="value">${a.punchOut.location.lat}, ${a.punchOut.location.lng}</span></div>` : ""}
+          <div class="row"><span class="label">Address</span><span class="value">${resolveAddress(a.punchOut?.address) || "—"}</span></div>
         </div>
 
-        ${a.remarks ? `<div class="card"><div class="card-title">Remarks</div><p style="font-size:13px">${a.remarks}</p></div>` : ""}
-
         <div class="footer">
-          Record ID: ${a._id || a.id || "N/A"} &nbsp;|&nbsp;
-          Created: ${fmtDateTime(a.createdAt)} &nbsp;|&nbsp;
-          Updated: ${fmtDateTime(a.updatedAt)}
+          Record ID: ${a._id || a.id || "—"} &nbsp;|&nbsp;
+          Created: ${fmtDateTime(a.createdAt)}
         </div>
       </body>
     </html>
@@ -332,8 +250,8 @@ export const printRecord = (a) => {
   win.print();
 };
 
-// ─── ActionExportMenu — used in DialogActions ─────────────────────────────────
-const ActionExportMenu = ({ attendance, onSnack }) => {
+// ─── Export Dropdown Action ───────────────────────────────────────────────────
+const ActionExportMenu = ({ attendance, onSnack, isDark }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
 
@@ -362,7 +280,7 @@ const ActionExportMenu = ({ attendance, onSnack }) => {
   const copyClip = handle(() => {
     try {
       navigator.clipboard.writeText(generateJSON(attendance));
-      onSnack("Copied to clipboard");
+      onSnack("Copied details to clipboard");
     } catch { onSnack("Copy failed", "error"); }
   });
 
@@ -377,15 +295,23 @@ const ActionExportMenu = ({ attendance, onSnack }) => {
     <>
       <Button
         variant="outlined"
-        startIcon={<FileDownload />}
+        startIcon={<FileDownload sx={{ fontSize: 16 }} />}
         endIcon={<ExpandMore sx={{ fontSize: 16 }} />}
         onClick={(e) => setAnchorEl(e.currentTarget)}
         sx={{
-          borderRadius: 2,
-          borderColor: alpha(PRIMARY, 0.35),
-          color: PRIMARY,
-          fontWeight: 600,
-          "&:hover": { bgcolor: alpha(PRIMARY, 0.05) },
+          borderRadius: "10px",
+          borderColor: isDark ? "rgba(255,255,255,0.15)" : "#cbd5e1",
+          color: isDark ? "#f8fafc" : "#0f172a",
+          bgcolor: isDark ? "rgba(255,255,255,0.04)" : "#f8fafc",
+          fontWeight: 700,
+          textTransform: "none",
+          fontSize: "0.82rem",
+          height: 36,
+          px: 1.75,
+          "&:hover": {
+            bgcolor: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
+            borderColor: "#3b82f6",
+          },
         }}
       >
         Export
@@ -396,34 +322,40 @@ const ActionExportMenu = ({ attendance, onSnack }) => {
         open={open}
         onClose={() => setAnchorEl(null)}
         PaperProps={{
-          sx: { mt: 1, borderRadius: 2.5, minWidth: 190, boxShadow: "0 8px 24px rgba(0,0,0,0.12)" },
+          sx: {
+            mt: 1,
+            borderRadius: "14px",
+            minWidth: 190,
+            bgcolor: isDark ? "#0e1424" : "#ffffff",
+            color: isDark ? "#f8fafc" : "#0f172a",
+            border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "#e2e8f0"}`,
+            boxShadow: isDark ? "0 16px 40px rgba(0,0,0,0.6)" : "0 10px 30px rgba(0,0,0,0.1)",
+          },
         }}
         transformOrigin={{ horizontal: "left", vertical: "bottom" }}
         anchorOrigin={{ horizontal: "left", vertical: "top" }}
       >
-        <Box sx={{ px: 2, pt: 1.5, pb: 0.5 }}>
-          <Typography variant="caption" color="text.secondary" fontWeight={700}
-            sx={{ textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.65rem" }}
-          >
-            Export This Record
+        <Box sx={{ px: 2, pt: 1.25, pb: 0.5 }}>
+          <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 800, textTransform: "uppercase", fontSize: "0.65rem", letterSpacing: 0.5 }}>
+            Export Attendance
           </Typography>
         </Box>
-        <MenuItem onClick={exportCSV} sx={{ py: 1.25 }}>
-          <ListItemIcon><FileDownload fontSize="small" sx={{ color: SUCCESS }} /></ListItemIcon>
-          <ListItemText primary="Export as CSV" primaryTypographyProps={{ variant: "body2", fontWeight: 600 }} />
+        <MenuItem onClick={exportCSV} sx={{ py: 1, fontSize: "0.82rem", fontWeight: 600 }}>
+          <ListItemIcon><FileDownload fontSize="small" sx={{ color: "#10b981" }} /></ListItemIcon>
+          <ListItemText primary="Export as CSV (.csv)" primaryTypographyProps={{ fontSize: "0.82rem", fontWeight: 600 }} />
         </MenuItem>
-        <MenuItem onClick={exportJSON} sx={{ py: 1.25 }}>
-          <ListItemIcon><FileDownload fontSize="small" sx={{ color: PRIMARY }} /></ListItemIcon>
-          <ListItemText primary="Export as JSON" primaryTypographyProps={{ variant: "body2", fontWeight: 600 }} />
+        <MenuItem onClick={exportJSON} sx={{ py: 1, fontSize: "0.82rem", fontWeight: 600 }}>
+          <ListItemIcon><FileDownload fontSize="small" sx={{ color: "#3b82f6" }} /></ListItemIcon>
+          <ListItemText primary="Export as JSON (.json)" primaryTypographyProps={{ fontSize: "0.82rem", fontWeight: 600 }} />
         </MenuItem>
-        <Divider sx={{ my: 0.5 }} />
-        <MenuItem onClick={copyClip} sx={{ py: 1.25 }}>
-          <ListItemIcon><ContentCopy fontSize="small" /></ListItemIcon>
-          <ListItemText primary="Copy to Clipboard" primaryTypographyProps={{ variant: "body2", fontWeight: 600 }} />
+        <Divider sx={{ my: 0.5, borderColor: isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0" }} />
+        <MenuItem onClick={copyClip} sx={{ py: 1, fontSize: "0.82rem", fontWeight: 600 }}>
+          <ListItemIcon><ContentCopy fontSize="small" sx={{ color: isDark ? "#94a3b8" : "#64748b" }} /></ListItemIcon>
+          <ListItemText primary="Copy JSON to Clipboard" primaryTypographyProps={{ fontSize: "0.82rem", fontWeight: 600 }} />
         </MenuItem>
-        <MenuItem onClick={print} sx={{ py: 1.25 }}>
-          <ListItemIcon><Print fontSize="small" /></ListItemIcon>
-          <ListItemText primary="Print" primaryTypographyProps={{ variant: "body2", fontWeight: 600 }} />
+        <MenuItem onClick={print} sx={{ py: 1, fontSize: "0.82rem", fontWeight: 600 }}>
+          <ListItemIcon><Print fontSize="small" sx={{ color: isDark ? "#94a3b8" : "#64748b" }} /></ListItemIcon>
+          <ListItemText primary="Print Preview" primaryTypographyProps={{ fontSize: "0.82rem", fontWeight: 600 }} />
         </MenuItem>
       </Menu>
     </>
@@ -441,11 +373,23 @@ export default function AttendanceDetails({
   onDelete,
 }) {
   const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const { updateAttendance } = useAttendance();
+  const { updateAttendance, markAttendance, deleteAttendance, allowMobilePunchIn } = useAttendance();
+
+  const [currentAttendance, setCurrentAttendance] = useState(attendance);
+  React.useEffect(() => {
+    setCurrentAttendance(attendance);
+  }, [attendance]);
 
   const [editMode, setEditMode] = useState(false);
-  const [editData, setEditData] = useState({ status: "", remarks: "" });
+  const [editData, setEditData] = useState({
+    status: "present",
+    punchInTime: "09:30",
+    punchOutTime: "18:30",
+    workHours: 8,
+    remarks: "",
+  });
   const [editLoad, setEditLoad] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [selPhoto, setSelPhoto] = useState(null);
@@ -454,32 +398,167 @@ export default function AttendanceDetails({
   const showSnack = useCallback((message, severity = "success") =>
     setSnackbar({ open: true, message, severity }), []);
 
-  if (!attendance) return null;
+  if (!currentAttendance) return null;
 
-  const a = attendance;
-  const statusCfg = STATUS_CONFIG[a.status] || STATUS_CONFIG.present;
+  const a = currentAttendance;
+  const normStatus = String(a.status || "present").toLowerCase();
+  const statusCfg = STATUS_CONFIG[normStatus] || STATUS_CONFIG.present;
+
+  const empName =
+    a.user?.name ||
+    (a.user?.firstName ? `${a.user.firstName} ${a.user.lastName || ""}`.trim() : null) ||
+    "Attendance Details";
+  const empAvatarLetter = (empName || "A").charAt(0).toUpperCase();
+  const empPhone = a.user?.phone || a.user?.phoneNumber || "—";
+  const empEmail = a.user?.email || "—";
+  const workHoursDisplay = a.workHoursFormatted || a.workHours || (normStatus === "present" ? "08:00" : "00:00");
+
+  const punchInAddress = resolveAddress(a.punchIn?.address);
+  const punchOutAddress = resolveAddress(a.punchOut?.address);
+  const punchInTimeStr = a.punchIn?.time ? fmtTime(a.punchIn.time) : null;
+  const punchOutTimeStr = a.punchOut?.time ? fmtTime(a.punchOut.time) : null;
+
+  const punchInLat = a.punchIn?.location?.lat || a.punchIn?.latitude;
+  const punchInLng = a.punchIn?.location?.lng || a.punchIn?.longitude;
+  const punchOutLat = a.punchOut?.location?.lat || a.punchOut?.latitude;
+  const punchOutLng = a.punchOut?.location?.lng || a.punchOut?.longitude;
+
   const photos = [...(a.punchIn?.photos || []), ...(a.punchOut?.photos || [])];
 
+  const toTimeString = (dateVal) => {
+    if (!dateVal) return "";
+    const d = new Date(dateVal);
+    if (Number.isNaN(d.getTime())) return "";
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+  };
+
   const handleEditStart = () => {
-    setEditData({ status: a.status || "present", remarks: a.remarks || "" });
+    const curStatus = String(a.status || "present").toLowerCase();
+    const inTime = a.punchIn?.time ? toTimeString(a.punchIn.time) : "09:30";
+    const outTime = a.punchOut?.time ? toTimeString(a.punchOut.time) : (curStatus === "present" ? "18:30" : "");
+    const hrs = a.workHours !== undefined && a.workHours !== null && a.workHours !== "00:00" ? a.workHours : (curStatus === "present" ? 8 : 0);
+
+    setEditData({
+      status: curStatus === "upcoming" ? "present" : curStatus,
+      punchInTime: inTime,
+      punchOutTime: outTime,
+      workHours: hrs,
+      remarks: a.remarks || (curStatus === "absent" ? "Changed from Absent to Present by Admin" : ""),
+    });
     setEditMode(true);
   };
 
   const handleEditSave = async () => {
+    if (editData.status === "punch_in") {
+      await handleAllowMobilePunchIn();
+      return;
+    }
     setEditLoad(true);
     try {
       const id = a._id || a.id;
-      if (!id) { showSnack("Invalid record ID", "error"); return; }
-      const res = await updateAttendance(id, editData);
+      const isSynthetic = !id || String(id).startsWith("rec-");
+      const targetUserId = a.user?._id || a.user?.id || a.userId;
+
+      const baseDate = new Date(a.date || Date.now());
+      let finalPunchIn = null;
+      let finalPunchOut = null;
+
+      if (editData.status === "present" || editData.punchInTime) {
+        const inDate = new Date(baseDate);
+        if (editData.punchInTime && editData.punchInTime.includes(":")) {
+          const [h, m] = editData.punchInTime.split(":").map(Number);
+          inDate.setHours(h, m, 0, 0);
+        } else {
+          inDate.setHours(9, 30, 0, 0);
+        }
+        finalPunchIn = {
+          time: inDate,
+          address: a.punchIn?.address || "Marked Present by Admin",
+        };
+      }
+
+      if (editData.punchOutTime && editData.punchOutTime.includes(":")) {
+        const outDate = new Date(baseDate);
+        const [h, m] = editData.punchOutTime.split(":").map(Number);
+        outDate.setHours(h, m, 0, 0);
+        finalPunchOut = {
+          time: outDate,
+          address: a.punchOut?.address || "Marked Present by Admin",
+        };
+      }
+
+      const calcHours = Number(editData.workHours) || (editData.status === "present" ? 8 : 0);
+
+      const payload = {
+        userId: targetUserId,
+        date: a.date,
+        status: editData.status,
+        workHours: calcHours,
+        remarks: editData.remarks || `Marked ${editData.status} by Admin`,
+        ...(finalPunchIn ? { punchIn: finalPunchIn } : {}),
+        ...(finalPunchOut ? { punchOut: finalPunchOut } : {}),
+      };
+
+      let res;
+      if (isSynthetic) {
+        res = await markAttendance(payload);
+      } else {
+        res = await updateAttendance(id, payload);
+      }
+
       if (res?.success) {
-        showSnack("Attendance updated successfully");
+        showSnack(
+          editData.status === "present"
+            ? "Attendance changed to Present successfully"
+            : "Attendance updated successfully"
+        );
+        const updatedDoc = {
+          ...a,
+          ...payload,
+          ...(res.data || {}),
+          status: editData.status,
+          workHours: calcHours,
+          workHoursFormatted: `${String(Math.floor(calcHours)).padStart(2, "0")}:${String(Math.round((calcHours % 1) * 60)).padStart(2, "0")}`,
+          punchIn: finalPunchIn || res.data?.punchIn || a.punchIn,
+          punchOut: finalPunchOut || res.data?.punchOut || a.punchOut,
+          _id: res.data?._id || id,
+        };
+        setCurrentAttendance(updatedDoc);
         setEditMode(false);
-        if (onEdit) onEdit(res.data);
+        if (onEdit) onEdit(updatedDoc);
       } else {
         showSnack(res?.error || "Update failed", "error");
       }
-    } catch {
-      showSnack("An error occurred", "error");
+    } catch (err) {
+      showSnack(err?.message || "An error occurred during update", "error");
+    } finally {
+      setEditLoad(false);
+    }
+  };
+
+  const handleAllowMobilePunchIn = async () => {
+    setEditLoad(true);
+    try {
+      const id = a._id || a.id;
+      const targetUserId = a.user?._id || a.user?.id || a.userId;
+      
+      const res = await allowMobilePunchIn({
+        userId: targetUserId,
+        attendanceId: id,
+        date: a.date,
+      });
+
+      if (res?.success) {
+        showSnack("Mobile Punch-In unlocked! Notification sent to employee's phone.", "success");
+        onClose();
+        if (onDelete) onDelete(a);
+      } else {
+        showSnack(res?.error || "Failed to enable mobile punch-in", "error");
+      }
+    } catch (err) {
+      showSnack(err?.message || "Failed to enable mobile punch-in", "error");
     } finally {
       setEditLoad(false);
     }
@@ -494,6 +573,21 @@ export default function AttendanceDetails({
     onClose();
   };
 
+  // Color tokens
+  const COLOR = {
+    bg: isDark ? "#060a12" : "#ffffff",
+    card: isDark ? "#0e1424" : "#f8fafc",
+    cardHover: isDark ? "#131b30" : "#f1f5f9",
+    border: isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0",
+    text: isDark ? "#f8fafc" : "#0f172a",
+    textSub: isDark ? "#94a3b8" : "#475569",
+    textMuted: isDark ? "#64748b" : "#94a3b8",
+    blue: "#3b82f6",
+    green: "#10b981",
+    red: "#ef4444",
+    amber: "#f59e0b",
+  };
+
   return (
     <>
       <Dialog
@@ -503,100 +597,539 @@ export default function AttendanceDetails({
         fullWidth
         fullScreen={isMobile}
         PaperProps={{
-          sx: { borderRadius: isMobile ? 0 : 4, overflow: "hidden", maxHeight: isMobile ? "100%" : "92vh" },
+          sx: {
+            borderRadius: isMobile ? 0 : "20px",
+            bgcolor: COLOR.bg,
+            color: COLOR.text,
+            border: `1px solid ${COLOR.border}`,
+            boxShadow: isDark ? "0 28px 70px rgba(0, 0, 0, 0.75)" : "0 20px 50px rgba(0, 0, 0, 0.14)",
+            overflow: "hidden",
+            maxHeight: isMobile ? "100%" : "92vh",
+          },
         }}
         TransitionComponent={isMobile ? Slide : Fade}
         TransitionProps={isMobile ? { direction: "up" } : {}}
         transitionDuration={280}
       >
-        {/* Top accent bar */}
-        <Box sx={{ height: 5, background: `linear-gradient(90deg, ${statusCfg.color}, ${PRIMARY})` }} />
+        {/* Top Accent Gradient Bar */}
+        <Box
+          sx={{
+            height: 4,
+            background: `linear-gradient(90deg, ${statusCfg.color} 0%, #3b82f6 50%, #a855f7 100%)`,
+          }}
+        />
 
-        {/* Header */}
-        <DialogTitle sx={{ bgcolor: PRIMARY, color: "#fff", px: { xs: 2, sm: 3 }, py: { xs: 1.5, sm: 2 } }}>
+        {/* Header Banner */}
+        <DialogTitle
+          sx={{
+            background: "linear-gradient(135deg, #090e1a 0%, #111736 50%, #1f1347 100%)",
+            color: "#ffffff",
+            px: { xs: 2, sm: 3 },
+            py: { xs: 2, sm: 2.25 },
+            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+          }}
+        >
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Stack direction="row" spacing={1.5} alignItems="center">
+            <Stack direction="row" spacing={1.75} alignItems="center">
               <Avatar
                 sx={{
-                  bgcolor: "rgba(255,255,255,.15)", color: "#fff",
-                  width: { xs: 38, sm: 44 }, height: { xs: 38, sm: 44 }, fontWeight: 700,
+                  bgcolor: "#3b82f6",
+                  color: "#ffffff",
+                  width: { xs: 42, sm: 48 },
+                  height: { xs: 42, sm: 48 },
+                  fontWeight: 800,
+                  fontSize: "1.25rem",
+                  border: "2px solid rgba(255,255,255,0.25)",
+                  boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
                 }}
               >
-                {a.user?.name?.charAt(0) || "A"}
+                {empAvatarLetter}
               </Avatar>
               <Box>
-                <Typography variant="h6" fontWeight={800} sx={{ fontSize: { xs: "1rem", sm: "1.15rem" } }}>
-                  {a.user?.name || "Attendance Details"}
+                <Typography variant="h6" fontWeight={800} sx={{ fontSize: { xs: "1.05rem", sm: "1.22rem" }, letterSpacing: "-0.01em", color: "#ffffff" }}>
+                  Attendance Details
                 </Typography>
-                <Typography variant="caption" sx={{ opacity: 0.85 }}>{fmtDate(a.date)}</Typography>
+                <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.75)", fontSize: "0.78rem", display: "block", mt: 0.25 }}>
+                  {fmtDate(a.date)}
+                </Typography>
               </Box>
             </Stack>
-            <Stack direction="row" spacing={0.5} alignItems="center">
+
+            <Stack direction="row" spacing={1} alignItems="center">
               <StatusChip status={a.status || "present"} />
-              {/* ← Export removed from header; moved to Actions */}
-              <IconButton onClick={handleClose} size="small" sx={{ color: "#fff", ml: 0.5 }}>
-                <Close />
+              <IconButton
+                onClick={handleClose}
+                size="small"
+                sx={{
+                  color: "#ffffff",
+                  bgcolor: "rgba(255, 255, 255, 0.08)",
+                  borderRadius: "10px",
+                  p: 0.75,
+                  "&:hover": { bgcolor: "rgba(255, 255, 255, 0.18)" },
+                }}
+              >
+                <Close sx={{ fontSize: 18 }} />
               </IconButton>
             </Stack>
           </Stack>
         </DialogTitle>
 
-        {/* Content */}
-        <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 2.5 } }}>
+        {/* Content Body */}
+        <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2.5, sm: 3 } }}>
           <Stack spacing={2.5}>
-            {/* Summary chips */}
+            
+            {/* ── 3 Summary KPI Cards: Work Hours, Phone, Email ── */}
             <Grid container spacing={1.5}>
-              {[
-                { label: "Work Hours", value: a.workHoursFormatted || "—", color: PRIMARY },
-                { label: "Phone", value: a.user?.phone || "—" },
-                { label: "Email", value: a.user?.email || "—" },
-              ].map((item) => (
-                <Grid item xs={12} sm={4} key={item.label}>
-                  <Paper
-                    elevation={0}
-                    sx={{ p: 1.5, borderRadius: 2.5, bgcolor: alpha(PRIMARY, 0.04), border: `1px solid ${alpha(PRIMARY, 0.1)}` }}
-                  >
-                    <Typography variant="caption" color="text.secondary" fontWeight={600}
-                      sx={{ textTransform: "uppercase", fontSize: "0.65rem", letterSpacing: 0.5 }}
-                    >
-                      {item.label}
+              {/* Work Hours Card */}
+              <Grid item xs={12} sm={4}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    borderRadius: "14px",
+                    bgcolor: COLOR.card,
+                    border: `1px solid ${COLOR.border}`,
+                    transition: "all 0.2s ease",
+                    "&:hover": { bgcolor: COLOR.cardHover },
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                    <Box sx={{ width: 22, height: 22, borderRadius: "6px", bgcolor: alpha(COLOR.blue, 0.12), color: COLOR.blue, display: "grid", placeItems: "center" }}>
+                      <AccessTime sx={{ fontSize: 13 }} />
+                    </Box>
+                    <Typography variant="caption" fontWeight={800} sx={{ color: COLOR.textMuted, textTransform: "uppercase", fontSize: "0.68rem", letterSpacing: "0.05em" }}>
+                      WORK HOURS
                     </Typography>
-                    <Typography variant="body2" fontWeight={700} color={item.color || "text.primary"} noWrap sx={{ mt: 0.25 }}>
-                      {item.value}
+                  </Stack>
+                  <Typography variant="h6" fontWeight={900} sx={{ color: COLOR.blue, pl: 0.2, fontSize: "1.2rem" }}>
+                    {workHoursDisplay}
+                  </Typography>
+                </Paper>
+              </Grid>
+
+              {/* Phone Card */}
+              <Grid item xs={12} sm={4}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    borderRadius: "14px",
+                    bgcolor: COLOR.card,
+                    border: `1px solid ${COLOR.border}`,
+                    transition: "all 0.2s ease",
+                    "&:hover": { bgcolor: COLOR.cardHover },
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                    <Box sx={{ width: 22, height: 22, borderRadius: "6px", bgcolor: "rgba(148, 163, 184, 0.12)", color: COLOR.textSub, display: "grid", placeItems: "center" }}>
+                      <Phone sx={{ fontSize: 13 }} />
+                    </Box>
+                    <Typography variant="caption" fontWeight={800} sx={{ color: COLOR.textMuted, textTransform: "uppercase", fontSize: "0.68rem", letterSpacing: "0.05em" }}>
+                      PHONE
                     </Typography>
-                  </Paper>
-                </Grid>
-              ))}
+                  </Stack>
+                  <Typography variant="body1" fontWeight={800} sx={{ color: COLOR.text, pl: 0.2 }} noWrap>
+                    {empPhone}
+                  </Typography>
+                </Paper>
+              </Grid>
+
+              {/* Email Card */}
+              <Grid item xs={12} sm={4}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    borderRadius: "14px",
+                    bgcolor: COLOR.card,
+                    border: `1px solid ${COLOR.border}`,
+                    transition: "all 0.2s ease",
+                    "&:hover": { bgcolor: COLOR.cardHover },
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                    <Box sx={{ width: 22, height: 22, borderRadius: "6px", bgcolor: "rgba(148, 163, 184, 0.12)", color: COLOR.textSub, display: "grid", placeItems: "center" }}>
+                      <Email sx={{ fontSize: 13 }} />
+                    </Box>
+                    <Typography variant="caption" fontWeight={800} sx={{ color: COLOR.textMuted, textTransform: "uppercase", fontSize: "0.68rem", letterSpacing: "0.05em" }}>
+                      EMAIL
+                    </Typography>
+                  </Stack>
+                  <Typography variant="body1" fontWeight={800} sx={{ color: COLOR.text, pl: 0.2 }} noWrap>
+                    {empEmail}
+                  </Typography>
+                </Paper>
+              </Grid>
             </Grid>
 
-            {/* Edit form */}
+            {/* ── 2 Punch Blocks: Punch In & Punch Out ── */}
+            <Grid container spacing={2}>
+              
+              {/* Punch In Card */}
+              <Grid item xs={12} sm={6}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2.5,
+                    borderRadius: "16px",
+                    bgcolor: isDark ? "rgba(16, 185, 129, 0.05)" : "#f0fdf4",
+                    border: `1px solid ${isDark ? "rgba(16, 185, 129, 0.25)" : "#bbf7d0"}`,
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <Box>
+                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
+                      <Box
+                        sx={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: "12px",
+                          bgcolor: "rgba(16, 185, 129, 0.15)",
+                          color: "#10b981",
+                          display: "grid",
+                          placeItems: "center",
+                        }}
+                      >
+                        <Login sx={{ fontSize: 20 }} />
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" fontWeight={800} sx={{ color: COLOR.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: "0.7rem" }}>
+                          PUNCH IN
+                        </Typography>
+                        <Typography variant="h6" fontWeight={900} sx={{ color: punchInTimeStr ? "#10b981" : COLOR.textMuted, lineHeight: 1.1 }}>
+                          {punchInTimeStr || "Not recorded"}
+                        </Typography>
+                      </Box>
+                    </Stack>
+
+                    {punchInAddress ? (
+                      <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1.5 }}>
+                        <LocationOn sx={{ fontSize: 16, color: COLOR.textMuted, mt: 0.25, flexShrink: 0 }} />
+                        <Typography variant="body2" sx={{ color: COLOR.textSub, fontSize: "0.82rem", lineHeight: 1.45 }}>
+                          {punchInAddress}
+                        </Typography>
+                      </Stack>
+                    ) : (
+                      <Typography variant="caption" sx={{ color: COLOR.textMuted, display: "block", mt: 1 }}>
+                        No punch in location recorded
+                      </Typography>
+                    )}
+                  </Box>
+
+                  {punchInLat && punchInLng && (
+                    <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.7rem", fontFamily: "monospace", mt: 1.5, display: "block" }}>
+                      {Number(punchInLat).toFixed(5)}, {Number(punchInLng).toFixed(5)}
+                    </Typography>
+                  )}
+                </Paper>
+              </Grid>
+
+              {/* Punch Out Card */}
+              <Grid item xs={12} sm={6}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2.5,
+                    borderRadius: "16px",
+                    bgcolor: isDark ? "rgba(245, 158, 11, 0.05)" : "#fffbeb",
+                    border: `1px solid ${isDark ? "rgba(245, 158, 11, 0.25)" : "#fde68a"}`,
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <Box>
+                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
+                      <Box
+                        sx={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: "12px",
+                          bgcolor: "rgba(245, 158, 11, 0.15)",
+                          color: "#f59e0b",
+                          display: "grid",
+                          placeItems: "center",
+                        }}
+                      >
+                        <Logout sx={{ fontSize: 20 }} />
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" fontWeight={800} sx={{ color: COLOR.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: "0.7rem" }}>
+                          PUNCH OUT
+                        </Typography>
+                        <Typography variant="h6" fontWeight={900} sx={{ color: punchOutTimeStr ? "#f59e0b" : COLOR.textMuted, lineHeight: 1.1 }}>
+                          {punchOutTimeStr || (normStatus === "present" && !punchOutTimeStr ? "Ongoing" : "Not punched out")}
+                        </Typography>
+                      </Box>
+                    </Stack>
+
+                    {punchOutAddress ? (
+                      <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1.5 }}>
+                        <LocationOn sx={{ fontSize: 16, color: COLOR.textMuted, mt: 0.25, flexShrink: 0 }} />
+                        <Typography variant="body2" sx={{ color: COLOR.textSub, fontSize: "0.82rem", lineHeight: 1.45 }}>
+                          {punchOutAddress}
+                        </Typography>
+                      </Stack>
+                    ) : (
+                      <Typography variant="caption" sx={{ color: COLOR.textMuted, display: "block", mt: 1 }}>
+                        No punch out location recorded
+                      </Typography>
+                    )}
+                  </Box>
+
+                  {punchOutLat && punchOutLng && (
+                    <Typography variant="caption" sx={{ color: COLOR.textMuted, fontSize: "0.7rem", fontFamily: "monospace", mt: 1.5, display: "block" }}>
+                      {Number(punchOutLat).toFixed(5)}, {Number(punchOutLng).toFixed(5)}
+                    </Typography>
+                  )}
+                </Paper>
+              </Grid>
+            </Grid>
+
+            {/* ── Record Details Section (Record ID, Created, Updated) ── */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                px: 2.5,
+                borderRadius: "16px",
+                bgcolor: COLOR.card,
+                border: `1px solid ${COLOR.border}`,
+              }}
+            >
+              <Stack spacing={1.5}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" fontWeight={800} sx={{ color: COLOR.textMuted, fontSize: "0.72rem", letterSpacing: "0.05em" }}>
+                    RECORD ID
+                  </Typography>
+                  <Typography variant="body2" fontWeight={700} sx={{ color: COLOR.text, fontFamily: "monospace", fontSize: "0.82rem" }}>
+                    {String(a._id || a.id || "—").slice(-10)}
+                  </Typography>
+                </Stack>
+                <Divider sx={{ borderColor: COLOR.border }} />
+
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" fontWeight={800} sx={{ color: COLOR.textMuted, fontSize: "0.72rem", letterSpacing: "0.05em" }}>
+                    CREATED
+                  </Typography>
+                  <Typography variant="body2" fontWeight={700} sx={{ color: COLOR.text, fontSize: "0.82rem" }}>
+                    {a.createdAt ? format(new Date(a.createdAt), "dd MMM yyyy, hh:mm a") : fmtDate(a.date)}
+                  </Typography>
+                </Stack>
+                <Divider sx={{ borderColor: COLOR.border }} />
+
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" fontWeight={800} sx={{ color: COLOR.textMuted, fontSize: "0.72rem", letterSpacing: "0.05em" }}>
+                    LAST UPDATED
+                  </Typography>
+                  <Typography variant="body2" fontWeight={700} sx={{ color: COLOR.text, fontSize: "0.82rem" }}>
+                    {a.updatedAt ? format(new Date(a.updatedAt), "dd MMM yyyy, hh:mm a") : fmtDate(a.date)}
+                  </Typography>
+                </Stack>
+              </Stack>
+            </Paper>
+
+            {/* Remarks if any */}
+            {a.remarks && !editMode && (
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  borderRadius: "14px",
+                  bgcolor: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
+                  border: `1px solid ${COLOR.border}`,
+                }}
+              >
+                <Typography variant="caption" fontWeight={800} sx={{ color: COLOR.textMuted, textTransform: "uppercase", fontSize: "0.68rem", display: "block", mb: 0.5 }}>
+                  Remarks
+                </Typography>
+                <Typography variant="body2" sx={{ color: COLOR.text, fontSize: "0.85rem" }}>
+                  {a.remarks}
+                </Typography>
+              </Paper>
+            )}
+
+            {/* Photos if any */}
+            {photos.length > 0 && (
+              <Box>
+                <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1.5, color: COLOR.text }}>
+                  Photos ({photos.length})
+                </Typography>
+                <Stack direction="row" spacing={1.5} sx={{ overflowX: "auto", pb: 0.5 }}>
+                  {photos.map((p, i) => (
+                    <Box
+                      key={i}
+                      onClick={() => { setSelPhoto(p); setPhotoOpen(true); }}
+                      sx={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: "12px",
+                        overflow: "hidden",
+                        border: `2px solid ${COLOR.border}`,
+                        flexShrink: 0,
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                        "&:hover": { transform: "scale(1.06)", borderColor: COLOR.blue },
+                      }}
+                    >
+                      <img src={toBackendAssetUrl(p?.url || p?.path || p?.filename)} alt={`punch-${i}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            )}
+
+            {/* Edit Mode Form */}
             {editMode && (
               <Paper
                 elevation={0}
-                sx={{ p: 2, borderRadius: 3, border: `1px solid ${alpha(WARNING, 0.25)}`, bgcolor: alpha(WARNING, 0.04) }}
+                sx={{
+                  p: 2.5,
+                  borderRadius: "16px",
+                  border: `1px solid ${editData.status === "present" ? "rgba(16, 185, 129, 0.4)" : "rgba(245, 158, 11, 0.4)"}`,
+                  bgcolor: isDark
+                    ? (editData.status === "present" ? "rgba(16, 185, 129, 0.06)" : "rgba(245, 158, 11, 0.05)")
+                    : (editData.status === "present" ? "#f0fdf4" : "#fffbeb"),
+                }}
               >
-                <Typography variant="subtitle2" fontWeight={700} color={WARNING} sx={{ mb: 2 }}>
-                  Edit Attendance
-                </Typography>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: editData.status === "present" ? "#10b981" : "#f59e0b" }} />
+                  <Typography variant="subtitle2" fontWeight={800} sx={{ color: editData.status === "present" ? "#10b981" : "#f59e0b" }}>
+                    {normStatus === "absent" && editData.status === "present"
+                      ? "Admin Override: Change Absent to Present"
+                      : "Edit Attendance Record"}
+                  </Typography>
+                </Stack>
+
+                {normStatus === "absent" && editData.status === "present" && (
+                  <Alert severity="success" sx={{ mb: 2, borderRadius: "10px", fontSize: "0.8rem", fontWeight: 600 }}>
+                    Changing status to Present will mark this employee as Present, clear the reminder timeout, and credit work hours.
+                  </Alert>
+                )}
+
+                {editData.status === "punch_in" && (
+                  <Alert
+                    severity="success"
+                    icon={<TouchApp sx={{ fontSize: 20 }} />}
+                    action={
+                      <Button
+                        color="inherit"
+                        size="small"
+                        onClick={handleAllowMobilePunchIn}
+                        disabled={editLoad}
+                        sx={{ fontWeight: 800, textTransform: "none", bgcolor: "rgba(255,255,255,0.2)", px: 1.5 }}
+                      >
+                        Punch In Now
+                      </Button>
+                    }
+                    sx={{ mb: 2, borderRadius: "10px", fontSize: "0.82rem", fontWeight: 600 }}
+                  >
+                    Selecting <strong>Punch In</strong> will unlock the green &quot;Punch In&quot; button on the employee&apos;s phone so they can tap Punch In manually with live GPS satellite tracking.
+                  </Alert>
+                )}
+
                 <Stack spacing={2}>
                   <FormControl fullWidth size="small">
-                    <InputLabel>Status</InputLabel>
+                    <InputLabel sx={{ color: COLOR.textMuted }}>Status</InputLabel>
                     <Select
                       value={editData.status}
-                      onChange={(e) => setEditData((p) => ({ ...p, status: e.target.value }))}
+                      onChange={(e) => {
+                        const nextStatus = e.target.value;
+                        setEditData((p) => ({
+                          ...p,
+                          status: nextStatus,
+                          workHours: nextStatus === "present" ? 8 : nextStatus === "half-day" ? 4 : 0,
+                        }));
+                      }}
                       label="Status"
-                      sx={{ borderRadius: 2 }}
+                      sx={{
+                        borderRadius: "10px",
+                        bgcolor: COLOR.card,
+                        color: COLOR.text,
+                        "& .MuiOutlinedInput-notchedOutline": { borderColor: COLOR.border },
+                      }}
                     >
-                      {Object.entries(STATUS_CONFIG).map(([k, v]) => (
+                      {Object.entries(STATUS_CONFIG).filter(([k]) => k !== "upcoming").map(([k, v]) => (
                         <MenuItem key={k} value={k}>
                           <Stack direction="row" spacing={1} alignItems="center">
                             <Box sx={{ color: v.color }}>{v.icon}</Box>
-                            <span>{v.label}</span>
+                            <span style={{ fontWeight: 600 }}>{v.label}</span>
                           </Stack>
                         </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
+
+                  {/* Punch In / Out / Work Hours inputs for Present / Late / Half-Day */}
+                  {["present", "late", "half-day"].includes(editData.status) && (
+                    <Grid container spacing={1.5}>
+                      <Grid item xs={12} sm={4}>
+                        <TextField
+                          size="small"
+                          label="Punch In Time"
+                          type="time"
+                          fullWidth
+                          InputLabelProps={{ shrink: true }}
+                          value={editData.punchInTime}
+                          onChange={(e) => setEditData((p) => ({ ...p, punchInTime: e.target.value }))}
+                          sx={{
+                            bgcolor: COLOR.card,
+                            "& .MuiOutlinedInput-root": {
+                              borderRadius: "10px",
+                              color: COLOR.text,
+                              "& fieldset": { borderColor: COLOR.border },
+                            },
+                            "& .MuiInputLabel-root": { color: COLOR.textMuted },
+                          }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <TextField
+                          size="small"
+                          label="Punch Out Time"
+                          type="time"
+                          fullWidth
+                          InputLabelProps={{ shrink: true }}
+                          value={editData.punchOutTime}
+                          onChange={(e) => setEditData((p) => ({ ...p, punchOutTime: e.target.value }))}
+                          sx={{
+                            bgcolor: COLOR.card,
+                            "& .MuiOutlinedInput-root": {
+                              borderRadius: "10px",
+                              color: COLOR.text,
+                              "& fieldset": { borderColor: COLOR.border },
+                            },
+                            "& .MuiInputLabel-root": { color: COLOR.textMuted },
+                          }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <TextField
+                          size="small"
+                          label="Work Hours"
+                          type="number"
+                          fullWidth
+                          inputProps={{ min: 0, max: 24, step: 0.5 }}
+                          value={editData.workHours}
+                          onChange={(e) => setEditData((p) => ({ ...p, workHours: e.target.value }))}
+                          sx={{
+                            bgcolor: COLOR.card,
+                            "& .MuiOutlinedInput-root": {
+                              borderRadius: "10px",
+                              color: COLOR.text,
+                              "& fieldset": { borderColor: COLOR.border },
+                            },
+                            "& .MuiInputLabel-root": { color: COLOR.textMuted },
+                          }}
+                        />
+                      </Grid>
+                    </Grid>
+                  )}
+
                   <TextField
                     size="small"
                     label="Remarks"
@@ -607,143 +1140,160 @@ export default function AttendanceDetails({
                     onChange={(e) => setEditData((p) => ({ ...p, remarks: e.target.value }))}
                     inputProps={{ maxLength: 250 }}
                     helperText={`${editData.remarks.length}/250`}
-                    FormHelperTextProps={{ sx: { textAlign: "right" } }}
-                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+                    FormHelperTextProps={{ sx: { textAlign: "right", color: COLOR.textMuted } }}
+                    sx={{
+                      bgcolor: COLOR.card,
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: "10px",
+                        color: COLOR.text,
+                        "& fieldset": { borderColor: COLOR.border },
+                      },
+                      "& .MuiInputLabel-root": { color: COLOR.textMuted },
+                    }}
                   />
                 </Stack>
               </Paper>
             )}
 
-            {/* Punch blocks */}
-            <Grid container spacing={1.5}>
-              <Grid item xs={12} sm={6}><PunchBlock type="in" data={a.punchIn} /></Grid>
-              <Grid item xs={12} sm={6}><PunchBlock type="out" data={a.punchOut} /></Grid>
-            </Grid>
-
-            {/* Remarks */}
-            {a.remarks && !editMode && (
-              <Paper
-                elevation={0}
-                sx={{ p: 2, borderRadius: 2.5, bgcolor: alpha(PRIMARY, 0.04), border: `1px solid ${alpha(PRIMARY, 0.1)}` }}
-              >
-                <Typography variant="caption" color="text.secondary" fontWeight={600}
-                  sx={{ textTransform: "uppercase", fontSize: "0.65rem", letterSpacing: 0.5, display: "block", mb: 0.5 }}
-                >
-                  Remarks
-                </Typography>
-                <Typography variant="body2">{a.remarks}</Typography>
-              </Paper>
-            )}
-
-            {/* Metadata */}
-            <Paper
-              elevation={0}
-              sx={{ p: 2, borderRadius: 2.5, bgcolor: alpha(PRIMARY, 0.025), border: `1px solid ${alpha(PRIMARY, 0.08)}` }}
-            >
-              <InfoRow label="Record ID" value={(a._id || a.id || "—").slice(-10)} />
-              <InfoRow label="Created" value={a.createdAt ? format(new Date(a.createdAt), "dd MMM yyyy, hh:mm a") : "—"} />
-              <InfoRow label="Last Updated" value={a.updatedAt ? format(new Date(a.updatedAt), "dd MMM yyyy, hh:mm a") : "—"} />
-            </Paper>
-
-            {/* Photos */}
-            {photos.length > 0 && (
-              <Box>
-                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
-                  Photos ({photos.length})
-                </Typography>
-                <Stack direction="row" spacing={1.5} sx={{ overflowX: "auto", pb: 0.5 }}>
-                  {photos.map((p, i) => (
-                    <Box
-                      key={i}
-                      onClick={() => { setSelPhoto(p); setPhotoOpen(true); }}
-                      sx={{
-                        width: 80, height: 80, borderRadius: 2, overflow: "hidden",
-                        border: `2px solid ${alpha(PRIMARY, 0.2)}`, flexShrink: 0, cursor: "pointer",
-                        transition: "transform .2s",
-                        "&:hover": { transform: "scale(1.06)", borderColor: PRIMARY },
-                      }}
-                    >
-                      <img src={toBackendAssetUrl(p?.url || p?.path || p?.filename)} alt={`photo-${i}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    </Box>
-                  ))}
-                </Stack>
-              </Box>
-            )}
           </Stack>
         </DialogContent>
 
-        {/* ─── Actions (Export always shown; Edit/Delete conditional) ─────── */}
+        {/* Dialog Actions Bar */}
         <DialogActions
           sx={{
             px: { xs: 2, sm: 3 },
-            py: { xs: 2, sm: 2 },
-            borderTop: `1px solid ${alpha(PRIMARY, 0.08)}`,
+            py: 2,
+            borderTop: `1px solid ${COLOR.border}`,
+            bgcolor: isDark ? "#090d18" : "#f8fafc",
             flexWrap: "wrap",
-            gap: 1,
+            gap: 1.5,
             justifyContent: "space-between",
           }}
         >
           {editMode ? (
-            /* ── Edit mode actions ── */
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ width: "100%" }}>
+            <Stack direction="row" spacing={1.5} sx={{ width: "100%" }} justifyContent="flex-end">
               <Button
-                fullWidth={isMobile}
                 variant="outlined"
                 startIcon={<Cancel />}
                 onClick={() => setEditMode(false)}
                 disabled={editLoad}
-                sx={{ borderRadius: 2, borderColor: alpha(PRIMARY, 0.3), color: PRIMARY }}
+                sx={{
+                  borderRadius: "10px",
+                  borderColor: COLOR.border,
+                  color: COLOR.text,
+                  fontWeight: 700,
+                  textTransform: "none",
+                }}
               >
                 Cancel
               </Button>
               <Button
-                fullWidth={isMobile}
                 variant="contained"
                 startIcon={editLoad ? <CircularProgress size={16} color="inherit" /> : <Save />}
                 onClick={handleEditSave}
                 disabled={editLoad}
-                sx={{ borderRadius: 2, bgcolor: PRIMARY, "&:hover": { bgcolor: SECONDARY } }}
+                sx={{
+                  borderRadius: "10px",
+                  bgcolor: COLOR.blue,
+                  fontWeight: 700,
+                  textTransform: "none",
+                  "&:hover": { bgcolor: "#2563eb" },
+                }}
               >
                 {editLoad ? "Saving…" : "Save Changes"}
               </Button>
             </Stack>
           ) : (
             <>
-              {/* Left group: Export + Close */}
-              <Stack direction="row" spacing={1} flexWrap="wrap">
-                {/* Export button with dropdown — always visible */}
-                <ActionExportMenu attendance={a} onSnack={showSnack} />
+              {/* Left group: Export and Close */}
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <ActionExportMenu attendance={a} onSnack={showSnack} isDark={isDark} />
                 <Button
                   variant="outlined"
                   onClick={handleClose}
-                  sx={{ borderRadius: 2, borderColor: alpha(PRIMARY, 0.3), color: PRIMARY }}
+                  sx={{
+                    borderRadius: "10px",
+                    borderColor: COLOR.border,
+                    color: COLOR.text,
+                    fontWeight: 700,
+                    textTransform: "none",
+                    fontSize: "0.82rem",
+                    height: 36,
+                    px: 2,
+                    "&:hover": { bgcolor: isDark ? "rgba(255,255,255,0.06)" : "#f1f5f9" },
+                  }}
                 >
                   Close
                 </Button>
               </Stack>
 
-              {/* Right group: Edit + Delete */}
-              <Stack direction="row" spacing={1} flexWrap="wrap">
+              {/* Right group: Allow Mobile Punch In, Edit, Delete if permitted */}
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                {canEdit && normStatus === "absent" && (
+                  <Tooltip title="Unlock Punch In on the employee's phone so they can tap Punch In with live GPS location" arrow>
+                    <Button
+                      variant="contained"
+                      startIcon={<TouchApp sx={{ fontSize: 17 }} />}
+                      onClick={handleAllowMobilePunchIn}
+                      disabled={editLoad}
+                      sx={{
+                        borderRadius: "10px",
+                        bgcolor: "#10b981",
+                        color: "#fff",
+                        fontWeight: 800,
+                        textTransform: "none",
+                        fontSize: "0.82rem",
+                        height: 36,
+                        px: 2,
+                        boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)",
+                        "&:hover": {
+                          bgcolor: "#059669",
+                        },
+                      }}
+                    >
+                      {editLoad ? "Enabling..." : "Allow Mobile Punch-In"}
+                    </Button>
+                  </Tooltip>
+                )}
                 {canEdit && (
                   <Button
                     variant="outlined"
-                    startIcon={<Edit />}
+                    startIcon={<Edit sx={{ fontSize: 16 }} />}
                     onClick={handleEditStart}
                     sx={{
-                      borderRadius: 2, borderColor: WARNING, color: WARNING,
-                      "&:hover": { bgcolor: alpha(WARNING, 0.06) },
+                      borderRadius: "10px",
+                      borderColor: "rgba(245, 158, 11, 0.4)",
+                      bgcolor: "transparent",
+                      color: "#f59e0b",
+                      fontWeight: 800,
+                      textTransform: "none",
+                      fontSize: "0.82rem",
+                      height: 36,
+                      px: 2,
+                      "&:hover": {
+                        bgcolor: "rgba(245, 158, 11, 0.1)",
+                        borderColor: "#f59e0b",
+                      },
                     }}
                   >
-                    Edit
+                    {normStatus === "absent" ? "Manual Edit" : "Edit"}
                   </Button>
                 )}
                 {canDelete && (
                   <Button
                     variant="contained"
                     color="error"
-                    startIcon={<Delete />}
+                    startIcon={<Delete sx={{ fontSize: 16 }} />}
                     onClick={handleDelete}
-                    sx={{ borderRadius: 2 }}
+                    sx={{
+                      borderRadius: "10px",
+                      fontWeight: 700,
+                      textTransform: "none",
+                      fontSize: "0.82rem",
+                      height: 36,
+                      bgcolor: "#dc2626",
+                      "&:hover": { bgcolor: "#b91c1c" },
+                    }}
                   >
                     Delete
                   </Button>
@@ -754,47 +1304,36 @@ export default function AttendanceDetails({
         </DialogActions>
       </Dialog>
 
-      {/* Photo lightbox */}
+      {/* Photo Lightbox */}
       <Dialog
         open={photoOpen}
         onClose={() => setPhotoOpen(false)}
         maxWidth="lg"
         fullScreen={isMobile}
-        PaperProps={{ sx: { borderRadius: isMobile ? 0 : 3, bgcolor: "#000" } }}
+        PaperProps={{ sx: { borderRadius: isMobile ? 0 : 3, bgcolor: "#000000" } }}
       >
         <IconButton
           onClick={() => setPhotoOpen(false)}
-          sx={{ position: "absolute", top: 8, right: 8, bgcolor: "rgba(0,0,0,.5)", color: "#fff", zIndex: 10 }}
+          sx={{ position: "absolute", top: 12, right: 12, bgcolor: "rgba(0,0,0,0.6)", color: "#ffffff", zIndex: 10 }}
         >
           <Close />
         </IconButton>
         {selPhoto?.url && (
-          <img src={selPhoto.url} alt="attendance" style={{ width: "100%", maxHeight: "92vh", objectFit: "contain" }} />
+          <img src={selPhoto.url} alt="attendance" style={{ width: "100%", maxHeight: "90vh", objectFit: "contain" }} />
         )}
       </Dialog>
 
-      {/* Snackbar */}
+      {/* Snackbar feedback */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={3000}
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: isMobile ? "top" : "bottom", horizontal: isMobile ? "center" : "right" }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
       >
-        <Alert severity={snackbar.severity} variant="filled" sx={{ borderRadius: 2, color: "#fff", fontWeight: 600 }}>
+        <Alert severity={snackbar.severity} variant="filled" sx={{ borderRadius: "10px", color: "#ffffff", fontWeight: 700 }}>
           {snackbar.message}
         </Alert>
       </Snackbar>
-      {/* ✅ Missed punch-out alert */}
-{attendance?.missedPunchOut && (
-  <Alert
-    severity="warning"
-    sx={{ borderRadius: 2, mb: 2, fontWeight: 600 }}
-  >
-    {attendance.punchOutMessage || "User did not punch out this day"}
-    {attendance.punchOut?.isAutoPunchOut &&
-      " — System auto punched out after 12 hours."}
-  </Alert>
-)}
     </>
   );
 }

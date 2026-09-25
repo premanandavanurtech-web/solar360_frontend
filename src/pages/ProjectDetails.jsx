@@ -3465,9 +3465,17 @@ function ProjectDetails() {
 
     formDataToSend.append("data", JSON.stringify(jsonData));
 
+    const targetLeadId = project?._id || project?.id || project?.leadId;
+    if (!targetLeadId) {
+      setSnackbar({ open: true, message: "Project / Lead ID is missing. Please refresh the page.", severity: "error" });
+      setUploadingSlotKey("");
+      setPendingUploadSlot("");
+      return;
+    }
+
     try {
       setUploadingSlotKey(slotKey);
-      const response = await fetchAPI(`/lead/upload/${getValidLeadId(project)}/upload-documents`, {
+      const response = await fetchAPI(`/lead/upload/${targetLeadId}/upload-documents`, {
         method: "PUT",
         body: formDataToSend,
       });
