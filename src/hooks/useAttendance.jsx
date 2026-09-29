@@ -321,7 +321,7 @@ export const useAttendance = () => {
 
   // ── allowMobilePunchIn (Admin allows user to punch in with GPS & sends push notification) ──
   const allowMobilePunchIn = useCallback(
-    async ({ userId, attendanceId, date }) => {
+    async ({ userId, attendanceId, date, email, phone }) => {
       setLoading(true);
       setError(null);
       setSuccess(null);
@@ -329,7 +329,7 @@ export const useAttendance = () => {
         const res = await fetchAPI('/attendance/allow-punch-in', {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, attendanceId, date }),
+          body: JSON.stringify({ userId, attendanceId, date, email, phone }),
         });
         if (res?.success) {
           setSuccess(res.message || "Mobile Punch-In unlocked and notification sent!");

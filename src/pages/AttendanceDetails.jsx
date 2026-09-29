@@ -542,12 +542,16 @@ export default function AttendanceDetails({
     setEditLoad(true);
     try {
       const id = a._id || a.id;
-      const targetUserId = a.user?._id || a.user?.id || a.userId;
+      const targetUserId = a.user?._id || a.user?.id || a.userId || (typeof a.user === 'string' ? a.user : null);
+      const email = a.user?.email || a.email;
+      const phone = a.user?.phone || a.phone;
       
       const res = await allowMobilePunchIn({
         userId: targetUserId,
         attendanceId: id,
         date: a.date,
+        email,
+        phone,
       });
 
       if (res?.success) {
