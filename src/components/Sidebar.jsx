@@ -490,7 +490,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         }}
       >
         <Box
-          component="img" src={currentLogo} alt="Myra Enterprise Pvt.Ltd."
+          component="img" src={currentLogo} alt="Connect 360"
           onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = currentLogo; }}
           sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.3 }}
         />
@@ -499,7 +499,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         <Box sx={{ overflow: "hidden" }}>
           <Typography variant="subtitle1" color={textPri} fontWeight={800}
             sx={{ lineHeight: 1.2, letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>
-            Myra Enterprise Pvt.Ltd.
+            Connect 360
           </Typography>
         </Box>
       )}
@@ -524,14 +524,14 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
           border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : borderCol}`,
           boxShadow: isDark ? "0 6px 16px rgba(0,0,0,0.4)" : "0 6px 16px rgba(30,64,175,0.14)",
         }}>
-          <Box component="img" src={currentLogo} alt="Myra Enterprise Pvt.Ltd."
+          <Box component="img" src={currentLogo} alt="Connect 360"
             onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = currentLogo; }}
             sx={{ height: "85%", width: "auto", maxWidth: "100%", objectFit: "contain" }}
           />
         </Box>
         <Box>
           <Typography variant="subtitle1" color={textPri} fontWeight={800} sx={{ lineHeight: 1.2 }}>
-            Myra Enterprise Pvt.Ltd.
+            Connect 360
           </Typography>
         </Box>
       </Box>
