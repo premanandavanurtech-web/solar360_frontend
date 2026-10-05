@@ -93,7 +93,16 @@ const SHADOW_LG = "0 20px 48px rgba(11, 18, 32, 0.14)";
 const RADIUS = "14px";
 const RADIUS_SM = "10px";
 
-const PROJECT_STAGES = [
+const getIsDark = () => {
+  if (typeof window === "undefined") return false;
+  return (
+    document.documentElement.getAttribute("data-theme") === "dark" ||
+    document.body.classList.contains("dark") ||
+    localStorage.getItem("theme") === "dark"
+  );
+};
+
+const ALL_PROJECT_STAGES = [
   { key: "lead_converted", label: "Lead Converted", icon: Workspaces },
   { key: "registration", label: "Registration", icon: FactCheck },
   { key: "document", label: "Document", icon: DescriptionOutlined },
@@ -103,15 +112,41 @@ const PROJECT_STAGES = [
   { key: "installation", label: "Installation", icon: Bolt },
 ];
 
-const ACTION_STAGES = PROJECT_STAGES.filter((stage) => stage.key !== "lead_converted");
+const isBankLoanPayment = (paymentType) => {
+  if (!paymentType) return true;
+  const normalized = String(paymentType).trim().toLowerCase();
+  return normalized === "bank loan" || normalized === "bankloan" || normalized === "loan";
+};
 
-// The Summary tab is a read-only overview, not an actual project stage,
-// so it lives alongside ACTION_STAGES only for tab navigation purposes.
+const getProjectStages = (paymentType) => {
+  if (!isBankLoanPayment(paymentType)) {
+    return ALL_PROJECT_STAGES.filter((stage) => stage.key !== "loan_pending");
+  }
+  return ALL_PROJECT_STAGES;
+};
+
+const getActionStages = (paymentType) => {
+  return getProjectStages(paymentType).filter((stage) => stage.key !== "lead_converted");
+};
+
+const getWorkflowTabs = (paymentType) => [
+  { key: "summary", label: "Summary", icon: Summarize },
+  ...getActionStages(paymentType),
+];
+
+const getStrictWorkflowStages = (paymentType) => {
+  if (!isBankLoanPayment(paymentType)) {
+    return ["registration", "document", "payment", "disbursement", "installation"];
+  }
+  return ["registration", "document", "payment", "loan_pending", "disbursement", "installation"];
+};
+
+const PROJECT_STAGES = ALL_PROJECT_STAGES;
+const ACTION_STAGES = PROJECT_STAGES.filter((stage) => stage.key !== "lead_converted");
 const WORKFLOW_TABS = [
   { key: "summary", label: "Summary", icon: Summarize },
   ...ACTION_STAGES,
 ];
-
 const STRICT_WORKFLOW_STAGES = [
   "registration",
   "document",
@@ -287,14 +322,19 @@ const hasValue = (value) => value !== undefined && value !== null && value !== "
 
 const formatOptionalMoney = (value) => (hasValue(value) ? formatMoney(value) : "Not available");
 
-const getValidLeadId = (proj) => {
-  if (!proj) return "";
-  if (proj.source === "installerWorksheet") {
-    return String(proj.worksheetProjectId || proj.worksheetId || "");
+const getValidLeadId = (proj, fallbackId = "") => {
+  if (proj) {
+    if (proj.source === "installerWorksheet") {
+      const wsId = proj.worksheetProjectId || proj.worksheetId || proj._id || proj.id || proj.leadId;
+      if (wsId) return String(wsId);
+    }
+    if (proj._id) return String(proj._id);
+    if (proj.id) return String(proj.id);
+    if (proj.leadId) return String(proj.leadId);
+    if (proj.lead?._id) return String(proj.lead._id);
+    if (proj.lead?.id) return String(proj.lead.id);
   }
-  if (proj.leadId) return String(proj.leadId);
-  if (proj._id) return String(proj._id);
-  if (proj.id) return String(proj.id);
+  if (fallbackId) return String(fallbackId);
   return "";
 };
 
@@ -352,7 +392,7 @@ const isStrictWorkflowStageComplete = (project, stageKey) => {
     );
   }
   if (stageKey === "loan_pending") {
-    if (project.paymentType === "Cash") return true;
+    if (!isBankLoanPayment(project.paymentType)) return true;
     return isCompletedStatus(project.bankAtPendingStatus);
   }
   if (stageKey === "disbursement") {
@@ -365,36 +405,17 @@ const isStrictWorkflowStageComplete = (project, stageKey) => {
   return false;
 };
 
-const getStrictWorkflowLock = (project, stageKey) => {
-  if (stageKey === "summary" || !STRICT_WORKFLOW_STAGES.includes(stageKey)) {
-    return { locked: false, message: "" };
-  }
-
-  const stagePosition = STRICT_WORKFLOW_STAGES.indexOf(stageKey);
-  for (let index = 0; index < stagePosition; index += 1) {
-    const previousKey = STRICT_WORKFLOW_STAGES[index];
-    if (project?.paymentType === "Cash" && previousKey === "loan_pending") {
-      continue;
-    }
-    if (!isStrictWorkflowStageComplete(project, previousKey)) {
-      const previousStage = getStageMeta(previousKey);
-      return {
-        locked: true,
-        blockerKey: previousKey,
-        message: `Complete ${previousStage.label} before opening ${getStageMeta(stageKey).label}.`,
-      };
-    }
-  }
-
+const getStrictWorkflowLock = () => {
   return { locked: false, message: "" };
 };
 
 const getFirstAvailableWorkflowStage = (project) => {
-  const firstIncomplete = STRICT_WORKFLOW_STAGES.find((stageKey) => !isStrictWorkflowStageComplete(project, stageKey));
-  return firstIncomplete || STRICT_WORKFLOW_STAGES[STRICT_WORKFLOW_STAGES.length - 1];
+  const stages = getStrictWorkflowStages(project?.paymentType);
+  const firstIncomplete = stages.find((stageKey) => !isStrictWorkflowStageComplete(project, stageKey));
+  return firstIncomplete || stages[stages.length - 1];
 };
 
-const getStageMeta = (key) => PROJECT_STAGES.find((stage) => stage.key === key) || PROJECT_STAGES[0];
+const getStageMeta = (key) => ALL_PROJECT_STAGES.find((stage) => stage.key === key) || ALL_PROJECT_STAGES[0];
 
 const formatInputDate = (value) => {
   if (!value) return "";
@@ -1893,6 +1914,8 @@ const PaymentWorkspace = ({
   readOnly = false,
   onEdit,
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const paymentType = formData.paymentType || "Bank Loan";
   const isCash = paymentType === "Cash";
   const isBankLoan = paymentType === "Bank Loan";
@@ -2068,7 +2091,7 @@ const PaymentWorkspace = ({
   );
 };
 
-const workflowStatusHeader = (Icon, title, customerName, onCancel) => (
+const workflowStatusHeader = (Icon, title, customerName, onCancel, isDark = getIsDark()) => (
   <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2.5, bgcolor: alpha(BRAND, 0.04), borderBottom: `1px solid ${BORDER}` }}>
     <Stack direction="row" spacing={1.75} alignItems="center">
       <Box sx={{ width: 46, height: 46, borderRadius: "13px", bgcolor: alpha(BRAND, 0.12), color: BRAND, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2121,6 +2144,8 @@ const InstallationWorkspace = ({
   readOnly = false,
   onEdit,
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const currentInstallation =
     INSTALLATION_STATUS_OPTIONS.find((status) => status.value === project?.installationStatus)?.label ||
     formatStatusLabel(project?.installationStatus);
@@ -2244,6 +2269,8 @@ const DisbursementWorkspace = ({
   readOnly = false,
   onEdit,
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const currentDisbursement =
     DISBURSEMENT_STATUS_OPTIONS.find((status) => status.value === project?.disbursementStatus)?.label ||
     formatStatusLabel(project?.disbursementStatus);
@@ -2403,6 +2430,8 @@ const LoanPendingWorkspace = ({
   readOnly = false,
   onEdit,
 }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const currentBank =
     BANK_STATUS_OPTIONS.find((status) => status.value === project?.bankAtPendingStatus)?.label ||
     formatStatusLabel(project?.bankAtPendingStatus);
@@ -2668,6 +2697,25 @@ function ProjectDetails() {
   const registrationReadOnly = isStrictWorkflowStageComplete(project, "registration") && !registrationEditMode;
   const documentSlots = useMemo(() => getDocumentSlots(project), [project]);
   const firstAvailableWorkflowStage = useMemo(() => getFirstAvailableWorkflowStage(project), [project]);
+  const activeProjectStages = useMemo(
+    () => getProjectStages(project?.paymentType),
+    [project?.paymentType]
+  );
+  const activeActionStages = useMemo(
+    () => getActionStages(project?.paymentType),
+    [project?.paymentType]
+  );
+  const activeWorkflowTabs = useMemo(
+    () => getWorkflowTabs(project?.paymentType),
+    [project?.paymentType]
+  );
+
+  useEffect(() => {
+    if (!isBankLoanPayment(project?.paymentType) && selectedWorkflowStage === "loan_pending") {
+      setSelectedWorkflowStage("disbursement");
+    }
+  }, [project?.paymentType, selectedWorkflowStage]);
+
   const selectedWorkflowLock = useMemo(
     () => getStrictWorkflowLock(project, selectedWorkflowStage),
     [project, selectedWorkflowStage],
@@ -2700,7 +2748,7 @@ function ProjectDetails() {
     chequeNumber: source?.chequeNumber || "",
     chequeDate: formatInputDate(source?.chequeDate),
     loanNotes: source?.loanNotes || "",
-    status: source?.paymentType === "Cash" ? "Disbursement" : source?.status || "Bank Loan Apply",
+    status: isBankLoanPayment(source?.paymentType) ? (source?.status || "Bank Loan Apply") : "Disbursement",
   }), []);
 
   const getInstallationForm = useCallback((source) => ({
@@ -2752,15 +2800,15 @@ function ProjectDetails() {
 
   const completedStageCount = useMemo(() => {
     if (!project) return 0;
-    return PROJECT_STAGES.reduce((count, stage) => {
+    return activeProjectStages.reduce((count, stage) => {
       if (stage.key === "lead_converted") {
         return project.projectConvertedAt || project.projectCode ? count + 1 : count;
       }
       return isCompletedStatus(actionState[stage.key]) ? count + 1 : count;
     }, 0);
-  }, [actionState, project]);
+  }, [actionState, activeProjectStages, project]);
 
-  const progress = Math.round((completedStageCount / PROJECT_STAGES.length) * 100);
+  const progress = Math.round((completedStageCount / activeProjectStages.length) * 100);
 
   const stageState = useCallback(
     (stageKey) => {
@@ -2775,20 +2823,9 @@ function ProjectDetails() {
   );
 
   const selectWorkflowStage = useCallback((stageKey) => {
-    const lock = getStrictWorkflowLock(project, stageKey);
-    if (lock.locked) {
-      setSnackbar({ open: true, message: lock.message, severity: "warning" });
-      return false;
-    }
     setSelectedWorkflowStage(stageKey);
     return true;
-  }, [project]);
-
-  useEffect(() => {
-    if (selectedWorkflowLock.locked) {
-      setSelectedWorkflowStage(firstAvailableWorkflowStage || "summary");
-    }
-  }, [firstAvailableWorkflowStage, selectedWorkflowLock.locked]);
+  }, []);
 
   const openStagePage = (stageKey) => {
     const path = STAGE_ROUTES[stageKey];
@@ -2876,7 +2913,12 @@ function ProjectDetails() {
         payload.dateOfRegistration = registrationForm.dateOfRegistration;
       }
 
-      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
+      const targetLeadId = getValidLeadId(project, projectId);
+      if (!targetLeadId) {
+        throw new Error("Project / Lead ID is missing. Please refresh the page.");
+      }
+
+      const response = await fetchAPI(`/lead/updateLead/${targetLeadId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -2887,7 +2929,7 @@ function ProjectDetails() {
       }
 
       const updatedProject = response?.result?.lead || response?.result || { ...project, ...payload };
-      setProject(updatedProject);
+      setProject(updatedProject);
       setRegistrationEditMode(false);
       setSelectedWorkflowStage("document");
       setSnackbar({ open: true, message: "Registration updated successfully", severity: "success" });
@@ -2995,7 +3037,7 @@ function ProjectDetails() {
         payload.transactionId = paymentForm.transactionId.trim();
         payload.paymentStatus = paymentForm.paymentStatus;
         payload.loanStatus = "submitted";
-        payload.status = "Bank Loan Apply";
+        payload.status = "Disbursement";
       } else if (paymentForm.paymentType === "Cheque") {
         payload.chequeNumber = paymentForm.chequeNumber.trim();
         payload.bank = paymentForm.bank.trim();
@@ -3003,14 +3045,19 @@ function ProjectDetails() {
         payload.paymentAmount = parseFloat(paymentForm.paymentAmount);
         payload.paymentStatus = paymentForm.paymentStatus;
         payload.loanStatus = "submitted";
-        payload.status = "Bank Loan Apply";
+        payload.status = "Disbursement";
       }
 
       if (paymentForm.paymentType === "Bank Loan" && paymentForm.loanApprovalDate) {
         payload.loanApprovalDate = paymentForm.loanApprovalDate;
       }
 
-      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
+      const targetLeadId = getValidLeadId(project, projectId);
+      if (!targetLeadId) {
+        throw new Error("Project / Lead ID is missing. Please refresh the page.");
+      }
+
+      const response = await fetchAPI(`/lead/updateLead/${targetLeadId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -3023,7 +3070,7 @@ function ProjectDetails() {
       const updatedProject = response?.result?.lead || response?.result || { ...project, ...payload };
       setProject(updatedProject);
       setSnackbar({ open: true, message: "Payment updated successfully", severity: "success" });
-      if (paymentForm.paymentType === "Cash") {
+      if (paymentForm.paymentType !== "Bank Loan") {
         setSelectedWorkflowStage("disbursement");
       }
     } catch (err) {
@@ -3077,7 +3124,12 @@ function ProjectDetails() {
         payload.installationDate = installationForm.installationDate;
       }
 
-      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
+      const targetLeadId = getValidLeadId(project, projectId);
+      if (!targetLeadId) {
+        throw new Error("Project / Lead ID is missing. Please refresh the page.");
+      }
+
+      const response = await fetchAPI(`/lead/updateLead/${targetLeadId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -3158,7 +3210,12 @@ function ProjectDetails() {
         payload.disbursementDate = disbursementForm.disbursementDate;
       }
 
-      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
+      const targetLeadId = getValidLeadId(project, projectId);
+      if (!targetLeadId) {
+        throw new Error("Project / Lead ID is missing. Please refresh the page.");
+      }
+
+      const response = await fetchAPI(`/lead/updateLead/${targetLeadId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -3227,7 +3284,12 @@ function ProjectDetails() {
         bankAtPendingNotes: loanPendingForm.bankAtPendingNotes.trim(),
       };
 
-      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
+      const targetLeadId = getValidLeadId(project, projectId);
+      if (!targetLeadId) {
+        throw new Error("Project / Lead ID is missing. Please refresh the page.");
+      }
+
+      const response = await fetchAPI(`/lead/updateLead/${targetLeadId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -3309,7 +3371,12 @@ function ProjectDetails() {
     }
 
     try {
-      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
+      const targetLeadId = getValidLeadId(project, projectId);
+      if (!targetLeadId) {
+        throw new Error("Project / Lead ID is missing. Please refresh the page.");
+      }
+
+      const response = await fetchAPI(`/lead/updateLead/${targetLeadId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ documentStatus: nextStatus }),
@@ -3378,7 +3445,12 @@ function ProjectDetails() {
     }
 
     try {
-      const response = await fetchAPI(`/lead/updateLead/${getValidLeadId(project)}`, {
+      const targetLeadId = getValidLeadId(project, projectId);
+      if (!targetLeadId) {
+        throw new Error("Project / Lead ID is missing. Please refresh the page.");
+      }
+
+      const response = await fetchAPI(`/lead/updateLead/${targetLeadId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -3582,7 +3654,7 @@ function ProjectDetails() {
           <MetricCard icon={<Payments />} label="Subsidy" value={formatOptionalMoney(project?.subsidyAmount || project?.subsidy)} color={WARNING} />
         </Grid>
         <Grid item xs={12} md={3}>
-          <MetricCard icon={<CalendarMonth />} label="Stages Complete" value={`${completedStageCount} of ${PROJECT_STAGES.length}`} color={INK_2} />
+          <MetricCard icon={<CalendarMonth />} label="Stages Complete" value={`${completedStageCount} of ${activeProjectStages.length}`} color={INK_2} />
         </Grid>
       </Grid>
 
@@ -3651,7 +3723,7 @@ function ProjectDetails() {
 
         <Box sx={{ overflowX: "auto", pb: 0.5 }}>
           <Stack direction="row" alignItems="flex-start" sx={{ minWidth: 920 }}>
-            {PROJECT_STAGES.map((stage, index) => {
+            {activeProjectStages.map((stage, index) => {
               const Icon = stage.icon;
               const state = stageState(stage.key);
               const color = stateColor(state);
@@ -3695,7 +3767,7 @@ function ProjectDetails() {
                       }}
                     />
                   </Stack>
-                  {index < PROJECT_STAGES.length - 1 && (
+                  {index < activeProjectStages.length - 1 && (
                     <Divider sx={{ flex: 1, minWidth: 42, mt: 2.1, borderColor: done ? (isDark ? "#10b981" : alpha(SUCCESS, 0.4)) : (isDark ? "rgba(255,255,255,0.12)" : BORDER) }} />
                   )}
                 </React.Fragment>
@@ -3711,7 +3783,7 @@ function ProjectDetails() {
             Project Workflow
           </Typography>
           <Typography variant="subtitle2" fontWeight={800} color={isDark ? "#f8fafc" : INK}>
-            {completedStageCount} of {PROJECT_STAGES.length} stages complete
+            {completedStageCount} of {activeProjectStages.length} stages complete
           </Typography>
         </Box>
         <Typography variant="subtitle2" fontWeight={800} sx={{ color: BRAND }}>
@@ -3721,7 +3793,7 @@ function ProjectDetails() {
 
       <Paper elevation={0} sx={{ p: 1.5, mb: 2.5, borderRadius: RADIUS, border: isDark ? "1px solid rgba(255,255,255,0.08)" : `1px solid ${BORDER}`, bgcolor: isDark ? "#0b0e1a" : PANEL, color: isDark ? "#f8fafc" : "inherit", boxShadow: SHADOW_SM }}>
         <Stack direction="row" spacing={1} sx={{ overflowX: "auto", pb: 0.5 }}>
-          {WORKFLOW_TABS.map((stage) => {
+          {activeWorkflowTabs.map((stage) => {
             const Icon = stage.icon;
             const active = selectedWorkflowStage === stage.key;
             const lock = getStrictWorkflowLock(project, stage.key);
@@ -3888,7 +3960,7 @@ function ProjectDetails() {
                 </Typography>
               </Stack>
               <Stack spacing={1.25}>
-                {ACTION_STAGES.map((stage) => (
+                {activeActionStages.map((stage) => (
                   <Stack key={stage.key} direction="row" justifyContent="space-between" spacing={1}>
                     <Typography variant="caption" sx={{ color: MUTED }} fontWeight={700}>
                       {stage.label}

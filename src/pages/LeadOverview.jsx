@@ -2873,13 +2873,35 @@ const LeadOverview = () => {
 
   const renderCardView = useCallback(() => {
     if (loading) return <LoadingSkeleton count={6} isMobile={isMobile} />;
-    if (leads.length === 0) return <EmptyState title={hasFilters ? "No matching leads found" : "No leads yet"} description={hasFilters ? "Try adjusting your filters" : "Get started by creating your first lead"} icon={hasFilters ? Search : Person} action={hasFilters && <Button onClick={handleResetFilters} variant="outlined" sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR }}>Clear Filters</Button>} />;
+    if (leads.length === 0) return (
+      <EmptyState
+        title={hasFilters ? "No matching leads found" : "No leads yet"}
+        description={hasFilters ? "Try adjusting your filters" : "Get started by creating your first lead"}
+        icon={hasFilters ? Search : Person}
+        action={
+          hasFilters ? (
+            <Button onClick={handleResetFilters} variant="outlined" sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR }}>
+              Clear Filters
+            </Button>
+          ) : (
+            <Button
+              onClick={addLeads}
+              variant="contained"
+              startIcon={<Add />}
+              sx={{ background: "linear-gradient(45deg, #f97316 0%, #ea580c 100%)", color: "#fff", fontWeight: 700, borderRadius: 2.5, px: 3, py: 1 }}
+            >
+              + Add Lead
+            </Button>
+          )
+        }
+      />
+    );
     return (
       <Box sx={{ p: { xs: 1, sm: 2 } }}>
         {leads.map((lead) => <MobileLeadCard key={lead._id} lead={lead} onView={openViewDialog} onEdit={openEditDialog} onAssign={openAssignDialog} onDelete={handleDeleteSingleLead} onConvertToProject={handleConvertToProject} permissions={permissions} />)}
       </Box>
     );
-  }, [loading, leads, hasFilters, permissions, openViewDialog, openEditDialog, openAssignDialog, handleDeleteSingleLead, handleConvertToProject, isMobile, handleResetFilters]);
+  }, [loading, leads, hasFilters, permissions, openViewDialog, openEditDialog, openAssignDialog, handleDeleteSingleLead, handleConvertToProject, isMobile, handleResetFilters, addLeads]);
 
   const summaryCards = useMemo(() => ([
     {
@@ -3288,8 +3310,8 @@ const LeadOverview = () => {
           </Select>
         </FormControl>
 
-        {/* View toggle + refresh */}
-        <Stack direction="row" spacing={0.5} alignItems="center">
+        {/* View toggle + refresh + add lead */}
+        <Stack direction="row" spacing={1} alignItems="center">
           <Tooltip title="Table view">
             <IconButton
               size="small"
@@ -3325,6 +3347,25 @@ const LeadOverview = () => {
               <Refresh sx={{ fontSize: 18, color: "text.secondary" }} />
             </IconButton>
           </Tooltip>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={addLeads}
+            size="small"
+            sx={{
+              background: "linear-gradient(45deg, #f97316 0%, #ea580c 100%)",
+              color: "#fff",
+              fontWeight: 700,
+              borderRadius: 2,
+              px: 2,
+              height: 34,
+              textTransform: "none",
+              boxShadow: "0 4px 12px rgba(249, 115, 22, 0.3)",
+              "&:hover": { background: "linear-gradient(45deg, #ea580c 0%, #c2410c 100%)" },
+            }}
+          >
+            + Add Lead
+          </Button>
         </Stack>
       </Stack>
 
@@ -3453,18 +3494,41 @@ const LeadOverview = () => {
       {/* Content */}
       <Paper elevation={0} sx={{ borderRadius: 3, overflow: "hidden", bgcolor: isDark ? "#0b101c" : "#fff", border: isDark ? "1px solid rgba(59, 130, 246, 0.15)" : "none" }}>
         <Box sx={{ p: { xs: 2, sm: 3 }, borderBottom: 1, borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "divider", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2, bgcolor: isDark ? "#090f1d" : "#fff" }}>
-          <Typography variant="h6" fontWeight={700} sx={{ fontSize: { xs: "1rem", sm: "1.25rem" }, color: isDark ? "#f8fafc" : "inherit" }}>
-            {viewMode === "table" ? "Lead List" : "Lead Cards"}
-            <Chip label={`${totalLeads} total`} size="small" sx={{ ml: 1, background: isDark ? "rgba(37, 99, 235, 0.25)" : "linear-gradient(135deg, rgba(37,99,235,0.14) 0%, rgba(96,165,250,0.24) 100%)", color: isDark ? "#60a5fa" : PRIMARY_COLOR, border: `1px solid ${isDark ? "rgba(59, 130, 246, 0.3)" : alpha(PRIMARY_COLOR, 0.12)}` }} />
-          </Typography>
-          {!isMobile && viewMode === "table" && (
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Rows per page:</Typography>
-              <Select size="small" value={rowsPerPage} onChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }} sx={{ minWidth: 80, bgcolor: isDark ? "#0e1628" : "inherit", color: isDark ? "#f8fafc" : "inherit" }}>
-                {[5, 10, 25, 50].map((option) => <MenuItem key={option} value={option}>{option}</MenuItem>)}
-              </Select>
-            </Stack>
-          )}
+          <Box display="flex" alignItems="center" gap={1.5}>
+            <Typography variant="h6" fontWeight={700} sx={{ fontSize: { xs: "1rem", sm: "1.25rem" }, color: isDark ? "#f8fafc" : "inherit" }}>
+              {viewMode === "table" ? "Lead List" : "Lead Cards"}
+              <Chip label={`${totalLeads} total`} size="small" sx={{ ml: 1, background: isDark ? "rgba(37, 99, 235, 0.25)" : "linear-gradient(135deg, rgba(37,99,235,0.14) 0%, rgba(96,165,250,0.24) 100%)", color: isDark ? "#60a5fa" : PRIMARY_COLOR, border: `1px solid ${isDark ? "rgba(59, 130, 246, 0.3)" : alpha(PRIMARY_COLOR, 0.12)}` }} />
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={addLeads}
+              size="small"
+              sx={{
+                background: "linear-gradient(45deg, #f97316 0%, #ea580c 100%)",
+                color: "#fff",
+                fontWeight: 700,
+                borderRadius: 2,
+                px: 2,
+                py: 0.6,
+                textTransform: "none",
+                boxShadow: "0 4px 12px rgba(249, 115, 22, 0.25)",
+                "&:hover": { background: "linear-gradient(45deg, #ea580c 0%, #c2410c 100%)" },
+              }}
+            >
+              + Add Lead
+            </Button>
+            {!isMobile && viewMode === "table" && (
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 1 }}>
+                <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>Rows:</Typography>
+                <Select size="small" value={rowsPerPage} onChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }} sx={{ minWidth: 70, height: 32, bgcolor: isDark ? "#0e1628" : "inherit", color: isDark ? "#f8fafc" : "inherit" }}>
+                  {[5, 10, 25, 50].map((option) => <MenuItem key={option} value={option}>{option}</MenuItem>)}
+                </Select>
+              </Stack>
+            )}
+          </Stack>
         </Box>
 
         {viewMode === "table" && !isMobile ? (
@@ -3485,9 +3549,30 @@ const LeadOverview = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {loading ? <TableRow><TableCell colSpan={7}><LoadingSkeleton count={rowsPerPage} /></TableCell></TableRow>
-                    : leads.length === 0 ? <TableRow><TableCell colSpan={7}><EmptyState title={hasFilters ? "No matching leads found" : "No leads yet"} description={hasFilters ? "Try adjusting your filters" : "Get started by creating your first lead"} icon={hasFilters ? Search : Person} action={hasFilters && <Button onClick={handleResetFilters} variant="outlined" sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR }}>Clear Filters</Button>} /></TableCell></TableRow>
-                    : leads.map(renderTableRow)}
+                  {loading ? (
+                    <TableRow><TableCell colSpan={7}><LoadingSkeleton count={rowsPerPage} /></TableCell></TableRow>
+                  ) : leads.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7}>
+                        <EmptyState
+                          title={hasFilters ? "No matching leads found" : "No leads yet"}
+                          description={hasFilters ? "Try adjusting your filters" : "Get started by creating your first lead"}
+                          icon={hasFilters ? Search : Person}
+                          action={
+                            hasFilters ? (
+                              <Button onClick={handleResetFilters} variant="outlined" sx={{ borderColor: PRIMARY_COLOR, color: PRIMARY_COLOR }}>Clear Filters</Button>
+                            ) : (
+                              <Button onClick={addLeads} variant="contained" startIcon={<Add />} sx={{ background: "linear-gradient(45deg, #f97316 0%, #ea580c 100%)", color: "#fff", fontWeight: 700, borderRadius: 2.5, px: 3, py: 1 }}>
+                                + Add Lead
+                              </Button>
+                            )
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    leads.map(renderTableRow)
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -3537,14 +3622,49 @@ const LeadOverview = () => {
         <Alert onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))} severity={snackbar.severity} variant="filled" sx={{ width: "100%", borderRadius: 2, color: "#fff" }}>{snackbar.message}</Alert>
       </Snackbar>
 
-      {/* Mobile FAB */}
+      {/* Mobile Floating Action Buttons (FABs) */}
       {isMobile && (
-        <Zoom in={true}>
-          <Fab color="primary" aria-label="filter" onClick={() => setMobileFilterOpen(true)}
-            sx={{ position: "fixed", bottom: 80, right: 16, zIndex: 1000, bgcolor: PRIMARY_COLOR, "&:hover": { bgcolor: SECONDARY_COLOR }, boxShadow: `0 4px 12px ${alpha(PRIMARY_COLOR, 0.3)}` }}>
-            <Badge badgeContent={activeFilterCount} color="error" max={9} sx={{ "& .MuiBadge-badge": { fontSize: "0.6rem", minWidth: 16, height: 16 } }}><FilterAlt /></Badge>
-          </Fab>
-        </Zoom>
+        <>
+          <Zoom in={true}>
+            <Fab
+              color="primary"
+              aria-label="filter"
+              onClick={() => setMobileFilterOpen(true)}
+              size="small"
+              sx={{
+                position: "fixed",
+                bottom: 148,
+                right: 18,
+                zIndex: 1000,
+                bgcolor: PRIMARY_COLOR,
+                "&:hover": { bgcolor: SECONDARY_COLOR },
+                boxShadow: `0 4px 12px ${alpha(PRIMARY_COLOR, 0.3)}`
+              }}
+            >
+              <Badge badgeContent={activeFilterCount} color="error" max={9} sx={{ "& .MuiBadge-badge": { fontSize: "0.6rem", minWidth: 16, height: 16 } }}>
+                <FilterAlt />
+              </Badge>
+            </Fab>
+          </Zoom>
+          <Zoom in={true}>
+            <Fab
+              aria-label="add lead"
+              onClick={addLeads}
+              sx={{
+                position: "fixed",
+                bottom: 80,
+                right: 16,
+                zIndex: 1000,
+                background: "linear-gradient(45deg, #f97316 0%, #ea580c 100%)",
+                color: "#fff",
+                boxShadow: "0 6px 20px rgba(249, 115, 22, 0.45)",
+                "&:hover": { background: "linear-gradient(45deg, #ea580c 0%, #c2410c 100%)" }
+              }}
+            >
+              <Add sx={{ fontSize: 28 }} />
+            </Fab>
+          </Zoom>
+        </>
       )}
     </Box>
   );

@@ -1649,6 +1649,9 @@ export default function LeadDetailsPage() {
   const [siteVisitUserError, setSiteVisitUserError] = useState("");
   const [siteVisitAssigneeId, setSiteVisitAssigneeId] = useState("");
   const [processingReminderId, setProcessingReminderId] = useState("");
+  const [processingSiteVisitId, setProcessingSiteVisitId] = useState("");
+  const [deleteVisitConfirmDialogOpen, setDeleteVisitConfirmDialogOpen] = useState(false);
+  const [siteVisitToDelete, setSiteVisitToDelete] = useState(null);
   const [quotationEntries, setQuotationEntries] = useState([]);
   const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
   const [loseLeadDialogOpen, setLoseLeadDialogOpen] = useState(false);
@@ -2005,18 +2008,65 @@ export default function LeadDetailsPage() {
     return customReminderEntries.sort((a, b) => new Date(a.sortAt || 0) - new Date(b.sortAt || 0));
   }, [customActivities, leadDetails?._id, leadDetails?.followUpDate, leadDetails?.followUpNotes]);
 
+  const combinedComments = useMemo(() => {
+    const customCommentList = customActivities
+      .filter((item) => {
+        const type = normalizeActivityType(item?.type, item);
+        return type === "Comment" || type === "Log call" || isCallActivity(item);
+      })
+      .map((item) => ({
+        ...item,
+        id: item.id || item._id || `${item.createdAt}-${item.message}`,
+        actorName: item.actorName || item.updatedBy?.firstName || "System",
+        createdAt: item.createdAt || item.updatedAt || new Date().toISOString(),
+        message: normalizeActivityMessage(item) || item.message || "",
+        type: isCallActivity(item) ? "Log call" : "Comment",
+      }));
+
+    const timelineCommentList = timelineEntries
+      .filter((item) => {
+        const actType = String(item.activityType || item.type || "").toLowerCase();
+        const stage = String(item.stage || "").toLowerCase();
+        return actType === "comment" || actType === "call" || stage.includes("comment") || stage.includes("call");
+      })
+      .map((item) => ({
+        ...item,
+        id: item._id || item.id || `${item.updatedAt}-${item.notes}`,
+        actorName: [item.updatedBy?.firstName, item.updatedBy?.lastName].filter(Boolean).join(" ") || "System",
+        createdAt: item.updatedAt || item.createdAt || new Date().toISOString(),
+        message: item.notes || item.message || "",
+        type: String(item.activityType || "").toLowerCase() === "call" || String(item.stage || "").toLowerCase().includes("call") ? "Log call" : "Comment",
+      }));
+
+    const seenKeys = new Set();
+    return [...customCommentList, ...timelineCommentList]
+      .filter((item) => {
+        if (!item.message) return false;
+        const time = item.createdAt;
+        const timeBucket = time ? Math.floor(new Date(time).getTime() / 60000) : "";
+        const text = String(item.message || "").trim().toLowerCase();
+        const key = `${timeBucket}|${text}`;
+        if (timeBucket && text) {
+          if (seenKeys.has(key)) return false;
+          seenKeys.add(key);
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  }, [customActivities, timelineEntries]);
+
   const hasThreeDDesign = Boolean(leadDetails?.threeDDesign && Array.isArray(leadDetails.threeDDesign.points) && leadDetails.threeDDesign.points.length >= 3);
 
   const tabCounts = useMemo(() => ({
     activity: timelineEntries.length + customActivities.length,
-    comments: customActivities.filter((item) => item.type === "Comment" || isCallActivity(item)).length,
+    comments: combinedComments.length,
     documents: uploadedDocumentCount,
     siteVisits: siteVisitEntries.length,
     siteSurvey: hasSiteSurvey ? 1 : 0,
     quotations: quotationEntries.length,
     threeDDesign: hasThreeDDesign ? 1 : 0,
     reminders: reminderEntries.length,
-  }), [customActivities, hasSiteSurvey, hasThreeDDesign, quotationEntries.length, reminderEntries.length, siteVisitEntries.length, timelineEntries.length, uploadedDocumentCount]);
+  }), [combinedComments.length, customActivities.length, hasSiteSurvey, hasThreeDDesign, quotationEntries.length, reminderEntries.length, siteVisitEntries.length, timelineEntries.length, uploadedDocumentCount]);
 
   const showInfo = useCallback((msg) => {
     setSnackbar({ open: true, message: msg, severity: "info" });
@@ -2336,6 +2386,50 @@ export default function LeadDetailsPage() {
       setProcessingReminderId("");
     }
   }, [fetchAPI, fetchLeadDetails, leadDetails?._id, leadDetails?.followUpDate, leadDetails?.followUpNotes, persistCustomActivities]);
+
+  const handleDeleteSiteVisit = useCallback(async (siteVisit) => {
+    if (!leadDetails?._id || !siteVisit) return;
+
+    try {
+      setProcessingSiteVisitId(siteVisit.id || "lead-visit");
+
+      const matchesLeadVisit = (
+        siteVisit.source === "lead" ||
+        siteVisit.id === `lead-visit-${leadDetails._id}` ||
+        (siteVisit.scheduledAt && leadDetails?.visitDate &&
+         new Date(siteVisit.scheduledAt).getTime() === new Date(leadDetails.visitDate).getTime())
+      );
+
+      if (matchesLeadVisit || leadDetails?.visitDate) {
+        await fetchAPI(`/lead/updateLead/${leadDetails._id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            visitDate: null,
+            visitLocation: "",
+            visitNotes: "",
+          }),
+        });
+      }
+
+      await persistCustomActivities((prev) =>
+        prev.filter((item) => {
+          if (siteVisit.id && item.id === siteVisit.id) return false;
+          if (item.type === "Site visit" && siteVisit.scheduledAt && item.scheduledAt === siteVisit.scheduledAt) return false;
+          return true;
+        })
+      );
+
+      await fetchLeadDetails();
+      setSnackbar({ open: true, message: "Site visit deleted successfully.", severity: "success" });
+    } catch (error) {
+      setSnackbar({ open: true, message: error.message || "Failed to delete site visit.", severity: "error" });
+    } finally {
+      setProcessingSiteVisitId("");
+      setDeleteVisitConfirmDialogOpen(false);
+      setSiteVisitToDelete(null);
+    }
+  }, [fetchAPI, fetchLeadDetails, leadDetails?._id, leadDetails?.visitDate, persistCustomActivities]);
   const openEditDialog = useCallback(() => {
     if (leadDetails?._id) setEditModalOpen(true);
   }, [leadDetails?._id]);
@@ -3883,32 +3977,59 @@ export default function LeadDetailsPage() {
                               </Typography>
                             ) : null}
                           </Stack>
-                          <Stack spacing={0.6} alignItems={{ xs: "flex-start", sm: "flex-end" }}>
-                            <Chip
-                              label={statusInfo.status || "Scheduled"}
-                              size="small"
-                              sx={{
-                                height: 28,
-                                borderRadius: 999,
-                                fontWeight: 700,
-                                fontSize: "0.82rem",
-                                ...chipStyles,
-                                "& .MuiChip-label": { px: 1.25 },
-                              }}
-                            />
-                            {statusInfo.helperText ? (
-                              <Typography
+                          <Stack direction="row" spacing={1.25} alignItems="center">
+                            <Stack spacing={0.6} alignItems={{ xs: "flex-start", sm: "flex-end" }}>
+                              <Chip
+                                label={statusInfo.status || "Scheduled"}
+                                size="small"
                                 sx={{
-                                  fontSize: "0.72rem",
-                                  color: statusInfo.isOverdue ? "#dc2626" : TOKEN.textMuted,
-                                  fontWeight: statusInfo.isOverdue ? 700 : 600,
-                                  textDecoration: statusInfo.isOverdue ? "underline" : "none",
-                                  textUnderlineOffset: "0.18em",
+                                  height: 28,
+                                  borderRadius: 999,
+                                  fontWeight: 700,
+                                  fontSize: "0.82rem",
+                                  ...chipStyles,
+                                  "& .MuiChip-label": { px: 1.25 },
+                                }}
+                              />
+                              {statusInfo.helperText ? (
+                                <Typography
+                                  sx={{
+                                    fontSize: "0.72rem",
+                                    color: statusInfo.isOverdue ? "#dc2626" : TOKEN.textMuted,
+                                    fontWeight: statusInfo.isOverdue ? 700 : 600,
+                                    textDecoration: statusInfo.isOverdue ? "underline" : "none",
+                                    textUnderlineOffset: "0.18em",
+                                  }}
+                                >
+                                  {statusInfo.helperText}
+                                </Typography>
+                              ) : null}
+                            </Stack>
+                            <Tooltip title="Delete site visit" arrow>
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  setSiteVisitToDelete(entry);
+                                  setDeleteVisitConfirmDialogOpen(true);
+                                }}
+                                disabled={processingSiteVisitId === entry.id || processingSiteVisitId === "lead-visit"}
+                                sx={{
+                                  color: "#ef4444",
+                                  bgcolor: alpha("#ef4444", 0.08),
+                                  border: `1px solid ${alpha("#ef4444", 0.2)}`,
+                                  borderRadius: 2,
+                                  p: 0.8,
+                                  transition: "all 0.2s",
+                                  "&:hover": {
+                                    bgcolor: alpha("#ef4444", 0.16),
+                                    borderColor: "#ef4444",
+                                    transform: "scale(1.05)",
+                                  },
                                 }}
                               >
-                                {statusInfo.helperText}
-                              </Typography>
-                            ) : null}
+                                <Delete sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </Tooltip>
                           </Stack>
                         </Stack>
                       </Paper>
@@ -5634,6 +5755,102 @@ export default function LeadDetailsPage() {
             }}
           >
             {submittingLoseLead ? "Marking..." : "Confirm Lose"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Site Visit Confirmation Dialog */}
+      <Dialog
+        open={deleteVisitConfirmDialogOpen}
+        onClose={() => !processingSiteVisitId && setDeleteVisitConfirmDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: "16px",
+            p: 0,
+            overflow: "hidden",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+            bgcolor: TOKEN.surface,
+            backgroundImage: "none",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            px: 3,
+            py: 2,
+            bgcolor: alpha("#ef4444", getIsDark() ? 0.12 : 0.05),
+            borderBottom: `1px solid ${alpha("#ef4444", 0.18)}`,
+          }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box
+              sx={{
+                width: 34,
+                height: 34,
+                borderRadius: "50%",
+                bgcolor: alpha("#ef4444", 0.15),
+                color: "#ef4444",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Delete sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h6" fontWeight={700} fontSize="1.05rem" color={TOKEN.text}>
+              Delete Site Visit
+            </Typography>
+          </Stack>
+          <IconButton size="small" onClick={() => setDeleteVisitConfirmDialogOpen(false)} disabled={Boolean(processingSiteVisitId)} sx={{ color: TOKEN.textMuted }}>
+            <Close sx={{ fontSize: 18 }} />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 2.5, pb: 1, bgcolor: TOKEN.surface }}>
+          <Typography variant="body2" color={TOKEN.textSub} sx={{ lineHeight: 1.6, fontSize: "0.875rem" }}>
+            Are you sure you want to delete this scheduled site visit
+            {siteVisitToDelete?.scheduledAt ? ` on ${formatDate(siteVisitToDelete.scheduledAt, "dd MMM yyyy")}` : ""}?
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2, borderTop: `1px solid ${TOKEN.border}`, bgcolor: getIsDark() ? "#0e1626" : "#fafafa", gap: 1 }}>
+          <Button
+            onClick={() => setDeleteVisitConfirmDialogOpen(false)}
+            disabled={Boolean(processingSiteVisitId)}
+            variant="outlined"
+            sx={{
+              textTransform: "none",
+              fontWeight: 600,
+              color: TOKEN.textSub,
+              borderColor: TOKEN.borderMid,
+              borderRadius: "8px",
+              px: 2,
+              "&:hover": { borderColor: TOKEN.textMuted, bgcolor: getIsDark() ? "rgba(255,255,255,0.04)" : "#f1f5f9" },
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => handleDeleteSiteVisit(siteVisitToDelete)}
+            variant="contained"
+            disabled={Boolean(processingSiteVisitId)}
+            sx={{
+              bgcolor: "#dc2626",
+              color: "#fff",
+              fontWeight: 700,
+              textTransform: "none",
+              borderRadius: "8px",
+              px: 2.5,
+              boxShadow: "0 4px 12px rgba(220, 38, 38, 0.25)",
+              "&:hover": { bgcolor: "#b91c1c" },
+            }}
+          >
+            {processingSiteVisitId ? "Deleting..." : "Delete Visit"}
           </Button>
         </DialogActions>
       </Dialog>

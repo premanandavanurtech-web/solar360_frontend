@@ -104,6 +104,7 @@ import {
   Schedule,
   DateRange,
   Clear,
+  Add,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -1718,9 +1719,30 @@ export default function LeadFunnelDashboard() {
                   alignItems="center"
                   mb={2}
                 >
-                  <Typography variant="body2" color={isDark ? "#94a3b8" : "text.secondary"}>
-                    Showing {paginatedLeads.length} of {filteredLeads.length} leads
-                  </Typography>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <Button
+                      variant="contained"
+                      startIcon={<Add />}
+                      onClick={() => navigate("/add-lead")}
+                      size="small"
+                      sx={{
+                        background: "linear-gradient(45deg, #f97316 0%, #ea580c 100%)",
+                        color: "#fff",
+                        fontWeight: 700,
+                        borderRadius: 2,
+                        px: 2,
+                        height: 36,
+                        textTransform: "none",
+                        boxShadow: "0 4px 12px rgba(249, 115, 22, 0.3)",
+                        "&:hover": { background: "linear-gradient(45deg, #ea580c 0%, #c2410c 100%)" },
+                      }}
+                    >
+                      + Add Lead
+                    </Button>
+                    <Typography variant="body2" color={isDark ? "#94a3b8" : "text.secondary"}>
+                      Showing {paginatedLeads.length} of {filteredLeads.length} leads
+                    </Typography>
+                  </Stack>
                   <FormControl size="small" sx={{ minWidth: 100 }}>
                     <Select
                       value={sortBy}

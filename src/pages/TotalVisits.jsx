@@ -104,6 +104,7 @@ import {
   KeyboardArrowRight,
   FiberManualRecord,
   OpenInNew,
+  Delete,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 import LeadAssignDialog from "../components/LeadAssignDialog";
@@ -682,7 +683,7 @@ const MobileFilterDrawer = ({
 };
 
 // ========== MOBILE VISIT CARD ==========
-const MobileVisitCard = ({ visit, onView, onOpenLead }) => {
+const MobileVisitCard = ({ visit, onView, onOpenLead, onDelete }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const [expanded, setExpanded] = useState(false);
@@ -770,6 +771,24 @@ const MobileVisitCard = ({ visit, onView, onOpenLead }) => {
                 sx={{ borderColor: ACCENT, color: ACCENT, borderRadius: "10px", fontSize: "12px", "&:hover": { background: alpha(ACCENT, 0.05) } }}>
                 Lead Details
               </Button>
+              {onDelete && (
+                <IconButton
+                  size="small"
+                  onClick={() => onDelete(visit)}
+                  sx={{
+                    background: "linear-gradient(135deg,#fee2e2,#fecaca)",
+                    color: "#dc2626",
+                    border: "1px solid rgba(220,38,38,0.25)",
+                    borderRadius: "10px",
+                    width: 36,
+                    height: 36,
+                    flexShrink: 0,
+                    "&:hover": { background: "#fca5a5" },
+                  }}
+                >
+                  <Delete sx={{ fontSize: 17 }} />
+                </IconButton>
+              )}
             </Stack>
           </Box>
         </Collapse>
@@ -1185,6 +1204,9 @@ export default function TotalVisitsPage() {
   const [rowsPerPage, setRowsPerPage] = useState(isMobile ? 10 : DEFAULT_ITEMS_PER_PAGE);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [assignLeadModalOpen, setAssignLeadModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [visitToDelete, setVisitToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
   const [viewMode, setViewMode] = useState(isMobile ? "card" : "table");
   const containerRef = useRef(null);
@@ -1457,6 +1479,90 @@ export default function TotalVisitsPage() {
     }
     navigate(`/all-leads/${leadId}`, { state: { initialTab: "siteVisits" } });
   }, [navigate, showSnackbar]);
+  const handleDeleteClick = useCallback((visit) => {
+    if (!visit?._id) {
+      showSnackbar("Invalid visit data", "error");
+      return;
+    }
+    setVisitToDelete(visit);
+    setDeleteConfirmOpen(true);
+  }, [showSnackbar]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!visitToDelete) return;
+    setDeleting(true);
+    try {
+      const leadId = visitToDelete.leadId || (visitToDelete.visitType !== "Other" ? visitToDelete._id : null);
+
+      if (visitToDelete.visitType === "Other" || !leadId) {
+        try {
+          await fetchAPI(`/visit/${visitToDelete._id}`, { method: "DELETE" });
+        } catch (apiErr) {
+          console.warn("DELETE /visit/:id error:", apiErr);
+          // If remote Render server returns 404 (because DELETE route hasn't been deployed to Render yet)
+          const errStr = String(apiErr?.message || "");
+          if (errStr.includes("404") || errStr.includes("Cannot DELETE")) {
+            if (leadId) {
+              await fetchAPI(`/lead/updateLead/${leadId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  visitDate: null,
+                  visitTime: null,
+                  visitLocation: "",
+                  visitNotes: "",
+                  visitStatus: "Not Assigned",
+                }),
+              });
+            } else {
+              // Try updating the visit record status to Cancelled / deleted as fallback
+              try {
+                await fetchAPI(`/visit/${visitToDelete._id}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ status: "Cancelled", remarks: "Deleted visit record" }),
+                });
+              } catch (putErr) {
+                console.warn("PUT /visit fallback error:", putErr);
+              }
+            }
+          } else {
+            throw apiErr;
+          }
+        }
+      } else {
+        await fetchAPI(`/lead/updateLead/${leadId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            visitDate: null,
+            visitTime: null,
+            visitLocation: "",
+            visitNotes: "",
+            visitStatus: "Not Assigned",
+          }),
+        });
+
+        if (visitToDelete.visitId && visitToDelete.visitId !== visitToDelete._id) {
+          try {
+            await fetchAPI(`/visit/${visitToDelete.visitId}`, { method: "DELETE" });
+          } catch (ignore) {}
+        }
+      }
+
+      setAllVisits((prev) => prev.filter((v) => v._id !== visitToDelete._id));
+      showSnackbar("Visit record deleted successfully", "success");
+      setDeleteConfirmOpen(false);
+      setVisitToDelete(null);
+      await fetchVisitsData();
+    } catch (err) {
+      console.error("Delete visit error:", err);
+      showSnackbar(err.message || "Failed to delete visit record", "error");
+    } finally {
+      setDeleting(false);
+    }
+  }, [visitToDelete, fetchAPI, fetchVisitsData, showSnackbar]);
+
   const handleAssignClick = useCallback(
     (visit) => {
       if (!visit?._id) {
@@ -1543,6 +1649,111 @@ export default function TotalVisitsPage() {
         onAssigned={fetchVisitsData}
         showSnackbar={showSnackbar}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => !deleting && setDeleteConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: "16px",
+            p: 1,
+            bgcolor: isDark ? "#0e1220" : "#fff",
+            border: isDark ? "1px solid rgba(255,255,255,0.1)" : "none",
+          },
+        }}
+      >
+        <DialogTitle sx={{ pb: 1, display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Box
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: "10px",
+              background: "linear-gradient(135deg, #fee2e2, #fecaca)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#dc2626",
+            }}
+          >
+            <Delete sx={{ fontSize: 22 }} />
+          </Box>
+          <Box>
+            <Typography variant="h6" fontWeight={700} sx={{ color: isDark ? "#f8fafc" : PRIMARY, fontSize: "1.1rem" }}>
+              Delete Visit Record
+            </Typography>
+            <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "text.secondary" }}>
+              This action cannot be undone.
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ py: 2 }}>
+          <Typography variant="body2" sx={{ color: isDark ? "#cbd5e1" : "text.primary", mb: 1.5 }}>
+            Are you sure you want to delete the visit record for{" "}
+            <strong>
+              {visitToDelete?.firstName} {visitToDelete?.lastName}
+            </strong>
+            ?
+          </Typography>
+          {visitToDelete && (
+            <Box
+              sx={{
+                p: 1.5,
+                borderRadius: "10px",
+                bgcolor: isDark ? "rgba(255,255,255,0.04)" : "#f8fafc",
+                border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #e2e8f0",
+                fontSize: "13px",
+              }}
+            >
+              <Typography variant="caption" display="block" color="text.secondary">
+                <strong>Date & Time:</strong> {getVisitDisplayDate(visitToDelete)} {getVisitDisplayTime(visitToDelete)}
+              </Typography>
+              {visitToDelete.visitLocation && (
+                <Typography variant="caption" display="block" color="text.secondary">
+                  <strong>Location:</strong> {visitToDelete.visitLocation}
+                </Typography>
+              )}
+              {visitToDelete.visitStatus && (
+                <Typography variant="caption" display="block" color="text.secondary">
+                  <strong>Status:</strong> {visitToDelete.visitStatus}
+                </Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, pt: 1, gap: 1 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteConfirmOpen(false)}
+            disabled={deleting}
+            sx={{
+              borderRadius: "8px",
+              textTransform: "none",
+              color: isDark ? "#cbd5e1" : "text.secondary",
+              borderColor: isDark ? "rgba(255,255,255,0.2)" : "#cbd5e1",
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmDelete}
+            disabled={deleting}
+            sx={{
+              borderRadius: "8px",
+              textTransform: "none",
+              background: "linear-gradient(135deg, #ef4444, #dc2626)",
+              "&:hover": { background: "linear-gradient(135deg, #dc2626, #b91c1c)" },
+              color: "#fff",
+              fontWeight: 600,
+            }}
+          >
+            {deleting ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <MobileFilterDrawer
         open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}
         period={period} setPeriod={setPeriod} statusFilter={statusFilter} setStatusFilter={setStatusFilter}
@@ -1949,6 +2160,16 @@ export default function TotalVisitsPage() {
                               <OpenInNew sx={{ fontSize: 15 }} />
                             </IconButton>
                           </Tooltip>
+                          <Tooltip title="Delete Visit Record">
+                            <IconButton size="small" onClick={() => handleDeleteClick(visit)} sx={{
+                              background: "linear-gradient(135deg,#fee2e2,#fecaca)", color: "#dc2626",
+                              border: "1px solid rgba(220,38,38,0.25)",
+                              width: 32, height: 32, borderRadius: "8px",
+                              transition: "all .15s", "&:hover": { background: "#fca5a5", boxShadow: "0 2px 8px rgba(220,38,38,0.3)" },
+                            }}>
+                              <Delete sx={{ fontSize: 15 }} />
+                            </IconButton>
+                          </Tooltip>
                         </Stack>
                       </TableCell>
                     </TableRow>
@@ -1967,7 +2188,7 @@ export default function TotalVisitsPage() {
             <Box sx={{ p: { xs: 1.5, sm: 2 }, bgcolor: "#fff" }}>
               {loading && allVisits.length > 0 && <LinearProgress sx={{ mb: 2, borderRadius: 2 }} />}
               {paginatedVisits.length > 0
-                ? paginatedVisits.map((visit) => <MobileVisitCard key={visit._id} visit={visit} onView={handleViewClick} onOpenLead={handleEditClick} />)
+                ? paginatedVisits.map((visit) => <MobileVisitCard key={visit._id} visit={visit} onView={handleViewClick} onOpenLead={handleEditClick} onDelete={handleDeleteClick} />)
                 : <EmptyState onClearFilters={handleClearFilters} hasFilters={activeFilterCount > 0} />
               }
             </Box>

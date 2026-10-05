@@ -40,11 +40,12 @@ import {
   ExpandMore,
   CategoryOutlined,
   Inventory2Outlined,
+  OutboxOutlined,
+  MoveToInboxOutlined,
   Menu as MenuIcon,
   Close as CloseIcon,
   RequestQuote,
   Settings as SettingsIcon,
-  Storage as StorageIcon,
   ReceiptLong,
   AccountBalance,
   AccountBalanceWallet,
@@ -53,8 +54,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import ViewInAr from "@mui/icons-material/ViewInAr";
 import { useAuth } from "../contexts/AuthContext";
-import sidebarLogo from "../assets/sidebar-logo.webp";
-import { API_BASE_URL } from "../utils/apiConfig";
+import sidebarLogoLight from "../assets/sidebar-logo-light.webp";
+import sidebarLogoDark from "../assets/sidebar-logo-dark.webp";
 
 // ─── Design Tokens ─────────────────────────────────────────────────────────────
 const BLUE = "#1e40af";
@@ -87,13 +88,6 @@ const SIDEBAR_WIDTH    = 268;
 const COLLAPSED_WIDTH  = 68;
 const MOBILE_WIDTH     = 272;
 
-const isItemActivePath = (currentPath, targetPath) => {
-  if (!targetPath || !currentPath) return false;
-  if (currentPath === targetPath) return true;
-  if (targetPath !== "/" && currentPath.startsWith(`${targetPath}/`)) return true;
-  return false;
-};
-
 // ─── Sidebar Component ────────────────────────────────────────────────────────
 const Sidebar = ({ open, toggleDrawer, onClose }) => {
   const theme    = useTheme();
@@ -103,11 +97,6 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
   const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
   const navigate = useNavigate();
   const location = useLocation();
-
-  const isActive = useCallback(
-    (path) => isItemActivePath(location.pathname, path),
-    [location.pathname]
-  );
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -124,59 +113,6 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
     !isMobile && (!open || (!isTablet && isCollapsed));
   const { user } = useAuth();
   const userRole = normalizeRole(user?.role);
-
-  // Live Unread Notifications Tracking (Today's only)
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
-
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const token =
-        localStorage.getItem("token") ||
-        localStorage.getItem("authToken") ||
-        localStorage.getItem("accessToken") ||
-        "";
-      if (!token) return;
-
-      const res = await fetch(`${API_BASE_URL}/notifications?limit=200`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!res.ok) return;
-      const payload = await res.json();
-      const data = payload?.data || payload?.result || {};
-      const list = data?.notifications || [];
-
-      const now = new Date();
-      const todayUnread = list.filter((n) => {
-        if (n.read) return false;
-        const nDate = n.createdAt ? new Date(n.createdAt) : (n.date ? new Date(n.date) : null);
-        if (!nDate || isNaN(nDate.getTime())) return false;
-        return (
-          nDate.getFullYear() === now.getFullYear() &&
-          nDate.getMonth() === now.getMonth() &&
-          nDate.getDate() === now.getDate()
-        );
-      }).length;
-
-      setUnreadNotifications(todayUnread);
-    } catch (err) {
-      // silent fallback
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 20000);
-    const handleNotificationUpdate = () => fetchUnreadCount();
-    window.addEventListener("notificationsUpdated", handleNotificationUpdate);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("notificationsUpdated", handleNotificationUpdate);
-    };
-  }, [fetchUnreadCount]);
 
   // Dynamic colors based on light vs dark theme
   const sidebarBg = isDark ? "#060b13" : "#ffffff";
@@ -195,8 +131,10 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
       { text: "Lead Funnel",     icon: <AccountTree />,       path: "/lead-funnel",            roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "All Leads",       icon: <FilterAlt />,         path: "/all-leads",              roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Projects",        icon: <TaskAlt />,           path: "/projects",               roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
-      { text: "Visit Schedule",  icon: <Groups />,            path: "/total-visits",           roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
+      { text: "Total Visits",    icon: <Groups />,            path: "/total-visits",           roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "3D Design",       icon: <ViewInAr />,          path: "/3d-design",              roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
+      { text: "Inventory In",     icon: <MoveToInboxOutlined />, path: "/inventory/items",        roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
+      { text: "Inventory Out",    icon: <OutboxOutlined />,    path: "/inventory/out",          roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
       { text: "Add Quotation",   icon: <RequestQuote />,      path: "/quotation/create",       roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "All Quotes",      icon: <RequestQuote />,      path: "/all-quotes",             roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Missed Leads",    icon: <Warning />,           path: "/missed-leads",           roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
@@ -210,6 +148,9 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
       { text: "Leave",              icon: <EventBusy />,          path: "/leave-management",   roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Leave Types",        icon: <Inventory2Outlined />, path: "/leave-types",        roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Holiday Management", icon: <Celebration />,        path: "/holiday-management", roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
+      { text: "Payroll",            icon: <Paid />,               path: "/payroll",            roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
+      { text: "Salary Structure",   icon: <ReceiptLong />,        path: "/payroll/salaries",   roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
+      { text: "Salary Slips",       icon: <AccountBalanceWallet />,path: "/payroll/payslips",   roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
       {
         text: "Location Visit",
         icon: <LocationOnIcon />,
@@ -219,9 +160,9 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
       { text: "Expense",       icon: <Paid />,              path: "/expense",          roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Import Leads",  icon: <CloudUpload />,       path: "/import-leads",     roles: ["Admin_panel","ZSM"] },
       { text: "Reports",       icon: <Insights />,          path: "/reports",          roles: ["Admin_panel","ZSM","Incharge"] },
-      { text: "Daily Worksheet", icon: <Insights />, path: "/work-register", roles: ["ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","Admin_panel","ZSM","Incharge"] },
+      { text: "Installer Work Register", icon: <Insights />, path: "/work-register", roles: ["ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","Admin_panel","ZSM","Incharge"] },
       { text: "Notifications", icon: <Notifications />,     path: "/notifications",    roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
-      { text: "Settings",      icon: <SettingsIcon />,   path: "/settings",          roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN"] },
+      { text: "Settings",      icon: <SettingsIcon />,      path: "/settings",         roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
     ],
     [userRole],
   );
@@ -245,12 +186,14 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
       [
         { text: "Overview",    icon: <Dashboard />,    itemNames: ["Dashboard","Lead Funnel"] },
         { text: "Leads",       icon: <FilterAlt />,    itemNames: ["All Leads","Missed Leads","Import Leads"] },
-        { text: "Projects",    icon: <TaskAlt />,      itemNames: ["Projects","Visit Schedule","3D Design","Add Quotation","All Quotes"] },
-        { text: "Attendance",  icon: <CalendarMonth />,itemNames: ["Team Attendance","My Attendance","Leave","Leave Types","Holiday Management"] },
-        { text: "HR",          icon: <Groups />,       itemNames: ["Employees"] },
+        { text: "Projects",    icon: <TaskAlt />,      itemNames: ["Projects","Total Visits","3D Design","Add Quotation","All Quotes"] },
+        { text: "Inventory",   icon: <Inventory2Outlined />, itemNames: ["Inventory In","Inventory Out"] },
+        { text: "Attendance",  icon: <CalendarMonth />,itemNames: ["Team Attendance","My Attendance","Leave Types","Holiday Management"] },
+        { text: "Salary",      icon: <AccountBalanceWallet />, itemNames: ["Payroll","Salary Structure","Salary Slips"] },
+        { text: "HR",          icon: <Groups />,       itemNames: ["Employees","Leave"] },
         { text: "Team",        icon: <Groups />,       itemNames: ["Location Visit","Expense"] },
-        { text: "Insights",    icon: <Insights />,     itemNames: ["Reports","Daily Worksheet","Notifications"] },
-        { text: "Settings",    icon: <SettingsIcon />, itemNames: ["Settings"], direct: true },
+        { text: "Insights",    icon: <Insights />,     itemNames: ["Reports","Installer Work Register","Notifications"] },
+        { text: "Settings",    icon: <SettingsIcon />, itemNames: ["Settings"] },
       ]
         .map((section) => ({
           ...section,
@@ -271,41 +214,25 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
     if (active) setOpenSection(active.text);
   }, [location.pathname, menuSections]);
 
+  const isActive  = (path) =>
+    location.pathname === path ||
+    (path !== "/payroll" && location.pathname.startsWith(`${path}/`));
+
   const handleNavigate = useCallback(
     (path) => {
-      if (path === "/notifications") {
-        setUnreadNotifications(0);
-        const token =
-          localStorage.getItem("token") ||
-          localStorage.getItem("authToken") ||
-          localStorage.getItem("accessToken") ||
-          "";
-        if (token) {
-          fetch(`${API_BASE_URL}/notifications/read-all`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-          }).catch(() => {});
-        }
-      }
       navigate(path);
       if (isMobile || isTablet) onClose?.();
     },
-    [navigate, isMobile, isTablet, onClose]
+    [navigate, isMobile, isTablet, onClose],
   );
 
-  const handleLogout = () => navigate("/login");
-  const getUserInitials = () =>
+  const handleLogout     = () => navigate("/login");
+  const getUserInitials  = () =>
     `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || ""}`.toUpperCase() || "U";
 
   // ── Collapsed Icon Item ────────────────────────────────────────────────────
   const renderMenuItem = (item) => {
-    const active = typeof isActive === "function" ? isActive(item.path) : isItemActivePath(location.pathname, item?.path);
-    const isNotificationItem = item.path === "/notifications";
-    const badgeCount = isNotificationItem ? unreadNotifications : (item.badge || 0);
-
+    const active = isActive(item.path);
     const btn = (
       <ListItemButton
         key={item.path}
@@ -349,27 +276,9 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
             transform: active ? "scale(1.1)" : "scale(1)",
           }}
         >
-          {badgeCount > 0 ? (
-            <Badge
-              badgeContent={badgeCount > 99 ? "99+" : badgeCount}
-              color="error"
-              sx={{
-                "& .MuiBadge-badge": {
-                  fontSize: "0.68rem",
-                  height: 18,
-                  minWidth: 18,
-                  borderRadius: "50%",
-                  fontWeight: 800,
-                  bgcolor: "#ef4444",
-                  boxShadow: "0 2px 6px rgba(239, 68, 68, 0.4)",
-                },
-              }}
-            >
-              {item.icon}
-            </Badge>
-          ) : (
-            item.icon
-          )}
+          {item.badge ? (
+            <Badge badgeContent={item.badge} color="error" variant="dot">{item.icon}</Badge>
+          ) : item.icon}
         </ListItemIcon>
         {!effectiveCollapsed && (
           <ListItemText
@@ -384,27 +293,6 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
             }}
           />
         )}
-        {!effectiveCollapsed && badgeCount > 0 && (
-          <Box
-            sx={{
-              minWidth: 20,
-              height: 20,
-              borderRadius: "50%",
-              bgcolor: "#ef4444",
-              color: "#ffffff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "0.72rem",
-              fontWeight: 800,
-              px: 0.5,
-              ml: "auto",
-              boxShadow: "0 2px 8px rgba(239, 68, 68, 0.4)",
-            }}
-          >
-            {badgeCount > 99 ? "99+" : badgeCount}
-          </Box>
-        )}
       </ListItemButton>
     );
 
@@ -417,10 +305,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
 
   // ── Submenu Item ───────────────────────────────────────────────────────────
   const renderSubmenuItem = (item) => {
-    const active = typeof isActive === "function" ? isActive(item.path) : isItemActivePath(location.pathname, item?.path);
-    const isNotificationItem = item.path === "/notifications";
-    const badgeCount = isNotificationItem ? unreadNotifications : (item.badge || 0);
-
+    const active = isActive(item.path);
     return (
       <ListItemButton
         key={item.path}
@@ -474,27 +359,6 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
             noWrap: true,
           }}
         />
-        {badgeCount > 0 && (
-          <Box
-            sx={{
-              minWidth: 19,
-              height: 19,
-              borderRadius: "50%",
-              bgcolor: "#ef4444",
-              color: "#ffffff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "0.68rem",
-              fontWeight: 800,
-              px: 0.5,
-              ml: "auto",
-              boxShadow: "0 2px 6px rgba(239, 68, 68, 0.4)",
-            }}
-          >
-            {badgeCount > 99 ? "99+" : badgeCount}
-          </Box>
-        )}
       </ListItemButton>
     );
   };
@@ -502,11 +366,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
   // ── Section Header ─────────────────────────────────────────────────────────
   const renderMenuSection = (section) => {
     const isOpen        = openSection === section.text;
-    const hasActiveItem = section.items.some((item) => (typeof isActive === "function" ? isActive(item.path) : isItemActivePath(location.pathname, item?.path)));
-    const sectionBadgeCount = section.items.reduce((acc, it) => {
-      if (it.path === "/notifications") return acc + unreadNotifications;
-      return acc + (it.badge || 0);
-    }, 0);
+    const hasActiveItem = section.items.some((item) => isActive(item.path));
 
     return (
       <Box key={section.text} sx={{ mb: 0.6 }}>
@@ -553,27 +413,6 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
               transition: "all 0.25s ease",
             }}
           />
-          {!isOpen && sectionBadgeCount > 0 && (
-            <Box
-              sx={{
-                minWidth: 18,
-                height: 18,
-                borderRadius: "50%",
-                bgcolor: "#ef4444",
-                color: "#ffffff",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "0.68rem",
-                fontWeight: 800,
-                px: 0.4,
-                mr: 1,
-                boxShadow: "0 2px 6px rgba(239, 68, 68, 0.4)",
-              }}
-            >
-              {sectionBadgeCount > 99 ? "99+" : sectionBadgeCount}
-            </Box>
-          )}
           <ExpandMore
             sx={{
               fontSize: "1.25rem",
@@ -622,6 +461,8 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
     </Box>
   );
 
+  const currentLogo = isDark ? sidebarLogoDark : sidebarLogoLight;
+
   // ── Logo Bar ───────────────────────────────────────────────────────────────
   const logoBar = (
     <Box
@@ -640,28 +481,25 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
           width: effectiveCollapsed ? 36 : 42,
           height: effectiveCollapsed ? 36 : 42,
           borderRadius: "12px", 
-          bgcolor: "#fff",
+          bgcolor: isDark ? "#000" : "#fff",
           display: "flex", alignItems: "center", justifyContent: "center",
           flexShrink: 0, overflow: "hidden",
-          border: `1px solid ${borderCol}`,
-          boxShadow: "0 6px 16px rgba(30,64,175,0.14)",
+          border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : borderCol}`,
+          boxShadow: isDark ? "0 6px 16px rgba(0,0,0,0.4)" : "0 6px 16px rgba(30,64,175,0.14)",
           transition: "all 0.25s ease",
         }}
       >
         <Box
-          component="img" src={sidebarLogo} alt="Sahoo Construction & Solar"
-          onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = sidebarLogo; }}
-          sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.4 }}
+          component="img" src={currentLogo} alt="Myra Enterprise Pvt.Ltd."
+          onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = currentLogo; }}
+          sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.3 }}
         />
       </Box>
       {!effectiveCollapsed && (
         <Box sx={{ overflow: "hidden" }}>
           <Typography variant="subtitle1" color={textPri} fontWeight={800}
-            sx={{ lineHeight: 1.2, letterSpacing: "-0.01em", whiteSpace: "nowrap", fontSize: "0.95rem" }}>
-            Sahoo Construction
-          </Typography>
-          <Typography variant="caption" sx={{ color: textSec, fontSize: "0.68rem", fontWeight: 600 }}>
-            SCS Connect
+            sx={{ lineHeight: 1.2, letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>
+            Myra Enterprise Pvt.Ltd.
           </Typography>
         </Box>
       )}
@@ -681,22 +519,19 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
     >
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
         <Box sx={{
-          height: 42, minWidth: 64, px: 1, borderRadius: "12px", bgcolor: "#fff",
+          height: 42, minWidth: 64, px: 1, borderRadius: "12px", bgcolor: isDark ? "#000" : "#fff",
           display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
-          border: `1px solid ${borderCol}`,
-          boxShadow: "0 6px 16px rgba(30,64,175,0.14)",
+          border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : borderCol}`,
+          boxShadow: isDark ? "0 6px 16px rgba(0,0,0,0.4)" : "0 6px 16px rgba(30,64,175,0.14)",
         }}>
-          <Box component="img" src={sidebarLogo} alt="Sahoo Construction & Solar"
-            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = sidebarLogo; }}
+          <Box component="img" src={currentLogo} alt="Myra Enterprise Pvt.Ltd."
+            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = currentLogo; }}
             sx={{ height: "85%", width: "auto", maxWidth: "100%", objectFit: "contain" }}
           />
         </Box>
         <Box>
-          <Typography variant="subtitle1" color={textPri} fontWeight={800} sx={{ lineHeight: 1.2, fontSize: "0.95rem" }}>
-            Sahoo Construction
-          </Typography>
-          <Typography variant="caption" sx={{ color: textSec, fontSize: "0.68rem", fontWeight: 600 }}>
-            SCS Connect
+          <Typography variant="subtitle1" color={textPri} fontWeight={800} sx={{ lineHeight: 1.2 }}>
+            Myra Enterprise Pvt.Ltd.
           </Typography>
         </Box>
       </Box>

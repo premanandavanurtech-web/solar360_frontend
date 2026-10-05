@@ -1015,11 +1015,13 @@ const TripOdometerPointBox = ({
   const itemBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0";
 
   const [candidateIndex, setCandidateIndex] = useState(0);
+  const [hasImageError, setHasImageError] = useState(false);
   const candidates = React.useMemo(() => getPhotoUrlCandidates(photoPath), [photoPath]);
-  const currentUrl = candidates[candidateIndex] || null;
+  const currentUrl = !hasImageError && candidates.length > 0 ? (candidates[candidateIndex] || null) : null;
 
   useEffect(() => {
     setCandidateIndex(0);
+    setHasImageError(false);
   }, [photoPath]);
 
   // If this is an End box for an Ongoing trip
@@ -1134,6 +1136,8 @@ const TripOdometerPointBox = ({
               onError={() => {
                 if (candidateIndex + 1 < candidates.length) {
                   setCandidateIndex((i) => i + 1);
+                } else {
+                  setHasImageError(true);
                 }
               }}
               sx={{
@@ -1364,7 +1368,7 @@ const TripItemCardExact = ({ trip, index, onOpenPreview, onShowOnMap }) => {
           headerColor={palette.main}
           time={trip.startTime}
           km={trip.startKm}
-          photoPath={trip.startKmImage}
+          photoPath={trip.startKmImage || trip.startKmImageUri || trip.startImage}
           location={trip.startLocation}
           onOpenPreview={onOpenPreview}
           tripInfo={trip}
@@ -1412,7 +1416,7 @@ const TripItemCardExact = ({ trip, index, onOpenPreview, onShowOnMap }) => {
           headerColor={isCompleted ? (TRIP_COLOR_PALETTES[(index + 1) % TRIP_COLOR_PALETTES.length].main) : palette.main}
           time={trip.endTime}
           km={trip.endKm}
-          photoPath={trip.endKmImage}
+          photoPath={trip.endKmImage || trip.endKmImageUri || trip.endImage}
           location={trip.endLocation}
           onOpenPreview={onOpenPreview}
           tripInfo={trip}
@@ -1835,6 +1839,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
   const [mapDistance,      setMapDistance]      = useState(null);
   const [currentLocation,  setCurrentLocation]  = useState(null);
   const [replayState,      setReplayState]      = useState(null);
+  const [showReplaySimulator, setShowReplaySimulator] = useState(true);
 
   const handleReplayUpdate = useCallback((data) => {
     setReplayState((prev) => {
@@ -2835,6 +2840,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
     punchBatteryInfo={punchBatteryInfo}
     resolvedAddress={resolvedAddress}
     visits={visibleVisits}
+    stayedLocations={stayedLocations}
     selectedDate={selectedMapDate}
     preferVisitTrail={useVisitTrailOnly}
     onReplayUpdate={handleReplayUpdate}
@@ -2860,8 +2866,40 @@ export default function MemberVisitHistory({ userId: propUserId }) {
 
             </Box>
 
+            {/* If dismissed, offer a button to re-open simulator */}
+            {!showReplaySimulator && replayState && replayState.hasPoints && (
+              <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => setShowReplaySimulator(true)}
+                  startIcon={<Route sx={{ fontSize: 18 }} />}
+                  sx={{
+                    textTransform: "none",
+                    fontWeight: 800,
+                    fontSize: "0.80rem",
+                    borderRadius: "12px",
+                    color: primaryColor,
+                    borderColor: alpha(primaryColor, 0.4),
+                    bgcolor: alpha(primaryColor, isDark ? 0.14 : 0.05),
+                    px: 2,
+                    py: 0.75,
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                    transition: "all 0.2s ease",
+                    "&:hover": {
+                      borderColor: primaryColor,
+                      bgcolor: alpha(primaryColor, isDark ? 0.22 : 0.1),
+                      boxShadow: `0 4px 14px ${alpha(primaryColor, 0.18)}`,
+                    },
+                  }}
+                >
+                  ▶ Open Route Replay Simulator
+                </Button>
+              </Box>
+            )}
+
             {/* Dedicated Route Replay Simulator Card */}
-            {replayState && replayState.hasPoints && (
+            {showReplaySimulator && replayState && replayState.hasPoints && (
               <Box sx={{
                 bgcolor: cardBg,
                 borderRadius: "20px",
@@ -2873,7 +2911,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                 gap: 2,
                 transition: "all 0.25s ease",
               }}>
-                {/* Header: Title + Time/Km + Speed options */}
+                {/* Header: Title + Time/Km + Speed options + Dismiss Button */}
                 <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1.5 }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                     <Box sx={{
@@ -2899,7 +2937,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                     </Box>
                   </Box>
 
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
                     {/* Time & Stop Location Pill (No KM factor) */}
                     <Box sx={{
                       bgcolor: isDark ? "rgba(255,255,255,0.06)" : "#f8fafc",
@@ -2950,6 +2988,38 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                         );
                       })}
                     </Box>
+
+                    {/* Dismiss / Normal Tracking Button */}
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => {
+                        setShowReplaySimulator(false);
+                        if (typeof replayState?.dismissReplay === "function") {
+                          replayState.dismissReplay();
+                        }
+                      }}
+                      startIcon={<Close sx={{ fontSize: 16 }} />}
+                      sx={{
+                        textTransform: "none",
+                        borderRadius: "10px",
+                        borderColor: isDark ? "rgba(255,255,255,0.18)" : "#e2e8f0",
+                        color: isDark ? "#cbd5e1" : "#64748b",
+                        fontWeight: 700,
+                        fontSize: "0.75rem",
+                        py: 0.45,
+                        px: 1.25,
+                        bgcolor: isDark ? "rgba(255,255,255,0.03)" : "#ffffff",
+                        transition: "all 0.15s ease",
+                        "&:hover": {
+                          borderColor: "#ef4444",
+                          color: "#ef4444",
+                          bgcolor: alpha("#ef4444", 0.08),
+                        },
+                      }}
+                    >
+                      Dismiss / Normal Tracking
+                    </Button>
                   </Box>
                 </Box>
 

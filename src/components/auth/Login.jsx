@@ -20,8 +20,8 @@ import { useAuth } from "../../contexts/AuthContext";
 
 const SolarLogoIcon = ({ className = "h-10 w-auto" }) => (
   <img
-    src="/solar360-logo-clean.png"
-    alt="SCS Connect"
+    src="/solar360-logo-light.png"
+    alt="Myra Enterprise Pvt.Ltd."
     className={`${className} object-contain`}
   />
 );
@@ -266,8 +266,8 @@ const Login = () => {
                 <SolarLogoIcon className="h-9 w-auto max-w-[130px]" />
               </div>
               <div className="flex items-center">
-                <span className="text-xl font-extrabold tracking-tight text-white">SCS</span>
-                <span className="text-xl font-extrabold tracking-tight text-purple-400 ml-1.5">CONNECT</span>
+                <span className="text-xl font-extrabold tracking-tight text-white">SOLAR</span>
+                <span className="text-xl font-extrabold tracking-tight text-purple-400 ml-1.5">CRM</span>
               </div>
             </div>
             <p className="mt-2.5 text-xs sm:text-sm text-slate-300 font-medium">
@@ -322,7 +322,7 @@ const Login = () => {
                 <SolarLogoIcon className="h-12 w-auto max-w-[170px]" />
               </div>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                Sign In to SCS Connect
+                Sign In to Myra Enterprise Pvt.Ltd.
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
                 Enter your credentials to access your admin dashboard
@@ -480,7 +480,7 @@ const Login = () => {
           {/* Footer Copyright */}
           <div className="mt-6 pt-4 border-t border-slate-100 text-center">
             <p className="text-xs text-slate-400 text-center sm:text-left">
-              &copy; {new Date().getFullYear()} SCS Connect Management System. All rights reserved.
+              &copy; {new Date().getFullYear()} Myra Enterprise Pvt.Ltd. All rights reserved.
             </p>
             <p className="text-[10px] text-indigo-600 mt-1 font-bold">
               Version 2.1.0 &bull; Security Verified

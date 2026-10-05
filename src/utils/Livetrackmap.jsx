@@ -532,6 +532,7 @@ export default function LiveTrackingMap({
   resolvedAddress  = "",
   selectedDate    = null,
   visits          = [],
+  stayedLocations = [],
   preferVisitTrail = false,
   punchInPopupTrigger = 0,
   onReplayUpdate = null,
@@ -547,12 +548,14 @@ export default function LiveTrackingMap({
   const allPtsRef  = useRef([]);
   const rawPtsRef  = useRef([]);
   const visitsRef = useRef(visits);
+  const stayedLocationsRef = useRef(stayedLocations);
   const punchInLocationRef = useRef(punchInLocation);
   const punchOutLocationRef = useRef(punchOutLocation);
   const snappedTrailCacheRef = useRef({ key: "", path: [] });
   const drawRequestSeqRef = useRef(0);
   const lastEmittedLocationRef = useRef(null);
   const visitMkRef = useRef([]);
+  const stayMkRef = useRef([]);
   const userAdjustedViewportRef = useRef(false);
   const suppressViewportEventsRef = useRef(false);
   const [mapLoaded,  setMapLoaded]  = useState(false);
@@ -848,6 +851,40 @@ export default function LiveTrackingMap({
     moveReplay(nextIdx, points);
   }, [replayIndex, moveReplay]);
 
+  const dismissReplay = useCallback(() => {
+    setIsReplaying(false);
+    setReplayIndex(0);
+    if (replayMarkerRef.current) {
+      try {
+        replayMarkerRef.current.remove();
+      } catch {}
+      replayMarkerRef.current = null;
+    }
+    if (replayPolyRef.current) {
+      try {
+        replayPolyRef.current.remove();
+      } catch {}
+      replayPolyRef.current = null;
+    }
+    const lMap = leafletMapRef.current;
+    const points = allPtsRef.current || [];
+    if (lMap && points.length > 0) {
+      try {
+        const validPoints = points
+          .filter((p) => Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)))
+          .map((p) => [Number(p.lat), Number(p.lng)]);
+        if (validPoints.length > 0) {
+          const bounds = L.latLngBounds(validPoints);
+          if (bounds.isValid()) {
+            withProgrammaticViewport(() => {
+              lMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+            });
+          }
+        }
+      } catch {}
+    }
+  }, [withProgrammaticViewport]);
+
   // Throttled Replay Updates to Parent (Eliminates React rendering bottlenecks)
   const toggleReplayRef = useRef(toggleReplay);
   toggleReplayRef.current = toggleReplay;
@@ -857,12 +894,15 @@ export default function LiveTrackingMap({
   stepReplayRef.current = stepReplay;
   const setReplaySpeedRef = useRef(setReplaySpeed);
   setReplaySpeedRef.current = setReplaySpeed;
+  const dismissReplayRef = useRef(dismissReplay);
+  dismissReplayRef.current = dismissReplay;
 
   const stableToggleReplay = useCallback(() => toggleReplayRef.current(), []);
   const stableSeek = useCallback((p) => handleSliderSeekRef.current(p), []);
   const stableSetSpeed = useCallback((s) => setReplaySpeedRef.current(s), []);
   const stableStepForward = useCallback(() => stepReplayRef.current(1), []);
   const stableStepBackward = useCallback(() => stepReplayRef.current(-1), []);
+  const stableDismissReplay = useCallback(() => dismissReplayRef.current(), []);
 
   useEffect(() => {
     if (typeof onReplayUpdateRef.current !== "function") return;
@@ -935,6 +975,7 @@ export default function LiveTrackingMap({
       setSpeed: stableSetSpeed,
       stepForward: stableStepForward,
       stepBackward: stableStepBackward,
+      dismissReplay: stableDismissReplay,
     });
   }, [
     isReplaying,
@@ -947,6 +988,7 @@ export default function LiveTrackingMap({
     stableSetSpeed,
     stableStepForward,
     stableStepBackward,
+    stableDismissReplay,
   ]);
 
   const syncStartMarker = useCallback((points = allPtsRef.current) => {
@@ -1233,6 +1275,135 @@ export default function LiveTrackingMap({
       visitMkRef.current.push(mk);
     });
   }, [mapLoaded, visits]);
+
+  // ── Draw Stayed Location Markers (15+ min stay) ────────────────────────────
+  useEffect(() => {
+    const lMap = leafletMapRef.current;
+    if (!mapLoaded || !lMap) return;
+
+    stayMkRef.current.forEach((m) => {
+      try { m.remove(); } catch {}
+    });
+    stayMkRef.current = [];
+
+    (stayedLocations || []).forEach((stay, idx) => {
+      const lat = Number(stay.lat ?? stay.coordinates?.lat ?? stay.location?.lat);
+      const lng = Number(stay.lng ?? stay.coordinates?.lng ?? stay.location?.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || (Math.abs(lat) < 0.1 && Math.abs(lng) < 0.1)) return;
+
+      const mins = Number(stay.totalDurationMinutes || stay.durationMinutes) || 15;
+      
+      const latestEvent = Array.isArray(stay.events) && stay.events.length
+        ? [...stay.events].sort((a, b) => new Date(b.endTime).getTime() - new Date(a.endTime).getTime())[0]
+        : null;
+      
+      const startTimeStr = latestEvent?.startTime
+        ? new Date(latestEvent.startTime).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })
+        : "";
+      const endTimeStr = latestEvent?.endTime || stay.lastEndTime
+        ? new Date(latestEvent?.endTime || stay.lastEndTime).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })
+        : "";
+      const timeRangeStr = startTimeStr && endTimeStr ? `${startTimeStr} - ${endTimeStr}` : (endTimeStr || `${mins} min`);
+
+      const displayTitle = stay.locationName && !/^-?\d+(\.\d+)?[,\s]+-?\d+(\.\d+)?$/.test(stay.locationName)
+        ? stay.locationName
+        : "Stayed Location";
+      
+      const displayAddress = stay.address && !/^-?\d+(\.\d+)?[,\s]+-?\d+(\.\d+)?$/.test(stay.address)
+        ? stay.address
+        : displayTitle;
+
+      const stayIconHtml = `
+        <div class="stay-map-marker" style="
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+          color: #ffffff;
+          padding: 3px 8px 3px 5px;
+          border-radius: 20px;
+          border: 2px solid #ffffff;
+          box-shadow: 0 4px 12px rgba(217,119,6,0.45), 0 2px 4px rgba(0,0,0,0.25);
+          cursor: pointer;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-size: 11px;
+          font-weight: 800;
+          white-space: nowrap;
+          transform: translate(-50%, -50%);
+          transition: transform 0.15s ease;
+        ">
+          <span style="
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ffffff;
+            color: #d97706;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            flex-shrink: 0;
+            font-weight: 900;
+          ">⏱</span>
+          <span>${mins}m</span>
+        </div>
+      `;
+
+      const stayIcon = L.divIcon({
+        className: "custom-stay-div-icon",
+        html: stayIconHtml,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      });
+
+      const popupHtml = `
+        <div style="
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          padding: 6px 4px;
+          max-width: 270px;
+          min-width: 200px;
+        ">
+          <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;">
+            <span style="color: #d97706; font-size: 14px;">📍</span>
+            <span>${displayTitle}</span>
+          </div>
+          <div style="font-size: 11.5px; color: #334155; line-height: 1.4; word-break: break-word;">
+            ${displayAddress}
+          </div>
+        </div>
+      `;
+
+      const tooltipHtml = `
+        <div style="
+          background: #ffffff;
+          color: #0f172a;
+          font-size: 11px;
+          font-weight: 700;
+          padding: 5px 10px;
+          border-radius: 8px;
+          box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+          border: 1px solid #e2e8f0;
+          white-space: nowrap;
+          max-width: 280px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        ">
+          <span style="color: #d97706; font-size: 12px;">📍</span>
+          <span>${displayAddress}</span>
+        </div>
+      `;
+
+      const mk = L.marker([lat, lng], { icon: stayIcon, zIndexOffset: 460 })
+        .addTo(lMap)
+        .bindTooltip(tooltipHtml, { permanent: false, direction: "top", offset: [0, -14], className: "custom-clean-tooltip", opacity: 1 })
+        .bindPopup(popupHtml, { maxWidth: 290, className: "custom-stay-popup" });
+
+      stayMkRef.current.push(mk);
+    });
+  }, [mapLoaded, stayedLocations]);
 
   const syncEndMarker = useCallback((points = allPtsRef.current) => {
     const lMap = leafletMapRef.current;
