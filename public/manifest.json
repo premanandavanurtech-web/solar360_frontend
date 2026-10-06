@@ -3,12 +3,12 @@
   "name": "Connect 360",
   "icons": [
     {
-      "src": "logo192.png?v=20260528b",
+      "src": "logo192.png?v=20261006",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "logo512.png?v=20260528b",
+      "src": "logo512.png?v=20261006",
       "sizes": "512x512",
       "type": "image/png"
     }

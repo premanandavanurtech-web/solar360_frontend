@@ -683,21 +683,7 @@ const UserDetailsPage = () => {
         { id: 8, name: "HDFC_Cancelled_Cheque.pdf", size: "640 KB", uploadedOn: "18 Jan 2023", verified: true },
       ],
     },
-    {
-      id: "salary",
-      title: "Salary Documents",
-      docCount: 2,
-      verified: false,
-      description: "Salary Structure, Form 16",
-      iconColor: "#f43f5e",
-      bgColor: "#fff1f2",
-      darkBgColor: "rgba(244, 63, 94, 0.12)",
-      icon: ReceiptLong,
-      files: [
-        { id: 9, name: "Salary_Annexure_Breakup.pdf", size: "1.1 MB", uploadedOn: "01 Feb 2023", verified: true },
-        { id: 10, name: "Form_16_FY_2025_26.pdf", size: "2.1 MB", uploadedOn: "10 Jul 2026", verified: true },
-      ],
-    },
+
     {
       id: "medical",
       title: "Medical Documents",
@@ -2042,7 +2028,7 @@ const UserDetailsPage = () => {
                           Bank Information
                         </Typography>
                         <Typography variant="caption" sx={{ color: isDark ? "#64748b" : "#94a3b8", fontSize: "0.7rem", fontWeight: 600 }}>
-                          Payroll & Direct Deposit
+                          Account Details
                         </Typography>
                       </Box>
                     </Stack>
@@ -3904,7 +3890,7 @@ const UserDetailsPage = () => {
       <Menu anchorEl={actionsAnchorEl} open={Boolean(actionsAnchorEl)} onClose={() => setActionsAnchorEl(null)}>
         <MenuItem onClick={() => { setActionsAnchorEl(null); setCurrentTab(1); }}><EventAvailable sx={{ fontSize: 16, mr: 1, color: "#10b981" }} /> View Attendance</MenuItem>
         <MenuItem onClick={() => { setActionsAnchorEl(null); setCurrentTab(2); }}><BeachAccess sx={{ fontSize: 16, mr: 1, color: "#1d68f0" }} /> Manage Leaves</MenuItem>
-        <MenuItem onClick={() => { setActionsAnchorEl(null); setCurrentTab(4); }}><ReceiptLong sx={{ fontSize: 16, mr: 1, color: "#8b5cf6" }} /> View Salary Slips</MenuItem>
+        <MenuItem onClick={() => { setActionsAnchorEl(null); setCurrentTab(4); }}><TrendingUp sx={{ fontSize: 16, mr: 1, color: "#8b5cf6" }} /> View Performance</MenuItem>
         <Divider />
         <MenuItem onClick={() => { setActionsAnchorEl(null); navigate("/user-management"); }} sx={{ color: "#ef4444" }}><Lock sx={{ fontSize: 16, mr: 1 }} /> Suspend Account</MenuItem>
       </Menu>

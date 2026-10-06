@@ -563,83 +563,8 @@ function StepComponents({ form, updateField, updateValue }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
 
-  const [liveItems, setLiveItems] = useState(inventoryItemsCatalog);
-  const [fetchingInventory, setFetchingInventory] = useState(false);
-  const getItemStock = (item) => {
-    const stockRows = Array.isArray(item?.warehouseStock) ? item.warehouseStock : [];
-    const rowStock = stockRows.reduce(
-      (sum, row) => sum + Number(row.availableQty ?? row.quantity ?? row.qty ?? 0),
-      0,
-    );
-    return Number(item?.availableStock ?? item?.totalStock ?? item?.openingStock ?? rowStock ?? 0);
-  };
-  const renderInventoryOption = (props, option) => (
-    <Box component="li" {...props} key={option.id || option.itemName}>
-      <Stack spacing={0.4} sx={{ width: "100%", minWidth: 0 }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-          <Typography fontWeight={800} noWrap sx={{ color: isDark ? "#f8fafc" : "#0f172a" }}>
-            {option.itemName}
-          </Typography>
-          <Chip
-            size="small"
-            label={`Stock: ${option.stock}`}
-            sx={{
-              flexShrink: 0,
-              height: 22,
-              fontWeight: 800,
-              bgcolor: option.stock > 0 ? alpha("#22c55e", isDark ? 0.18 : 0.12) : alpha("#ef4444", isDark ? 0.18 : 0.12),
-              color: option.stock > 0 ? (isDark ? "#86efac" : "#15803d") : "#ef4444",
-            }}
-          />
-        </Stack>
-        <Typography variant="caption" noWrap sx={{ color: isDark ? "#94a3b8" : "#64748b" }}>
-          Category: {option.category || "-"} | Subcategory: {option.subcategory || "-"}
-        </Typography>
-      </Stack>
-    </Box>
-  );
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchLiveInventory = async () => {
-      try {
-        setFetchingInventory(true);
-        const res = await axiosInstance.get("/inventory/items", { params: { limit: 500 } });
-        const data = res.data?.result?.items || (Array.isArray(res.data?.result) ? res.data.result : []);
-        if (isMounted && Array.isArray(data) && data.length > 0) {
-          const parsed = data.map((item) => {
-            const rawCat = typeof item.category === "object" ? item.category?.category : item.category;
-            const priceVal = item.pricing?.sellingPrice || item.pricing?.purchaseCost || item.price || 0;
-            const stockVal = getItemStock(item);
-            return {
-              id: item._id,
-              category: rawCat || "Solar Panels",
-              subcategory: item.subcategory || "General",
-              itemName: item.itemName || item.name,
-              brand: item.purchaseInfo?.vendorName || item.brand || item.itemName?.split(" ")[0] || "Standard",
-              wattPeak: item.wattPeak || String(item.itemName?.match(/\d{3}/)?.[0] || "540"),
-              size: item.size || String(item.itemName?.match(/\d+(\.\d+)?\s*k[wW]/i)?.[0]?.replace(/k[wW]/i, "") || "5"),
-              price: Number(priceVal),
-              stock: Number(stockVal),
-            };
-          });
-          setLiveItems((prev) => {
-            const merged = [...parsed];
-            prev.forEach((p) => {
-              if (!merged.some((m) => m.itemName === p.itemName)) merged.push(p);
-            });
-            return merged;
-          });
-        }
-      } catch (err) {
-        console.warn("Using fallback inventory catalog", err);
-      } finally {
-        if (isMounted) setFetchingInventory(false);
-      }
-    };
-    fetchLiveInventory();
-    return () => { isMounted = false; };
-  }, []);
+  const [liveItems] = useState(inventoryItemsCatalog);
+  const fetchingInventory = false;
 
   const componentItems = Array.isArray(form.componentItems) ? form.componentItems : [];
   const [componentCategory, setComponentCategory] = useState("");

@@ -39,16 +39,11 @@ import {
   ChevronRight,
   ExpandMore,
   CategoryOutlined,
-  Inventory2Outlined,
-  OutboxOutlined,
-  MoveToInboxOutlined,
+  FactCheck,
   Menu as MenuIcon,
   Close as CloseIcon,
   RequestQuote,
   Settings as SettingsIcon,
-  ReceiptLong,
-  AccountBalance,
-  AccountBalanceWallet,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
@@ -133,8 +128,6 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
       { text: "Projects",        icon: <TaskAlt />,           path: "/projects",               roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Total Visits",    icon: <Groups />,            path: "/total-visits",           roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "3D Design",       icon: <ViewInAr />,          path: "/3d-design",              roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
-      { text: "Inventory In",     icon: <MoveToInboxOutlined />, path: "/inventory/items",        roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
-      { text: "Inventory Out",    icon: <OutboxOutlined />,    path: "/inventory/out",          roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
       { text: "Add Quotation",   icon: <RequestQuote />,      path: "/quotation/create",       roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "All Quotes",      icon: <RequestQuote />,      path: "/all-quotes",             roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Missed Leads",    icon: <Warning />,           path: "/missed-leads",           roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
@@ -146,11 +139,8 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
       },
       { text: "Employees",          icon: <AdminPanelSettings />, path: "/user-management",    roles: ["Admin_panel","ZSM","Incharge"] },
       { text: "Leave",              icon: <EventBusy />,          path: "/leave-management",   roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
-      { text: "Leave Types",        icon: <Inventory2Outlined />, path: "/leave-types",        roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
+      { text: "Leave Types",        icon: <FactCheck />,          path: "/leave-types",        roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Holiday Management", icon: <Celebration />,        path: "/holiday-management", roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
-      { text: "Payroll",            icon: <Paid />,               path: "/payroll",            roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
-      { text: "Salary Structure",   icon: <ReceiptLong />,        path: "/payroll/salaries",   roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
-      { text: "Salary Slips",       icon: <AccountBalanceWallet />,path: "/payroll/payslips",   roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
       {
         text: "Location Visit",
         icon: <LocationOnIcon />,
@@ -187,9 +177,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         { text: "Overview",    icon: <Dashboard />,    itemNames: ["Dashboard","Lead Funnel"] },
         { text: "Leads",       icon: <FilterAlt />,    itemNames: ["All Leads","Missed Leads","Import Leads"] },
         { text: "Projects",    icon: <TaskAlt />,      itemNames: ["Projects","Total Visits","3D Design","Add Quotation","All Quotes"] },
-        { text: "Inventory",   icon: <Inventory2Outlined />, itemNames: ["Inventory In","Inventory Out"] },
         { text: "Attendance",  icon: <CalendarMonth />,itemNames: ["Team Attendance","My Attendance","Leave Types","Holiday Management"] },
-        { text: "Salary",      icon: <AccountBalanceWallet />, itemNames: ["Payroll","Salary Structure","Salary Slips"] },
         { text: "HR",          icon: <Groups />,       itemNames: ["Employees","Leave"] },
         { text: "Team",        icon: <Groups />,       itemNames: ["Location Visit","Expense"] },
         { text: "Insights",    icon: <Insights />,     itemNames: ["Reports","Installer Work Register","Notifications"] },
@@ -216,7 +204,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
 
   const isActive  = (path) =>
     location.pathname === path ||
-    (path !== "/payroll" && location.pathname.startsWith(`${path}/`));
+    location.pathname.startsWith(`${path}/`);
 
   const handleNavigate = useCallback(
     (path) => {
