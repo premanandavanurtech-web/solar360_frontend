@@ -13,10 +13,14 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  FormControl,
   Grid,
   IconButton,
   InputAdornment,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -32,15 +36,18 @@ import {
   CalendarTodayRounded,
   CheckCircleRounded,
   CloseRounded,
+  DateRangeRounded,
   EngineeringRounded,
   ExpandLessRounded,
   ExpandMoreRounded,
+  FilterListRounded,
   FmdGoodRounded,
   ImageRounded,
   OpenInNewRounded,
   PersonRounded,
   PictureAsPdfRounded,
   RefreshRounded,
+  RestartAltRounded,
   SearchRounded,
   ShieldRounded,
   SolarPowerRounded,
@@ -138,6 +145,16 @@ const uniqueSupervisorNames = (projects = []) => {
     .map((p) => personName(p.supervisor))
     .filter((n) => n && n !== "-");
   return [...new Set(names)].join(", ") || "-";
+};
+
+const isSupervisorSubmitter = (user) => {
+  const r = String(user?.role || "").trim().toUpperCase();
+  return ["SUPERVISOR", "ZSM", "MANAGER", "PROJECT_HEAD", "ADMIN", "ADMIN_PANEL"].includes(r);
+};
+
+const isInchargeSubmitter = (user) => {
+  const r = String(user?.role || "").trim().toUpperCase();
+  return ["INCHARGE", "TEAM", "INSTALLER"].includes(r) || (!isSupervisorSubmitter(user) && r !== "");
 };
 
 const getProjectTimestamp = (project, parentRow) => {
@@ -265,7 +282,7 @@ const drawFooter = (doc, pageNum, totalPages, workDate) => {
 // ─── PDF GENERATOR ───────────────────────────────────────────────────────────
 
 const downloadWorkRegisterPdf = async (row) => {
-  const installer = personName(row.user);
+  const submittedBy = personName(row.user);
   const workDate = formatDate(row.workDate);
   const supervisors = uniqueSupervisorNames(row.projects);
   const incharges = uniqueInchargeNames(row.projects);
@@ -332,16 +349,16 @@ const downloadWorkRegisterPdf = async (row) => {
   doc.setDrawColor(215, 230, 247);
   doc.line(180, cardY + 8, 180, cardY + 42);
 
-  // Segment 2: Installer (Who submitted)
+  // Segment 2: Submitted By (Who submitted)
   drawUserIcon(doc, 196, cardY + 15);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
-  doc.text("Installer", 218, cardY + 20);
+  doc.text("Submitted By", 218, cardY + 20);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(15, 47, 87);
-  doc.text(doc.splitTextToSize(installer, 130)[0] || "-", 218, cardY + 36);
+  doc.text(doc.splitTextToSize(submittedBy, 130)[0] || "-", 218, cardY + 36);
 
   doc.line(360, cardY + 8, 360, cardY + 42);
 
@@ -572,9 +589,9 @@ const downloadWorkRegisterPdf = async (row) => {
     drawFooter(doc, p, totalPages, workDate);
   }
 
-  const safeInstaller =
-    installer.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "installer";
-  doc.save(`daily-worksheet-${safeInstaller}-${workDate.replace(/\//g, "-")}.pdf`);
+  const safeSubmitter =
+    submittedBy.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "worksheet";
+  doc.save(`daily-worksheet-${safeSubmitter}-${workDate.replace(/\//g, "-")}.pdf`);
 };
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
@@ -585,6 +602,12 @@ export default function WorkRegister() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [roleTab, setRoleTab] = useState("ALL"); // "ALL" | "SUPERVISOR" | "INCHARGE"
+  const [selectedSupervisor, setSelectedSupervisor] = useState("ALL");
+  const [selectedIncharge, setSelectedIncharge] = useState("ALL");
+  const [selectedProjectType, setSelectedProjectType] = useState("ALL");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
   const [previewPhoto, setPreviewPhoto] = useState(null);
 
@@ -609,6 +632,87 @@ export default function WorkRegister() {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  // Tab counts
+  const tabCounts = useMemo(() => {
+    let inchargeCount = 0;
+    let supervisorCount = 0;
+    rows.forEach((r) => {
+      if (isSupervisorSubmitter(r.user)) supervisorCount += 1;
+      else inchargeCount += 1;
+    });
+    return {
+      all: rows.length,
+      supervisor: supervisorCount,
+      incharge: inchargeCount,
+    };
+  }, [rows]);
+
+  // Unique options for filters
+  const supervisorFilterOptions = useMemo(() => {
+    const set = new Set();
+    rows.forEach((r) => {
+      (r.projects || []).forEach((p) => {
+        const name = personName(p.supervisor);
+        if (name && name !== "-") set.add(name);
+      });
+      if (isSupervisorSubmitter(r.user)) {
+        const name = personName(r.user);
+        if (name && name !== "-") set.add(name);
+      }
+    });
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const inchargeFilterOptions = useMemo(() => {
+    const set = new Set();
+    rows.forEach((r) => {
+      (r.projects || []).forEach((p) => {
+        if (Array.isArray(p.incharges)) {
+          p.incharges.forEach((inc) => {
+            const name = personName(inc);
+            if (name && name !== "-") set.add(name);
+          });
+        }
+        if (p.incharge) {
+          const name = personName(p.incharge);
+          if (name && name !== "-") set.add(name);
+        }
+      });
+      if (!isSupervisorSubmitter(r.user)) {
+        const name = personName(r.user);
+        if (name && name !== "-") set.add(name);
+      }
+    });
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const projectTypeFilterOptions = useMemo(() => {
+    const set = new Set();
+    rows.forEach((r) => {
+      (r.projects || []).forEach((p) => {
+        if (p.projectType) set.add(p.projectType);
+      });
+    });
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedSupervisor !== "ALL") count++;
+    if (selectedIncharge !== "ALL") count++;
+    if (selectedProjectType !== "ALL") count++;
+    if (selectedDate) count++;
+    return count;
+  }, [selectedSupervisor, selectedIncharge, selectedProjectType, selectedDate]);
+
+  const clearAllFilters = () => {
+    setSelectedSupervisor("ALL");
+    setSelectedIncharge("ALL");
+    setSelectedProjectType("ALL");
+    setSelectedDate("");
+    setSearchTerm("");
+  };
+
   // Metrics
   const stats = useMemo(() => {
     let totalProjects = 0;
@@ -628,10 +732,58 @@ export default function WorkRegister() {
 
   // Filtered rows
   const filteredRows = useMemo(() => {
-    if (!searchTerm.trim()) return rows;
+    let list = rows;
+
+    // 1. Role tab filter
+    if (roleTab === "SUPERVISOR") {
+      list = list.filter((r) => isSupervisorSubmitter(r.user));
+    } else if (roleTab === "INCHARGE") {
+      list = list.filter((r) => !isSupervisorSubmitter(r.user));
+    }
+
+    // 2. Supervisor dropdown
+    if (selectedSupervisor !== "ALL") {
+      list = list.filter((r) => {
+        const sup = uniqueSupervisorNames(r.projects);
+        const subName = personName(r.user);
+        return sup === selectedSupervisor || subName === selectedSupervisor;
+      });
+    }
+
+    // 3. Incharge dropdown
+    if (selectedIncharge !== "ALL") {
+      list = list.filter((r) => {
+        const inc = uniqueInchargeNames(r.projects);
+        const subName = personName(r.user);
+        return inc.includes(selectedIncharge) || subName === selectedIncharge;
+      });
+    }
+
+    // 4. Project Type dropdown
+    if (selectedProjectType !== "ALL") {
+      list = list.filter((r) =>
+        (r.projects || []).some((p) => (p.projectType || "Others") === selectedProjectType)
+      );
+    }
+
+    // 5. Single Date Filter (e.g. specific day)
+    if (selectedDate) {
+      list = list.filter((r) => {
+        if (!r.workDate) return false;
+        const d = new Date(r.workDate);
+        if (Number.isNaN(d.getTime())) return false;
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}` === selectedDate;
+      });
+    }
+
+    // 6. Search term query
+    if (!searchTerm.trim()) return list;
     const q = searchTerm.toLowerCase();
-    return rows.filter((r) => {
-      const installer = personName(r.user).toLowerCase();
+    return list.filter((r) => {
+      const submittedBy = personName(r.user).toLowerCase();
       const sup = uniqueSupervisorNames(r.projects).toLowerCase();
       const inc = uniqueInchargeNames(r.projects).toLowerCase();
       const matchProject = (r.projects || []).some(
@@ -642,14 +794,22 @@ export default function WorkRegister() {
           String(p.projectType || "").toLowerCase().includes(q)
       );
       return (
-        installer.includes(q) ||
+        submittedBy.includes(q) ||
         sup.includes(q) ||
         inc.includes(q) ||
         matchProject ||
         formatDate(r.workDate).includes(q)
       );
     });
-  }, [rows, searchTerm]);
+  }, [
+    rows,
+    roleTab,
+    selectedSupervisor,
+    selectedIncharge,
+    selectedProjectType,
+    selectedDate,
+    searchTerm,
+  ]);
 
   return (
     <Box sx={{ p: { xs: 2, md: 3.5 }, bgcolor: "#f8fafc", minHeight: "100vh" }}>
@@ -678,7 +838,7 @@ export default function WorkRegister() {
                   Daily Worksheet & Site Verification
                 </Typography>
                 <Typography variant="body2" sx={{ color: "#64748b" }}>
-                  Approved field records, site geo-tagged photographs, supervisors & incharges
+                  Daily field records, site geo-tagged photographs, supervisors & incharges
                 </Typography>
               </Box>
             </Stack>
@@ -721,7 +881,7 @@ export default function WorkRegister() {
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Box>
                 <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
-                  Approved Worksheets
+                  Total Worksheets
                 </Typography>
                 <Typography variant="h4" sx={{ fontWeight: 800, color: "#0f2f57", mt: 0.5 }}>
                   {stats.worksheets}
@@ -787,33 +947,251 @@ export default function WorkRegister() {
         </Grid>
       </Grid>
 
-      {/* ─── SEARCH & FILTER BAR ─── */}
+      {/* ─── ROLE TABS & SEARCH BAR ─── */}
       <Card
         elevation={0}
         sx={{
-          p: 1.8,
+          p: 2,
           mb: 3,
           borderRadius: 3,
           border: "1px solid #e2e8f0",
           bgcolor: "#ffffff",
-          boxShadow: "0 1px 4px rgba(15, 23, 42, 0.04)",
+          boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
         }}
       >
-        <TextField
-          fullWidth
-          size="small"
-          placeholder="Search by Installer, Supervisor, Incharge, Consumer, A/C No, or Location..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchRounded sx={{ color: "#94a3b8" }} />
-              </InputAdornment>
-            ),
-            sx: { borderRadius: 2, bgcolor: "#f8fafc" },
-          }}
-        />
+        <Stack spacing={2}>
+          {/* Segmented Role Filter Tabs */}
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2} alignItems={{ xs: "stretch", sm: "center" }}>
+            <Button
+              variant={roleTab === "ALL" ? "contained" : "outlined"}
+              size="small"
+              onClick={() => setRoleTab("ALL")}
+              sx={{
+                borderRadius: 2.5,
+                textTransform: "none",
+                fontWeight: 700,
+                px: 2.2,
+                py: 0.9,
+                bgcolor: roleTab === "ALL" ? "#0f2f57" : "#f8fafc",
+                color: roleTab === "ALL" ? "#ffffff" : "#475569",
+                borderColor: roleTab === "ALL" ? "#0f2f57" : "#e2e8f0",
+                boxShadow: roleTab === "ALL" ? "0 4px 12px rgba(15, 47, 87, 0.25)" : "none",
+                "&:hover": {
+                  bgcolor: roleTab === "ALL" ? "#0a1f3a" : "#f1f5f9",
+                  borderColor: roleTab === "ALL" ? "#0a1f3a" : "#cbd5e1",
+                },
+              }}
+            >
+              All Worksheets ({tabCounts.all})
+            </Button>
+
+            <Button
+              variant={roleTab === "SUPERVISOR" ? "contained" : "outlined"}
+              size="small"
+              startIcon={<ShieldRounded sx={{ fontSize: "17px !important" }} />}
+              onClick={() => setRoleTab("SUPERVISOR")}
+              sx={{
+                borderRadius: 2.5,
+                textTransform: "none",
+                fontWeight: 700,
+                px: 2.2,
+                py: 0.9,
+                bgcolor: roleTab === "SUPERVISOR" ? "#ca8a04" : "#fefce8",
+                color: roleTab === "SUPERVISOR" ? "#ffffff" : "#854d0e",
+                borderColor: roleTab === "SUPERVISOR" ? "#ca8a04" : "#fef08a",
+                boxShadow: roleTab === "SUPERVISOR" ? "0 4px 12px rgba(202, 138, 4, 0.25)" : "none",
+                "&:hover": {
+                  bgcolor: roleTab === "SUPERVISOR" ? "#a16207" : "#fef9c3",
+                  borderColor: roleTab === "SUPERVISOR" ? "#a16207" : "#fde047",
+                },
+              }}
+            >
+              Supervisor Worksheets ({tabCounts.supervisor})
+            </Button>
+
+            <Button
+              variant={roleTab === "INCHARGE" ? "contained" : "outlined"}
+              size="small"
+              startIcon={<PersonRounded sx={{ fontSize: "17px !important" }} />}
+              onClick={() => setRoleTab("INCHARGE")}
+              sx={{
+                borderRadius: 2.5,
+                textTransform: "none",
+                fontWeight: 700,
+                px: 2.2,
+                py: 0.9,
+                bgcolor: roleTab === "INCHARGE" ? "#16a34a" : "#f0fdf4",
+                color: roleTab === "INCHARGE" ? "#ffffff" : "#166534",
+                borderColor: roleTab === "INCHARGE" ? "#16a34a" : "#bbf7d0",
+                boxShadow: roleTab === "INCHARGE" ? "0 4px 12px rgba(22, 163, 74, 0.25)" : "none",
+                "&:hover": {
+                  bgcolor: roleTab === "INCHARGE" ? "#15803d" : "#dcfce7",
+                  borderColor: roleTab === "INCHARGE" ? "#15803d" : "#86efac",
+                },
+              }}
+            >
+              Incharge Worksheets ({tabCounts.incharge})
+            </Button>
+          </Stack>
+
+          {/* Search Input and Filter Action Row */}
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems="center">
+            <TextField
+              fullWidth
+              size="small"
+              placeholder={
+                roleTab === "SUPERVISOR"
+                  ? "Search Supervisor worksheets by supervisor name, consumer, A/C No, or location..."
+                  : roleTab === "INCHARGE"
+                  ? "Search Incharge worksheets by incharge name, consumer, A/C No, or location..."
+                  : "Search by Employee, Supervisor, Incharge, Consumer, A/C No, or Location..."
+              }
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchRounded sx={{ color: "#94a3b8" }} />
+                  </InputAdornment>
+                ),
+                sx: { borderRadius: 2, bgcolor: "#f8fafc" },
+              }}
+            />
+
+            <Button
+              variant={showFilters || activeFilterCount > 0 ? "contained" : "outlined"}
+              size="small"
+              startIcon={<FilterListRounded />}
+              onClick={() => setShowFilters((prev) => !prev)}
+              sx={{
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 700,
+                px: 2.2,
+                py: 0.9,
+                whiteSpace: "nowrap",
+                minWidth: "fit-content",
+                bgcolor: showFilters || activeFilterCount > 0 ? "#0f2f57" : "#fff",
+                color: showFilters || activeFilterCount > 0 ? "#fff" : "#334155",
+                borderColor: "#cbd5e1",
+                "&:hover": {
+                  bgcolor: showFilters || activeFilterCount > 0 ? "#0a1f3a" : "#f1f5f9",
+                  borderColor: "#94a3b8",
+                },
+              }}
+            >
+              {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
+            </Button>
+
+            {activeFilterCount > 0 && (
+              <Button
+                variant="text"
+                size="small"
+                startIcon={<RestartAltRounded />}
+                onClick={clearAllFilters}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: "none",
+                  fontWeight: 600,
+                  color: "#ef4444",
+                  whiteSpace: "nowrap",
+                  "&:hover": { bgcolor: "#fef2f2" },
+                }}
+              >
+                Reset
+              </Button>
+            )}
+          </Stack>
+
+          {/* Collapsible Filter Panel */}
+          <Collapse in={showFilters}>
+            <Divider sx={{ my: 1.5, borderColor: "#e2e8f0" }} />
+            <Grid container spacing={1.5} alignItems="center">
+              {/* Supervisor Dropdown */}
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="sup-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
+                    Supervisor
+                  </InputLabel>
+                  <Select
+                    labelId="sup-filter-label"
+                    label="Supervisor"
+                    value={selectedSupervisor}
+                    onChange={(e) => setSelectedSupervisor(e.target.value)}
+                    sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                  >
+                    <MenuItem value="ALL">All Supervisors</MenuItem>
+                    {supervisorFilterOptions.map((name) => (
+                      <MenuItem key={name} value={name}>
+                        {name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Incharge Dropdown */}
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="inc-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
+                    Incharge
+                  </InputLabel>
+                  <Select
+                    labelId="inc-filter-label"
+                    label="Incharge"
+                    value={selectedIncharge}
+                    onChange={(e) => setSelectedIncharge(e.target.value)}
+                    sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                  >
+                    <MenuItem value="ALL">All Incharges</MenuItem>
+                    {inchargeFilterOptions.map((name) => (
+                      <MenuItem key={name} value={name}>
+                        {name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Project Type Dropdown */}
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="proj-type-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
+                    Project Type
+                  </InputLabel>
+                  <Select
+                    labelId="proj-type-filter-label"
+                    label="Project Type"
+                    value={selectedProjectType}
+                    onChange={(e) => setSelectedProjectType(e.target.value)}
+                    sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                  >
+                    <MenuItem value="ALL">All Types</MenuItem>
+                    {projectTypeFilterOptions.map((type) => (
+                      <MenuItem key={type} value={type}>
+                        {type}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Single Date Picker */}
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="date"
+                  label="Select Date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  sx={{ borderRadius: 2, bgcolor: "#f8fafc", "& input": { fontSize: "0.85rem" } }}
+                />
+              </Grid>
+            </Grid>
+          </Collapse>
+        </Stack>
       </Card>
 
       {error && (
@@ -855,7 +1233,9 @@ export default function WorkRegister() {
         <Stack spacing={2.5}>
           {filteredRows.map((row) => {
             const isExpanded = !!expandedRows[row._id];
-            const installer = personName(row.user);
+            const submittedBy = personName(row.user);
+            const isSup = isSupervisorSubmitter(row.user);
+            const submitterRoleLabel = isSup ? "Supervisor" : "Incharge";
             const workDate = formatDate(row.workDate);
             const supervisorNames = uniqueSupervisorNames(row.projects);
             const incharges = uniqueInchargeNames(row.projects);
@@ -921,19 +1301,6 @@ export default function WorkRegister() {
                           <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 0.4 }}>
                             <Chip
                               size="small"
-                              icon={<CheckCircleRounded sx={{ fontSize: "14px !important", color: "#059669" }} />}
-                              label="Approved"
-                              sx={{
-                                height: 22,
-                                fontSize: "0.72rem",
-                                fontWeight: 700,
-                                bgcolor: "#ecfdf5",
-                                color: "#059669",
-                                border: "1px solid #a7f3d0",
-                              }}
-                            />
-                            <Chip
-                              size="small"
                               label={`${projectCount} ${projectCount === 1 ? "Project" : "Projects"}`}
                               sx={{
                                 height: 22,
@@ -951,20 +1318,41 @@ export default function WorkRegister() {
                     {/* Middle: Personnel Details (Who is Who) */}
                     <Grid item xs={12} sm={6}>
                       <Grid container spacing={1.5}>
-                        {/* Installer */}
+                        {/* Submitted By */}
                         <Grid item xs={12} sm={4}>
-                          <Box sx={{ bgcolor: "#f0fdf4", p: 1, borderRadius: 2, border: "1px solid #bbf7d0" }}>
+                          <Box
+                            sx={{
+                              bgcolor: isSup ? "#fefce8" : "#f0fdf4",
+                              p: 1,
+                              borderRadius: 2,
+                              border: `1px solid ${isSup ? "#fef08a" : "#bbf7d0"}`,
+                            }}
+                          >
                             <Stack direction="row" spacing={0.8} alignItems="center">
-                              <EngineeringRounded sx={{ fontSize: 16, color: "#16a34a" }} />
-                              <Typography variant="caption" sx={{ color: "#166534", fontWeight: 700 }}>
-                                Installer
+                              {isSup ? (
+                                <ShieldRounded sx={{ fontSize: 16, color: "#ca8a04" }} />
+                              ) : (
+                                <PersonRounded sx={{ fontSize: 16, color: "#16a34a" }} />
+                              )}
+                              <Typography
+                                variant="caption"
+                                sx={{ color: isSup ? "#854d0e" : "#166534", fontWeight: 700 }}
+                              >
+                                Submitted By ({submitterRoleLabel})
                               </Typography>
                             </Stack>
                             <Typography
                               variant="body2"
-                              sx={{ fontWeight: 700, color: "#0f2f57", mt: 0.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                              sx={{
+                                fontWeight: 700,
+                                color: "#0f2f57",
+                                mt: 0.2,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
                             >
-                              {installer}
+                              {submittedBy}
                             </Typography>
                           </Box>
                         </Grid>

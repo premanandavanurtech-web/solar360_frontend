@@ -150,7 +150,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
       { text: "Expense",       icon: <Paid />,              path: "/expense",          roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Import Leads",  icon: <CloudUpload />,       path: "/import-leads",     roles: ["Admin_panel","ZSM"] },
       { text: "Reports",       icon: <Insights />,          path: "/reports",          roles: ["Admin_panel","ZSM","Incharge"] },
-      { text: "Installer Work Register", icon: <Insights />, path: "/work-register", roles: ["ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","Admin_panel","ZSM","Incharge"] },
+      { text: "Work Register", icon: <Insights />, path: "/work-register", roles: ["ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","Admin_panel","ZSM","Incharge"] },
       { text: "Notifications", icon: <Notifications />,     path: "/notifications",    roles: ["Admin_panel","ZSM","Incharge","TEAM"] },
       { text: "Settings",      icon: <SettingsIcon />,      path: "/settings",         roles: ["Admin_panel","ZSM","Incharge","TEAM","ADMIN","PROJECT_HEAD","MANAGER","SUPERVISOR","INSTALLER"] },
     ],
@@ -180,7 +180,7 @@ const Sidebar = ({ open, toggleDrawer, onClose }) => {
         { text: "Attendance",  icon: <CalendarMonth />,itemNames: ["Team Attendance","My Attendance","Leave Types","Holiday Management"] },
         { text: "HR",          icon: <Groups />,       itemNames: ["Employees","Leave"] },
         { text: "Team",        icon: <Groups />,       itemNames: ["Location Visit","Expense"] },
-        { text: "Insights",    icon: <Insights />,     itemNames: ["Reports","Installer Work Register","Notifications"] },
+        { text: "Insights",    icon: <Insights />,     itemNames: ["Reports","Work Register","Notifications"] },
         { text: "Settings",    icon: <SettingsIcon />, itemNames: ["Settings"] },
       ]
         .map((section) => ({
