@@ -1298,7 +1298,7 @@ export default function WorkRegister() {
                           <Typography variant="subtitle1" sx={{ fontWeight: 800, color: "#0f2f57", lineHeight: 1.2 }}>
                             {workDate}
                           </Typography>
-                          <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 0.4 }}>
+                          <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 0.4, flexWrap: "wrap", gap: 0.5 }}>
                             <Chip
                               size="small"
                               label={`${projectCount} ${projectCount === 1 ? "Project" : "Projects"}`}
@@ -1310,6 +1310,20 @@ export default function WorkRegister() {
                                 color: "#475569",
                               }}
                             />
+                            {Boolean(row.hasMissedProject || row.missedForDate || row.projects?.some(p => p.isMissedProject || p.missedForDate)) && (
+                              <Chip
+                                size="small"
+                                label={`Missed for: ${row.missedForDate ? formatDate(row.missedForDate) : workDate} • Created: ${row.createdAt ? formatDate(row.createdAt) : workDate}`}
+                                sx={{
+                                  height: 22,
+                                  fontSize: "0.70rem",
+                                  fontWeight: 800,
+                                  bgcolor: "#fef3c7",
+                                  color: "#b45309",
+                                  border: "1px solid #fcd34d",
+                                }}
+                              />
+                            )}
                           </Stack>
                         </Box>
                       </Stack>

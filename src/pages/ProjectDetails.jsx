@@ -1064,6 +1064,24 @@ const SummaryWorkspace = ({ project, onGoToStage, onOpenSurveyEditor }) => {
           </Tooltip>
         </Stack>
 
+        {(project?.isMissedProject || project?.missedForDate) && (
+          <Alert
+            severity="warning"
+            sx={{
+              mb: 3,
+              borderRadius: RADIUS_SM,
+              bgcolor: isDark ? "rgba(245, 158, 11, 0.12)" : "#fffbeb",
+              color: isDark ? "#fbbf24" : "#92400e",
+              border: `1px solid ${isDark ? "rgba(245, 158, 11, 0.3)" : "#fde68a"}`,
+              fontWeight: 600,
+            }}
+          >
+            <strong>Delayed Submission Notice:</strong> This project was required for missed attendance on{" "}
+            <strong>{formatDate(project.missedForDate || project.missedAttendance?.date)}</strong>. It was created on{" "}
+            <strong>{formatDate(project.actualCreatedDate || project.createdOnDate || project.createdAt, "dd MMM yyyy, hh:mm a")}</strong> upon next-day punch-in.
+          </Alert>
+        )}
+
         <Grid container spacing={4}>
           <Grid item xs={12} md={6}>
             <Stack spacing={3}>
@@ -3616,8 +3634,20 @@ function ProjectDetails() {
                 letterSpacing: "0.03em",
               }}
             />
+            {(project?.isMissedProject || project?.missedForDate) && (
+              <Chip
+                label={`Missed for: ${formatDate(project.missedForDate || project.missedAttendance?.date)}`}
+                size="small"
+                sx={{
+                  bgcolor: "#fef3c7",
+                  color: "#92400e",
+                  fontWeight: 800,
+                  border: "1px solid #fde68a",
+                }}
+              />
+            )}
             <Typography variant="caption" sx={{ color: MUTED_2 }}>
-              Created {formatDate(project?.projectConvertedAt || project?.createdAt)}
+              Created {formatDate(project?.actualCreatedDate || project?.createdOnDate || project?.projectConvertedAt || project?.createdAt)}
             </Typography>
           </Stack>
           <Typography variant="h5" fontWeight={800} color={isDark ? "#f8fafc" : INK} sx={{ lineHeight: 1.15 }} letterSpacing="-0.015em">

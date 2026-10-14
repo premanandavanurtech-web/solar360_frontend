@@ -242,6 +242,15 @@ const mapWorksheetProjects = (worksheets = []) =>
       const createdDate = worksheet?.workDate || worksheet?.createdAt || new Date().toISOString();
       const projectCode = `APP-${formatDate(createdDate, "ddMMyy")}-${String(index + 1).padStart(2, "0")}`;
 
+      const isMissedProject = Boolean(
+        project?.isMissedProject ||
+        worksheet?.hasMissedProject ||
+        project?.missedForDate ||
+        worksheet?.missedForDate
+      );
+      const missedForDate = project?.missedForDate || worksheet?.missedForDate || worksheet?.workDate;
+      const actualCreatedDate = project?.createdAt || worksheet?.createdAt || project?.createdOnDate || new Date().toISOString();
+
       return {
         ...project,
         _id: `worksheet-${worksheet?._id || "unknown"}-${projectId}`,
@@ -270,6 +279,9 @@ const mapWorksheetProjects = (worksheets = []) =>
         supervisorName: getPersonName(project?.supervisor),
         createdByName: getPersonName(worksheet?.user),
         teammates: Array.isArray(project?.teammates) ? project.teammates : [],
+        isMissedProject,
+        missedForDate,
+        actualCreatedDate,
       };
     });
   });
@@ -1541,6 +1553,25 @@ function Projects() {
                           <Typography variant="body2" fontWeight={600} color={NAVY}>
                             {formatDate(getRegistrationDateValue(project))}
                           </Typography>
+                          {project.isMissedProject && (
+                            <Box sx={{ mt: 0.5 }}>
+                              <Chip
+                                size="small"
+                                label={`Missed for: ${formatDate(project.missedForDate)}`}
+                                sx={{
+                                  height: 20,
+                                  fontSize: "0.65rem",
+                                  fontWeight: 800,
+                                  bgcolor: "#fef3c7",
+                                  color: "#b45309",
+                                  border: "1px solid #fcd34d",
+                                }}
+                              />
+                              <Typography variant="caption" sx={{ display: "block", fontSize: "0.68rem", color: "#64748b", mt: 0.2 }}>
+                                Created: {formatDate(project.actualCreatedDate || project.createdAt)}
+                              </Typography>
+                            </Box>
+                          )}
                         </TableCell>
 
                         <TableCell>
@@ -1705,6 +1736,20 @@ function Projects() {
                                   </Typography>
                                 </Box>
                                 {highlight && <Chip label="New" size="small" color="success" sx={{ height: 18, fontSize: 10 }} />}
+                                {project.isMissedProject && (
+                                  <Chip
+                                    label={`Missed: ${formatDate(project.missedForDate)} (Created: ${formatDate(project.actualCreatedDate || project.createdAt)})`}
+                                    size="small"
+                                    sx={{
+                                      height: 20,
+                                      fontSize: "0.65rem",
+                                      fontWeight: 800,
+                                      bgcolor: "#fef3c7",
+                                      color: "#b45309",
+                                      border: "1px solid #fcd34d",
+                                    }}
+                                  />
+                                )}
                                 {stuck && (
                                   <Tooltip title="No activity for 5+ days">
                                     <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: RED }} />
