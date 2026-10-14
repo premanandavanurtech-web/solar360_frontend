@@ -33,6 +33,10 @@ import {
   Typography,
 } from "@mui/material";
 import {
+  AccessTimeRounded,
+  ArrowBackRounded,
+  ArrowForwardRounded,
+  BadgeRounded,
   CalendarTodayRounded,
   CheckCircleRounded,
   CloseRounded,
@@ -42,9 +46,11 @@ import {
   ExpandMoreRounded,
   FilterListRounded,
   FmdGoodRounded,
+  GroupRounded,
   ImageRounded,
   OpenInNewRounded,
   PersonRounded,
+  PhoneRounded,
   PictureAsPdfRounded,
   RefreshRounded,
   RestartAltRounded,
@@ -52,6 +58,8 @@ import {
   ShieldRounded,
   SolarPowerRounded,
   SpeedRounded,
+  SupervisorAccountRounded,
+  WorkOutlineRounded,
 } from "@mui/icons-material";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -79,8 +87,19 @@ const personName = (person) => {
 
 const formatDate = (value) => {
   if (!value) return "-";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+      return trimmed;
+    }
+    const ddmmyyyy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (ddmmyyyy) {
+      const [, d, m, y] = ddmmyyyy;
+      return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
+    }
+  }
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
+  if (Number.isNaN(date.getTime())) return typeof value === "string" ? value : "-";
   return date.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "2-digit",
@@ -90,6 +109,12 @@ const formatDate = (value) => {
 
 const formatTime = (value) => {
   if (!value) return "-";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^\d{1,2}:\d{2}(:\d{2})?(\s*[AaPp][Mm])?$/.test(trimmed)) {
+      return trimmed;
+    }
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleTimeString("en-IN", {
@@ -147,18 +172,42 @@ const uniqueSupervisorNames = (projects = []) => {
   return [...new Set(names)].join(", ") || "-";
 };
 
-const isSupervisorSubmitter = (user) => {
-  const r = String(user?.role || "").trim().toUpperCase();
-  return ["SUPERVISOR", "ZSM", "MANAGER", "PROJECT_HEAD", "ADMIN", "ADMIN_PANEL"].includes(r);
+const isManagerRole = (roleOrUser) => {
+  const role = typeof roleOrUser === "string" ? roleOrUser : roleOrUser?.role;
+  const r = String(role || "").trim().toUpperCase();
+  return ["MANAGER", "HEAD_OFFICE", "ADMIN", "ADMIN_PANEL", "PROJECT_HEAD"].includes(r);
 };
 
-const isInchargeSubmitter = (user) => {
-  const r = String(user?.role || "").trim().toUpperCase();
-  return ["INCHARGE", "TEAM", "INSTALLER"].includes(r) || (!isSupervisorSubmitter(user) && r !== "");
+const isSupervisorRole = (roleOrUser) => {
+  const role = typeof roleOrUser === "string" ? roleOrUser : roleOrUser?.role;
+  const r = String(role || "").trim().toUpperCase();
+  return ["SUPERVISOR", "ZSM"].includes(r) || isManagerRole(roleOrUser);
+};
+
+const isInchargeRole = (roleOrUser) => {
+  const role = typeof roleOrUser === "string" ? roleOrUser : roleOrUser?.role;
+  const r = String(role || "").trim().toUpperCase();
+  return ["INCHARGE", "TEAM", "INSTALLER", "ASM"].includes(r) || (!isSupervisorRole(roleOrUser) && r !== "");
+};
+
+const isSupervisorSubmitter = (user) => isSupervisorRole(user);
+const isInchargeSubmitter = (user) => isInchargeRole(user);
+
+const getWorksheetTimestamp = (row) => {
+  const raw = row?.submittedAt || row?.createdAt || row?.updatedAt;
+  if (!raw) return "-";
+  return formatTime(raw);
+};
+
+const getWorksheetDateTime = (row) => {
+  const dateStr = formatDate(row?.workDate || row?.createdAt);
+  const timeStr = getWorksheetTimestamp(row);
+  return { date: dateStr, time: timeStr, full: `${dateStr} at ${timeStr}` };
 };
 
 const getProjectTimestamp = (project, parentRow) => {
   const raw =
+    project?.capturedAt ||
     project?.createdAt ||
     project?.timestamp ||
     project?.time ||
@@ -167,6 +216,7 @@ const getProjectTimestamp = (project, parentRow) => {
     project?.gpsLocation?.recordedAt ||
     parentRow?.submittedAt ||
     parentRow?.createdAt;
+  if (!raw) return "-";
   return formatTime(raw);
 };
 
@@ -602,7 +652,10 @@ export default function WorkRegister() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [roleTab, setRoleTab] = useState("ALL"); // "ALL" | "SUPERVISOR" | "INCHARGE"
+  const [roleTab, setRoleTab] = useState("INCHARGE"); // "INCHARGE" | "SUPERVISOR" | "MANAGER" | "ALL"
+  const [selectedUser, setSelectedUser] = useState(null); // When user clicks an incharge / supervisor / manager
+  const [userSearchTerm, setUserSearchTerm] = useState("");
+  const [userSortBy, setUserSortBy] = useState("worksheets"); // "worksheets" | "projects" | "recent" | "name"
   const [selectedSupervisor, setSelectedSupervisor] = useState("ALL");
   const [selectedIncharge, setSelectedIncharge] = useState("ALL");
   const [selectedProjectType, setSelectedProjectType] = useState("ALL");
@@ -632,20 +685,211 @@ export default function WorkRegister() {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Tab counts
-  const tabCounts = useMemo(() => {
-    let inchargeCount = 0;
-    let supervisorCount = 0;
+  // Group all distinct users with their full worksheet list for each role
+  const roleUsers = useMemo(() => {
+    const inchargeMap = new Map();
+    const supervisorMap = new Map();
+    const managerMap = new Map();
+
+    const registerUser = (map, rawUser, worksheet, defaultRole) => {
+      if (!rawUser) return;
+      const name = personName(rawUser);
+      if (!name || name === "-" || name.toLowerCase() === "n/a") return;
+      const id = String(rawUser?._id || rawUser?.employeeId || name).trim();
+
+      let entry = map.get(id);
+      if (!entry) {
+        entry = {
+          id,
+          _id: rawUser?._id || null,
+          name,
+          role: rawUser?.role || defaultRole,
+          employeeId: rawUser?.employeeId || "",
+          email: rawUser?.email || "",
+          phoneNumber: rawUser?.phoneNumber || "",
+          worksheets: [],
+          totalProjects: 0,
+          totalPhotos: 0,
+          latestDate: null,
+          latestTime: null,
+          earliestDate: null,
+        };
+        map.set(id, entry);
+      } else {
+        if (!entry.employeeId && rawUser?.employeeId) entry.employeeId = rawUser.employeeId;
+        if (!entry.email && rawUser?.email) entry.email = rawUser.email;
+        if (!entry.phoneNumber && rawUser?.phoneNumber) entry.phoneNumber = rawUser.phoneNumber;
+        if (rawUser?.role && (!entry.role || entry.role === defaultRole)) entry.role = rawUser.role;
+      }
+
+      // Add worksheet if not already added
+      if (!entry.worksheets.some((w) => w._id === worksheet._id)) {
+        entry.worksheets.push(worksheet);
+        const projCount = worksheet.projects?.length || 0;
+        entry.totalProjects += projCount;
+        (worksheet.projects || []).forEach((p) => {
+          entry.totalPhotos += p.photos?.length || 0;
+        });
+
+        const rawWDate = worksheet.workDate || worksheet.createdAt;
+        const wDate = new Date(rawWDate);
+        if (!Number.isNaN(wDate.getTime())) {
+          if (!entry.latestDate || wDate > new Date(entry.latestDate)) {
+            entry.latestDate = rawWDate;
+            entry.latestTime = worksheet.submittedAt || worksheet.createdAt;
+          }
+          if (!entry.earliestDate || wDate < new Date(entry.earliestDate)) {
+            entry.earliestDate = rawWDate;
+          }
+        }
+      }
+    };
+
     rows.forEach((r) => {
-      if (isSupervisorSubmitter(r.user)) supervisorCount += 1;
-      else inchargeCount += 1;
+      // 1. Submitter analysis
+      const submitter = r.user;
+      if (submitter) {
+        if (isManagerRole(submitter)) {
+          registerUser(managerMap, submitter, r, "Manager");
+          registerUser(supervisorMap, submitter, r, "Supervisor");
+        } else if (isSupervisorRole(submitter)) {
+          registerUser(supervisorMap, submitter, r, "Supervisor");
+        } else {
+          registerUser(inchargeMap, submitter, r, "Incharge");
+        }
+      }
+
+      // 2. ApprovedBy analysis (Managers)
+      if (r.approvedBy) {
+        registerUser(managerMap, r.approvedBy, r, "Manager");
+      }
+
+      // 3. Projects breakdown
+      (r.projects || []).forEach((p) => {
+        // Supervisor on project
+        if (p.supervisor) {
+          registerUser(supervisorMap, p.supervisor, r, "Supervisor");
+          if (isManagerRole(p.supervisor)) {
+            registerUser(managerMap, p.supervisor, r, "Manager");
+          }
+        }
+        // Incharges on project
+        if (Array.isArray(p.incharges) && p.incharges.length > 0) {
+          p.incharges.forEach((inc) => {
+            registerUser(inchargeMap, inc, r, "Incharge");
+          });
+        }
+        if (p.incharge) {
+          registerUser(inchargeMap, p.incharge, r, "Incharge");
+        }
+      });
     });
+
+    const finalizeList = (map) => {
+      const list = Array.from(map.values());
+      list.forEach((u) => {
+        u.worksheets.sort((a, b) => new Date(b.workDate || b.createdAt) - new Date(a.workDate || a.createdAt));
+      });
+      return list.sort((a, b) => {
+        if (b.worksheets.length !== a.worksheets.length) {
+          return b.worksheets.length - a.worksheets.length;
+        }
+        return b.totalProjects - a.totalProjects;
+      });
+    };
+
     return {
-      all: rows.length,
-      supervisor: supervisorCount,
-      incharge: inchargeCount,
+      incharges: finalizeList(inchargeMap),
+      supervisors: finalizeList(supervisorMap),
+      managers: finalizeList(managerMap),
     };
   }, [rows]);
+
+  // Tab counts
+  const tabCounts = useMemo(() => {
+    return {
+      incharge: roleUsers.incharges.length,
+      supervisor: roleUsers.supervisors.length,
+      manager: roleUsers.managers.length,
+      all: rows.length,
+    };
+  }, [roleUsers, rows.length]);
+
+  const handleTabChange = (newTab) => {
+    setRoleTab(newTab);
+    setSelectedUser(null);
+    setUserSearchTerm("");
+    setSearchTerm("");
+    setSelectedDate("");
+  };
+
+  const openUserDetail = (targetNameOrId, preferredRole = "INCHARGE") => {
+    if (!targetNameOrId) return;
+    const cleanTarget = String(targetNameOrId).toLowerCase().trim();
+
+    let pool = [];
+    if (preferredRole === "INCHARGE") pool = roleUsers.incharges;
+    else if (preferredRole === "SUPERVISOR") pool = roleUsers.supervisors;
+    else if (preferredRole === "MANAGER") pool = roleUsers.managers;
+    else pool = [...roleUsers.incharges, ...roleUsers.supervisors, ...roleUsers.managers];
+
+    let found = pool.find(
+      (u) =>
+        u.name.toLowerCase() === cleanTarget ||
+        u.id.toLowerCase() === cleanTarget ||
+        (u.employeeId && u.employeeId.toLowerCase() === cleanTarget)
+    );
+    if (!found) {
+      found = [...roleUsers.incharges, ...roleUsers.supervisors, ...roleUsers.managers].find(
+        (u) =>
+          u.name.toLowerCase().includes(cleanTarget) ||
+          cleanTarget.includes(u.name.toLowerCase()) ||
+          u.id.toLowerCase() === cleanTarget
+      );
+    }
+
+    if (found) {
+      const targetRole = preferredRole || (isSupervisorRole(found.role) ? "SUPERVISOR" : "INCHARGE");
+      setRoleTab(targetRole);
+      setSelectedUser(found);
+      window.scrollTo({ top: 380, behavior: "smooth" });
+    }
+  };
+
+  // Filtered users for the active role tab
+  const activeRoleUsers = useMemo(() => {
+    let list = [];
+    if (roleTab === "INCHARGE") list = roleUsers.incharges;
+    else if (roleTab === "SUPERVISOR") list = roleUsers.supervisors;
+    else if (roleTab === "MANAGER") list = roleUsers.managers;
+    else return [];
+
+    if (userSearchTerm.trim()) {
+      const q = userSearchTerm.toLowerCase().trim();
+      list = list.filter((u) => {
+        return (
+          u.name.toLowerCase().includes(q) ||
+          (u.employeeId || "").toLowerCase().includes(q) ||
+          (u.role || "").toLowerCase().includes(q) ||
+          (u.phoneNumber || "").toLowerCase().includes(q) ||
+          (u.email || "").toLowerCase().includes(q)
+        );
+      });
+    }
+
+    const sorted = [...list];
+    if (userSortBy === "worksheets") {
+      sorted.sort((a, b) => b.worksheets.length - a.worksheets.length);
+    } else if (userSortBy === "projects") {
+      sorted.sort((a, b) => b.totalProjects - a.totalProjects);
+    } else if (userSortBy === "recent") {
+      sorted.sort((a, b) => new Date(b.latestTime || b.latestDate || 0) - new Date(a.latestTime || a.latestDate || 0));
+    } else if (userSortBy === "name") {
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    return sorted;
+  }, [roleTab, roleUsers, userSearchTerm, userSortBy]);
 
   // Unique options for filters
   const supervisorFilterOptions = useMemo(() => {
@@ -711,6 +955,7 @@ export default function WorkRegister() {
     setSelectedProjectType("ALL");
     setSelectedDate("");
     setSearchTerm("");
+    setUserSearchTerm("");
   };
 
   // Metrics
@@ -727,21 +972,66 @@ export default function WorkRegister() {
       worksheets: rows.length,
       projects: totalProjects,
       photos: totalPhotos,
+      incharges: roleUsers.incharges.length,
+      supervisors: roleUsers.supervisors.length,
+      managers: roleUsers.managers.length,
     };
-  }, [rows]);
+  }, [rows, roleUsers]);
 
-  // Filtered rows
+  // Worksheets filtered for the selected user
+  const userFilteredWorksheets = useMemo(() => {
+    if (!selectedUser) return [];
+    let list = selectedUser.worksheets || [];
+
+    if (selectedDate) {
+      list = list.filter((r) => {
+        if (!r.workDate && !r.createdAt) return false;
+        const d = new Date(r.workDate || r.createdAt);
+        if (Number.isNaN(d.getTime())) return false;
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}` === selectedDate;
+      });
+    }
+
+    if (selectedProjectType !== "ALL") {
+      list = list.filter((r) =>
+        (r.projects || []).some((p) => (p.projectType || "Others") === selectedProjectType)
+      );
+    }
+
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      list = list.filter((r) => {
+        const submittedBy = personName(r.user).toLowerCase();
+        const sup = uniqueSupervisorNames(r.projects).toLowerCase();
+        const inc = uniqueInchargeNames(r.projects).toLowerCase();
+        const matchProject = (r.projects || []).some(
+          (p) =>
+            String(p.consumerName || "").toLowerCase().includes(q) ||
+            String(p.consumerAccountNo || "").toLowerCase().includes(q) ||
+            String(p.address || "").toLowerCase().includes(q) ||
+            String(p.projectType || "").toLowerCase().includes(q)
+        );
+        return (
+          submittedBy.includes(q) ||
+          sup.includes(q) ||
+          inc.includes(q) ||
+          matchProject ||
+          formatDate(r.workDate).includes(q) ||
+          getWorksheetTimestamp(r).toLowerCase().includes(q)
+        );
+      });
+    }
+
+    return list;
+  }, [selectedUser, selectedDate, selectedProjectType, searchTerm]);
+
+  // Filtered rows for "All Worksheets" view
   const filteredRows = useMemo(() => {
     let list = rows;
 
-    // 1. Role tab filter
-    if (roleTab === "SUPERVISOR") {
-      list = list.filter((r) => isSupervisorSubmitter(r.user));
-    } else if (roleTab === "INCHARGE") {
-      list = list.filter((r) => !isSupervisorSubmitter(r.user));
-    }
-
-    // 2. Supervisor dropdown
     if (selectedSupervisor !== "ALL") {
       list = list.filter((r) => {
         const sup = uniqueSupervisorNames(r.projects);
@@ -750,7 +1040,6 @@ export default function WorkRegister() {
       });
     }
 
-    // 3. Incharge dropdown
     if (selectedIncharge !== "ALL") {
       list = list.filter((r) => {
         const inc = uniqueInchargeNames(r.projects);
@@ -759,14 +1048,12 @@ export default function WorkRegister() {
       });
     }
 
-    // 4. Project Type dropdown
     if (selectedProjectType !== "ALL") {
       list = list.filter((r) =>
         (r.projects || []).some((p) => (p.projectType || "Others") === selectedProjectType)
       );
     }
 
-    // 5. Single Date Filter (e.g. specific day)
     if (selectedDate) {
       list = list.filter((r) => {
         if (!r.workDate) return false;
@@ -779,7 +1066,6 @@ export default function WorkRegister() {
       });
     }
 
-    // 6. Search term query
     if (!searchTerm.trim()) return list;
     const q = searchTerm.toLowerCase();
     return list.filter((r) => {
@@ -798,12 +1084,12 @@ export default function WorkRegister() {
         sup.includes(q) ||
         inc.includes(q) ||
         matchProject ||
-        formatDate(r.workDate).includes(q)
+        formatDate(r.workDate).includes(q) ||
+        getWorksheetTimestamp(r).toLowerCase().includes(q)
       );
     });
   }, [
     rows,
-    roleTab,
     selectedSupervisor,
     selectedIncharge,
     selectedProjectType,
@@ -947,250 +1233,117 @@ export default function WorkRegister() {
         </Grid>
       </Grid>
 
-      {/* ─── ROLE TABS & SEARCH BAR ─── */}
+      {/* ─── ROLE TABS ─── */}
       <Card
         elevation={0}
         sx={{
-          p: 2,
+          p: 1.2,
           mb: 3,
           borderRadius: 3,
           border: "1px solid #e2e8f0",
-          bgcolor: "#ffffff",
-          boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+          bgcolor: "#f8fafc",
+          boxShadow: "0 2px 8px rgba(15, 23, 42, 0.03)",
         }}
       >
-        <Stack spacing={2}>
-          {/* Segmented Role Filter Tabs */}
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2} alignItems={{ xs: "stretch", sm: "center" }}>
-            <Button
-              variant={roleTab === "ALL" ? "contained" : "outlined"}
-              size="small"
-              onClick={() => setRoleTab("ALL")}
-              sx={{
-                borderRadius: 2.5,
-                textTransform: "none",
-                fontWeight: 700,
-                px: 2.2,
-                py: 0.9,
-                bgcolor: roleTab === "ALL" ? "#0f2f57" : "#f8fafc",
-                color: roleTab === "ALL" ? "#ffffff" : "#475569",
-                borderColor: roleTab === "ALL" ? "#0f2f57" : "#e2e8f0",
-                boxShadow: roleTab === "ALL" ? "0 4px 12px rgba(15, 47, 87, 0.25)" : "none",
-                "&:hover": {
-                  bgcolor: roleTab === "ALL" ? "#0a1f3a" : "#f1f5f9",
-                  borderColor: roleTab === "ALL" ? "#0a1f3a" : "#cbd5e1",
-                },
-              }}
-            >
-              All Worksheets ({tabCounts.all})
-            </Button>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1}
+          alignItems={{ xs: "stretch", sm: "center" }}
+          sx={{ flexWrap: "wrap", gap: 1 }}
+        >
+          <Button
+            variant={roleTab === "INCHARGE" ? "contained" : "text"}
+            size="small"
+            startIcon={<PersonRounded sx={{ fontSize: "17px !important" }} />}
+            onClick={() => handleTabChange("INCHARGE")}
+            sx={{
+              borderRadius: 2.2,
+              textTransform: "none",
+              fontWeight: 700,
+              px: 2.4,
+              py: 0.9,
+              bgcolor: roleTab === "INCHARGE" ? "#16a34a" : "transparent",
+              color: roleTab === "INCHARGE" ? "#ffffff" : "#475569",
+              boxShadow: roleTab === "INCHARGE" ? "0 4px 14px rgba(22, 163, 74, 0.3)" : "none",
+              "&:hover": {
+                bgcolor: roleTab === "INCHARGE" ? "#15803d" : "#e2e8f0",
+                color: roleTab === "INCHARGE" ? "#ffffff" : "#0f172a",
+              },
+            }}
+          >
+            Incharges ({tabCounts.incharge})
+          </Button>
 
-            <Button
-              variant={roleTab === "SUPERVISOR" ? "contained" : "outlined"}
-              size="small"
-              startIcon={<ShieldRounded sx={{ fontSize: "17px !important" }} />}
-              onClick={() => setRoleTab("SUPERVISOR")}
-              sx={{
-                borderRadius: 2.5,
-                textTransform: "none",
-                fontWeight: 700,
-                px: 2.2,
-                py: 0.9,
-                bgcolor: roleTab === "SUPERVISOR" ? "#ca8a04" : "#fefce8",
-                color: roleTab === "SUPERVISOR" ? "#ffffff" : "#854d0e",
-                borderColor: roleTab === "SUPERVISOR" ? "#ca8a04" : "#fef08a",
-                boxShadow: roleTab === "SUPERVISOR" ? "0 4px 12px rgba(202, 138, 4, 0.25)" : "none",
-                "&:hover": {
-                  bgcolor: roleTab === "SUPERVISOR" ? "#a16207" : "#fef9c3",
-                  borderColor: roleTab === "SUPERVISOR" ? "#a16207" : "#fde047",
-                },
-              }}
-            >
-              Supervisor Worksheets ({tabCounts.supervisor})
-            </Button>
+          <Button
+            variant={roleTab === "SUPERVISOR" ? "contained" : "text"}
+            size="small"
+            startIcon={<ShieldRounded sx={{ fontSize: "17px !important" }} />}
+            onClick={() => handleTabChange("SUPERVISOR")}
+            sx={{
+              borderRadius: 2.2,
+              textTransform: "none",
+              fontWeight: 700,
+              px: 2.4,
+              py: 0.9,
+              bgcolor: roleTab === "SUPERVISOR" ? "#ca8a04" : "transparent",
+              color: roleTab === "SUPERVISOR" ? "#ffffff" : "#475569",
+              boxShadow: roleTab === "SUPERVISOR" ? "0 4px 14px rgba(202, 138, 4, 0.3)" : "none",
+              "&:hover": {
+                bgcolor: roleTab === "SUPERVISOR" ? "#a16207" : "#e2e8f0",
+                color: roleTab === "SUPERVISOR" ? "#ffffff" : "#0f172a",
+              },
+            }}
+          >
+            Supervisors ({tabCounts.supervisor})
+          </Button>
 
-            <Button
-              variant={roleTab === "INCHARGE" ? "contained" : "outlined"}
-              size="small"
-              startIcon={<PersonRounded sx={{ fontSize: "17px !important" }} />}
-              onClick={() => setRoleTab("INCHARGE")}
-              sx={{
-                borderRadius: 2.5,
-                textTransform: "none",
-                fontWeight: 700,
-                px: 2.2,
-                py: 0.9,
-                bgcolor: roleTab === "INCHARGE" ? "#16a34a" : "#f0fdf4",
-                color: roleTab === "INCHARGE" ? "#ffffff" : "#166534",
-                borderColor: roleTab === "INCHARGE" ? "#16a34a" : "#bbf7d0",
-                boxShadow: roleTab === "INCHARGE" ? "0 4px 12px rgba(22, 163, 74, 0.25)" : "none",
-                "&:hover": {
-                  bgcolor: roleTab === "INCHARGE" ? "#15803d" : "#dcfce7",
-                  borderColor: roleTab === "INCHARGE" ? "#15803d" : "#86efac",
-                },
-              }}
-            >
-              Incharge Worksheets ({tabCounts.incharge})
-            </Button>
-          </Stack>
+          <Button
+            variant={roleTab === "MANAGER" ? "contained" : "text"}
+            size="small"
+            startIcon={<SupervisorAccountRounded sx={{ fontSize: "17px !important" }} />}
+            onClick={() => handleTabChange("MANAGER")}
+            sx={{
+              borderRadius: 2.2,
+              textTransform: "none",
+              fontWeight: 700,
+              px: 2.4,
+              py: 0.9,
+              bgcolor: roleTab === "MANAGER" ? "#4f46e5" : "transparent",
+              color: roleTab === "MANAGER" ? "#ffffff" : "#475569",
+              boxShadow: roleTab === "MANAGER" ? "0 4px 14px rgba(79, 70, 229, 0.3)" : "none",
+              "&:hover": {
+                bgcolor: roleTab === "MANAGER" ? "#4338ca" : "#e2e8f0",
+                color: roleTab === "MANAGER" ? "#ffffff" : "#0f172a",
+              },
+            }}
+          >
+            Managers ({tabCounts.manager})
+          </Button>
 
-          {/* Search Input and Filter Action Row */}
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems="center">
-            <TextField
-              fullWidth
-              size="small"
-              placeholder={
-                roleTab === "SUPERVISOR"
-                  ? "Search Supervisor worksheets by supervisor name, consumer, A/C No, or location..."
-                  : roleTab === "INCHARGE"
-                  ? "Search Incharge worksheets by incharge name, consumer, A/C No, or location..."
-                  : "Search by Employee, Supervisor, Incharge, Consumer, A/C No, or Location..."
-              }
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchRounded sx={{ color: "#94a3b8" }} />
-                  </InputAdornment>
-                ),
-                sx: { borderRadius: 2, bgcolor: "#f8fafc" },
-              }}
-            />
+          <Box sx={{ flexGrow: 1 }} />
 
-            <Button
-              variant={showFilters || activeFilterCount > 0 ? "contained" : "outlined"}
-              size="small"
-              startIcon={<FilterListRounded />}
-              onClick={() => setShowFilters((prev) => !prev)}
-              sx={{
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 700,
-                px: 2.2,
-                py: 0.9,
-                whiteSpace: "nowrap",
-                minWidth: "fit-content",
-                bgcolor: showFilters || activeFilterCount > 0 ? "#0f2f57" : "#fff",
-                color: showFilters || activeFilterCount > 0 ? "#fff" : "#334155",
-                borderColor: "#cbd5e1",
-                "&:hover": {
-                  bgcolor: showFilters || activeFilterCount > 0 ? "#0a1f3a" : "#f1f5f9",
-                  borderColor: "#94a3b8",
-                },
-              }}
-            >
-              {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
-            </Button>
-
-            {activeFilterCount > 0 && (
-              <Button
-                variant="text"
-                size="small"
-                startIcon={<RestartAltRounded />}
-                onClick={clearAllFilters}
-                sx={{
-                  borderRadius: 2,
-                  textTransform: "none",
-                  fontWeight: 600,
-                  color: "#ef4444",
-                  whiteSpace: "nowrap",
-                  "&:hover": { bgcolor: "#fef2f2" },
-                }}
-              >
-                Reset
-              </Button>
-            )}
-          </Stack>
-
-          {/* Collapsible Filter Panel */}
-          <Collapse in={showFilters}>
-            <Divider sx={{ my: 1.5, borderColor: "#e2e8f0" }} />
-            <Grid container spacing={1.5} alignItems="center">
-              {/* Supervisor Dropdown */}
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth size="small">
-                  <InputLabel id="sup-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
-                    Supervisor
-                  </InputLabel>
-                  <Select
-                    labelId="sup-filter-label"
-                    label="Supervisor"
-                    value={selectedSupervisor}
-                    onChange={(e) => setSelectedSupervisor(e.target.value)}
-                    sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
-                  >
-                    <MenuItem value="ALL">All Supervisors</MenuItem>
-                    {supervisorFilterOptions.map((name) => (
-                      <MenuItem key={name} value={name}>
-                        {name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              {/* Incharge Dropdown */}
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth size="small">
-                  <InputLabel id="inc-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
-                    Incharge
-                  </InputLabel>
-                  <Select
-                    labelId="inc-filter-label"
-                    label="Incharge"
-                    value={selectedIncharge}
-                    onChange={(e) => setSelectedIncharge(e.target.value)}
-                    sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
-                  >
-                    <MenuItem value="ALL">All Incharges</MenuItem>
-                    {inchargeFilterOptions.map((name) => (
-                      <MenuItem key={name} value={name}>
-                        {name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              {/* Project Type Dropdown */}
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth size="small">
-                  <InputLabel id="proj-type-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
-                    Project Type
-                  </InputLabel>
-                  <Select
-                    labelId="proj-type-filter-label"
-                    label="Project Type"
-                    value={selectedProjectType}
-                    onChange={(e) => setSelectedProjectType(e.target.value)}
-                    sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
-                  >
-                    <MenuItem value="ALL">All Types</MenuItem>
-                    {projectTypeFilterOptions.map((type) => (
-                      <MenuItem key={type} value={type}>
-                        {type}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              {/* Single Date Picker */}
-              <Grid item xs={12} sm={6} md={3}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  type="date"
-                  label="Select Date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  sx={{ borderRadius: 2, bgcolor: "#f8fafc", "& input": { fontSize: "0.85rem" } }}
-                />
-              </Grid>
-            </Grid>
-          </Collapse>
+          <Button
+            variant={roleTab === "ALL" ? "contained" : "text"}
+            size="small"
+            startIcon={<EngineeringRounded sx={{ fontSize: "17px !important" }} />}
+            onClick={() => handleTabChange("ALL")}
+            sx={{
+              borderRadius: 2.2,
+              textTransform: "none",
+              fontWeight: 700,
+              px: 2.4,
+              py: 0.9,
+              bgcolor: roleTab === "ALL" ? "#0f2f57" : "transparent",
+              color: roleTab === "ALL" ? "#ffffff" : "#475569",
+              boxShadow: roleTab === "ALL" ? "0 4px 14px rgba(15, 47, 87, 0.3)" : "none",
+              "&:hover": {
+                bgcolor: roleTab === "ALL" ? "#0a1f3a" : "#e2e8f0",
+                color: roleTab === "ALL" ? "#ffffff" : "#0f172a",
+              },
+            }}
+          >
+            All Worksheets ({tabCounts.all})
+          </Button>
         </Stack>
       </Card>
 
@@ -1200,462 +1353,1803 @@ export default function WorkRegister() {
         </Alert>
       )}
 
-      {/* ─── WORKSHEETS LIST ─── */}
-      {loading ? (
-        <Box sx={{ p: 8, textAlign: "center" }}>
-          <CircularProgress size={38} sx={{ color: "#004792" }} />
-          <Typography sx={{ mt: 2, color: "#64748b", fontWeight: 500 }}>
-            Loading daily worksheets...
-          </Typography>
-        </Box>
-      ) : filteredRows.length === 0 ? (
-        <Paper
-          elevation={0}
-          sx={{
-            p: 6,
-            textAlign: "center",
-            borderRadius: 3,
-            border: "1px dashed #cbd5e1",
-            bgcolor: "#ffffff",
-          }}
-        >
-          <SolarPowerRounded sx={{ fontSize: 50, color: "#94a3b8", mb: 1 }} />
-          <Typography variant="h6" sx={{ fontWeight: 700, color: "#334155" }}>
-            No worksheets found
-          </Typography>
-          <Typography variant="body2" sx={{ color: "#64748b", mt: 0.5 }}>
-            {searchTerm
-              ? "No worksheets match your current search query."
-              : "No approved worksheets have been registered yet."}
-          </Typography>
-        </Paper>
-      ) : (
-        <Stack spacing={2.5}>
-          {filteredRows.map((row) => {
-            const isExpanded = !!expandedRows[row._id];
-            const submittedBy = personName(row.user);
-            const isSup = isSupervisorSubmitter(row.user);
-            const submitterRoleLabel = isSup ? "Supervisor" : "Incharge";
-            const workDate = formatDate(row.workDate);
-            const supervisorNames = uniqueSupervisorNames(row.projects);
-            const incharges = uniqueInchargeNames(row.projects);
-            const projectCount = row.projects?.length || 0;
-
-            const allPhotos = (row.projects || []).flatMap((p, pIdx) =>
-              (p.photos || []).map((ph) => ({
-                ...ph,
-                projectName: p.consumerName || `Project #${pIdx + 1}`,
-                consumerAccountNo: p.consumerAccountNo,
-                projectType: p.projectType,
-                supervisor: personName(p.supervisor),
-                incharge: inchargeNames(p),
-                address: ph.address || p.address || p.siteLocation,
-                latitude: ph.latitude || p.gpsLocation?.latitude,
-                longitude: ph.longitude || p.gpsLocation?.longitude,
-                capturedAt: ph.capturedAt || p.createdAt,
-              }))
-            );
-
-            return (
-              <Card
-                key={row._id}
-                elevation={0}
-                sx={{
-                  borderRadius: 3,
-                  border: "1px solid #e2e8f0",
-                  bgcolor: "#ffffff",
-                  overflow: "hidden",
-                  transition: "box-shadow 0.2s ease",
-                  "&:hover": {
-                    boxShadow: "0 6px 20px rgba(15, 23, 42, 0.08)",
-                  },
+      {/* ─── CASE 1: ROLE DIRECTORY VIEW (When Role Tab active & no user selected) ─── */}
+      {roleTab !== "ALL" && !selectedUser && (
+        <Box sx={{ mb: 4 }}>
+          {/* Search & Sort Toolbar for Role Directory */}
+          <Card
+            elevation={0}
+            sx={{
+              p: 2,
+              mb: 3,
+              borderRadius: 3,
+              border: "1px solid #e2e8f0",
+              bgcolor: "#ffffff",
+              boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+            }}
+          >
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={2}
+              alignItems={{ xs: "stretch", md: "center" }}
+              justifyContent="space-between"
+            >
+              <TextField
+                size="small"
+                placeholder={
+                  roleTab === "INCHARGE"
+                    ? "Search Incharge by name, employee ID, phone..."
+                    : roleTab === "SUPERVISOR"
+                    ? "Search Supervisor by name, employee ID, phone..."
+                    : "Search Manager by name, employee ID, phone..."
+                }
+                value={userSearchTerm}
+                onChange={(e) => setUserSearchTerm(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchRounded sx={{ color: "#94a3b8" }} />
+                    </InputAdornment>
+                  ),
+                  sx: { borderRadius: 2, bgcolor: "#f8fafc" },
                 }}
-              >
-                {/* ── CARD TOP BAR ── */}
-                <Box
-                  sx={{
-                    p: { xs: 2, sm: 2.5 },
-                    bgcolor: isExpanded ? "#f8fafc" : "#ffffff",
-                    borderBottom: isExpanded ? "1px solid #e2e8f0" : "none",
-                  }}
-                >
-                  <Grid container spacing={2} alignItems="center">
-                    {/* Left: Date & Status */}
-                    <Grid item xs={12} sm={3}>
-                      <Stack direction="row" spacing={1.5} alignItems="center">
-                        <Avatar
-                          sx={{
-                            bgcolor: "#eff6ff",
-                            color: "#004792",
-                            width: 42,
-                            height: 42,
-                            borderRadius: 2.5,
-                          }}
-                        >
-                          <CalendarTodayRounded sx={{ fontSize: 20 }} />
-                        </Avatar>
-                        <Box>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 800, color: "#0f2f57", lineHeight: 1.2 }}>
-                            {workDate}
-                          </Typography>
-                          <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 0.4, flexWrap: "wrap", gap: 0.5 }}>
-                            <Chip
-                              size="small"
-                              label={`${projectCount} ${projectCount === 1 ? "Project" : "Projects"}`}
-                              sx={{
-                                height: 22,
-                                fontSize: "0.72rem",
-                                fontWeight: 700,
-                                bgcolor: "#f1f5f9",
-                                color: "#475569",
-                              }}
-                            />
-                            {Boolean(row.hasMissedProject || row.missedForDate || row.projects?.some(p => p.isMissedProject || p.missedForDate)) && (
-                              <Chip
-                                size="small"
-                                label={`Missed for: ${row.missedForDate ? formatDate(row.missedForDate) : workDate} • Created: ${row.createdAt ? formatDate(row.createdAt) : workDate}`}
-                                sx={{
-                                  height: 22,
-                                  fontSize: "0.70rem",
-                                  fontWeight: 800,
-                                  bgcolor: "#fef3c7",
-                                  color: "#b45309",
-                                  border: "1px solid #fcd34d",
-                                }}
-                              />
-                            )}
-                          </Stack>
-                        </Box>
-                      </Stack>
-                    </Grid>
+                sx={{ flex: 1 }}
+              />
 
-                    {/* Middle: Personnel Details (Who is Who) */}
-                    <Grid item xs={12} sm={6}>
-                      <Grid container spacing={1.5}>
-                        {/* Submitted By */}
-                        <Grid item xs={12} sm={4}>
-                          <Box
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <FormControl size="small" sx={{ minWidth: 170 }}>
+                  <InputLabel id="user-sort-label" sx={{ fontSize: "0.85rem" }}>
+                    Sort Members
+                  </InputLabel>
+                  <Select
+                    labelId="user-sort-label"
+                    label="Sort Members"
+                    value={userSortBy}
+                    onChange={(e) => setUserSortBy(e.target.value)}
+                    sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                  >
+                    <MenuItem value="worksheets">Most Worksheets</MenuItem>
+                    <MenuItem value="projects">Most Projects</MenuItem>
+                    <MenuItem value="recent">Recent Activity</MenuItem>
+                    <MenuItem value="name">Name (A-Z)</MenuItem>
+                  </Select>
+                </FormControl>
+
+                {userSearchTerm && (
+                  <Button
+                    size="small"
+                    variant="text"
+                    startIcon={<RestartAltRounded />}
+                    onClick={() => setUserSearchTerm("")}
+                    sx={{ color: "#ef4444", fontWeight: 700, textTransform: "none" }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </Stack>
+            </Stack>
+          </Card>
+
+          {/* User Cards Grid */}
+          {loading ? (
+            <Box sx={{ p: 8, textAlign: "center" }}>
+              <CircularProgress size={38} sx={{ color: "#004792" }} />
+              <Typography sx={{ mt: 2, color: "#64748b", fontWeight: 500 }}>
+                Loading personnel directory...
+              </Typography>
+            </Box>
+          ) : activeRoleUsers.length === 0 ? (
+            <Paper
+              elevation={0}
+              sx={{
+                p: 6,
+                textAlign: "center",
+                borderRadius: 3,
+                border: "1px dashed #cbd5e1",
+                bgcolor: "#ffffff",
+              }}
+            >
+              <GroupRounded sx={{ fontSize: 50, color: "#94a3b8", mb: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 700, color: "#334155" }}>
+                No {roleTab === "INCHARGE" ? "Incharges" : roleTab === "SUPERVISOR" ? "Supervisors" : "Managers"} found
+              </Typography>
+              <Typography variant="body2" sx={{ color: "#64748b", mt: 0.5 }}>
+                {userSearchTerm
+                  ? "No personnel match your search term."
+                  : `No ${roleTab.toLowerCase()} records have been registered in worksheets yet.`}
+              </Typography>
+            </Paper>
+          ) : (
+            <Grid container spacing={2.5}>
+              {activeRoleUsers.map((user) => {
+                const roleBadgeColor =
+                  roleTab === "INCHARGE"
+                    ? {
+                        main: "#16a34a",
+                        dark: "#15803d",
+                        btnHover: "#15803d",
+                        bg: "#f0fdf4",
+                        border: "#bbf7d0",
+                        borderHover: "#86efac",
+                        text: "#166534",
+                        timeColor: "#15803d",
+                        gradient: "linear-gradient(135deg, #22c55e 0%, #15803d 100%)",
+                        avatarShadow: "rgba(34, 197, 94, 0.35)",
+                        hoverShadow: "rgba(22, 163, 74, 0.15)",
+                        btnShadow: "rgba(22, 163, 74, 0.3)",
+                      }
+                    : roleTab === "SUPERVISOR"
+                    ? {
+                        main: "#ca8a04",
+                        dark: "#a16207",
+                        btnHover: "#a16207",
+                        bg: "#fefce8",
+                        border: "#fef08a",
+                        borderHover: "#fde047",
+                        text: "#854d0e",
+                        timeColor: "#b45309",
+                        gradient: "linear-gradient(135deg, #f59e0b 0%, #b45309 100%)",
+                        avatarShadow: "rgba(245, 158, 11, 0.35)",
+                        hoverShadow: "rgba(202, 138, 4, 0.15)",
+                        btnShadow: "rgba(202, 138, 4, 0.3)",
+                      }
+                    : {
+                        main: "#4f46e5",
+                        dark: "#4338ca",
+                        btnHover: "#4338ca",
+                        bg: "#eef2ff",
+                        border: "#c7d2fe",
+                        borderHover: "#a5b4fc",
+                        text: "#4338ca",
+                        timeColor: "#4338ca",
+                        gradient: "linear-gradient(135deg, #6366f1 0%, #4338ca 100%)",
+                        avatarShadow: "rgba(99, 102, 241, 0.35)",
+                        hoverShadow: "rgba(79, 70, 229, 0.15)",
+                        btnShadow: "rgba(79, 70, 229, 0.3)",
+                      };
+
+                const initials =
+                  user.name
+                    .split(" ")
+                    .map((p) => p[0])
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .join("")
+                    .toUpperCase() || "U";
+
+                const latestDateFormatted = formatDate(user.latestDate);
+                const latestTimeFormatted = formatTime(user.latestTime || user.latestDate);
+
+                return (
+                  <Grid item xs={12} sm={6} md={4} key={user.id}>
+                    <Card
+                      elevation={0}
+                      onClick={() => {
+                        setSelectedUser(user);
+                        window.scrollTo({ top: 380, behavior: "smooth" });
+                      }}
+                      sx={{
+                        borderRadius: 3.5,
+                        border: "1px solid #e2e8f0",
+                        bgcolor: "#ffffff",
+                        cursor: "pointer",
+                        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                        position: "relative",
+                        overflow: "hidden",
+                        boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+                        "&:hover": {
+                          transform: "translateY(-4px)",
+                          boxShadow: `0 16px 32px -8px ${roleBadgeColor.hoverShadow}, 0 4px 12px rgba(15, 23, 42, 0.05)`,
+                          borderColor: roleBadgeColor.borderHover,
+                          "& .view-btn": {
+                            bgcolor: roleBadgeColor.btnHover,
+                            transform: "translateX(2px)",
+                          },
+                          "& .avatar-box": {
+                            transform: "scale(1.04)",
+                          },
+                        },
+                      }}
+                    >
+                      {/* Top Accent Line */}
+                      <Box
+                        sx={{
+                          height: 4,
+                          background: roleBadgeColor.gradient,
+                          width: "100%",
+                        }}
+                      />
+
+                      <Box sx={{ p: 2.5 }}>
+                        {/* Header: Avatar, Name, Role badge, ID, Phone */}
+                        <Stack direction="row" spacing={1.8} alignItems="center" sx={{ mb: 2 }}>
+                          <Avatar
+                            className="avatar-box"
                             sx={{
-                              bgcolor: isSup ? "#fefce8" : "#f0fdf4",
-                              p: 1,
-                              borderRadius: 2,
-                              border: `1px solid ${isSup ? "#fef08a" : "#bbf7d0"}`,
+                              width: 50,
+                              height: 50,
+                              background: roleBadgeColor.gradient,
+                              color: "#ffffff",
+                              fontWeight: 800,
+                              fontSize: "1.05rem",
+                              letterSpacing: "0.5px",
+                              boxShadow: `0 6px 16px ${roleBadgeColor.avatarShadow}`,
+                              border: "2px solid #ffffff",
+                              transition: "transform 0.25s ease",
+                              flexShrink: 0,
                             }}
                           >
-                            <Stack direction="row" spacing={0.8} alignItems="center">
-                              {isSup ? (
-                                <ShieldRounded sx={{ fontSize: 16, color: "#ca8a04" }} />
-                              ) : (
-                                <PersonRounded sx={{ fontSize: 16, color: "#16a34a" }} />
-                              )}
+                            {initials}
+                          </Avatar>
+
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
                               <Typography
-                                variant="caption"
-                                sx={{ color: isSup ? "#854d0e" : "#166534", fontWeight: 700 }}
+                                variant="h6"
+                                noWrap
+                                sx={{
+                                  fontWeight: 800,
+                                  color: "#0f2f57",
+                                  fontSize: "1.02rem",
+                                  lineHeight: 1.25,
+                                }}
                               >
-                                Submitted By ({submitterRoleLabel})
+                                {user.name}
                               </Typography>
+
+                              <Chip
+                                size="small"
+                                label={user.role || (roleTab === "INCHARGE" ? "Incharge" : roleTab === "SUPERVISOR" ? "Supervisor" : "Manager")}
+                                sx={{
+                                  height: 22,
+                                  fontWeight: 800,
+                                  fontSize: "0.7rem",
+                                  bgcolor: roleBadgeColor.bg,
+                                  color: roleBadgeColor.text,
+                                  border: `1px solid ${roleBadgeColor.border}`,
+                                  borderRadius: "6px",
+                                  flexShrink: 0,
+                                }}
+                              />
                             </Stack>
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                fontWeight: 700,
-                                color: "#0f2f57",
-                                mt: 0.2,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {submittedBy}
-                            </Typography>
-                          </Box>
-                        </Grid>
 
-                        {/* Supervisor */}
-                        <Grid item xs={12} sm={4}>
-                          <Box sx={{ bgcolor: "#fefce8", p: 1, borderRadius: 2, border: "1px solid #fef08a" }}>
-                            <Stack direction="row" spacing={0.8} alignItems="center">
-                              <ShieldRounded sx={{ fontSize: 16, color: "#ca8a04" }} />
-                              <Typography variant="caption" sx={{ color: "#854d0e", fontWeight: 700 }}>
-                                Supervisor
-                              </Typography>
+                            <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mt: 0.6, flexWrap: "wrap", gap: 0.6 }}>
+                              {user.employeeId && (
+                                <Chip
+                                  size="small"
+                                  icon={<BadgeRounded sx={{ fontSize: "13px !important", color: "#475569" }} />}
+                                  label={user.employeeId}
+                                  sx={{
+                                    height: 20,
+                                    fontWeight: 700,
+                                    fontSize: "0.7rem",
+                                    bgcolor: "#f1f5f9",
+                                    color: "#334155",
+                                    borderRadius: "6px",
+                                    "& .MuiChip-icon": { ml: 0.4 },
+                                  }}
+                                />
+                              )}
+
+                              {user.phoneNumber ? (
+                                <Stack direction="row" spacing={0.4} alignItems="center">
+                                  <PhoneRounded sx={{ fontSize: 13, color: "#64748b" }} />
+                                  <Typography sx={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>
+                                    {user.phoneNumber}
+                                  </Typography>
+                                </Stack>
+                              ) : user.email ? (
+                                <Typography noWrap sx={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 500, maxWidth: 160 }}>
+                                  {user.email}
+                                </Typography>
+                              ) : null}
                             </Stack>
-                            <Typography
-                              variant="body2"
-                              sx={{ fontWeight: 700, color: "#0f2f57", mt: 0.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                            >
-                              {supervisorNames}
-                            </Typography>
                           </Box>
-                        </Grid>
+                        </Stack>
 
-                        {/* Incharges */}
-                        <Grid item xs={12} sm={4}>
-                          <Box sx={{ bgcolor: "#eff6ff", p: 1, borderRadius: 2, border: "1px solid #bfdbfe" }}>
-                            <Stack direction="row" spacing={0.8} alignItems="center">
-                              <PersonRounded sx={{ fontSize: 16, color: "#2563eb" }} />
-                              <Typography variant="caption" sx={{ color: "#1e40af", fontWeight: 700 }}>
-                                Incharge(s)
-                              </Typography>
-                            </Stack>
-                            <Typography
-                              variant="body2"
-                              sx={{ fontWeight: 700, color: "#0f2f57", mt: 0.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                            >
-                              {incharges}
-                            </Typography>
-                          </Box>
-                        </Grid>
-                      </Grid>
-                    </Grid>
-
-                    {/* Right: Actions */}
-                    <Grid item xs={12} sm={3}>
-                      <Stack direction="row" spacing={1} justifyContent={{ xs: "flex-start", sm: "flex-end" }} alignItems="center">
-                        <Button
-                          variant="contained"
-                          size="small"
-                          startIcon={<PictureAsPdfRounded />}
-                          onClick={() => downloadWorkRegisterPdf(row)}
-                          sx={{
-                            borderRadius: 2,
-                            textTransform: "none",
-                            fontWeight: 700,
-                            bgcolor: "#004792",
-                            boxShadow: "0 2px 8px rgba(0, 71, 146, 0.3)",
-                            "&:hover": { bgcolor: "#003366" },
-                          }}
-                        >
-                          Download PDF
-                        </Button>
-                        <IconButton
-                          onClick={() => toggleRow(row._id)}
-                          sx={{
-                            bgcolor: "#f1f5f9",
-                            color: "#334155",
-                            "&:hover": { bgcolor: "#e2e8f0" },
-                          }}
-                        >
-                          {isExpanded ? <ExpandLessRounded /> : <ExpandMoreRounded />}
-                        </IconButton>
-                      </Stack>
-                    </Grid>
-                  </Grid>
-                </Box>
-
-                {/* ── EXPANDED CONTENT ── */}
-                <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                  <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-                    {/* SECTION 1: PROJECTS TABLE */}
-                    <Box sx={{ mb: 3.5 }}>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#0f2f57", mb: 1.5 }}>
-                        Projects Execution Breakdown ({projectCount})
-                      </Typography>
-                      <TableContainer component={Paper} elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 2 }}>
-                        <Table size="small">
-                          <TableHead sx={{ bgcolor: "#004792" }}>
-                            <TableRow>
-                              <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>#</TableCell>
-                              <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Time</TableCell>
-                              <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Project Type</TableCell>
-                              <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Consumer Name</TableCell>
-                              <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>A/C No.</TableCell>
-                              <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Capacity</TableCell>
-                              <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Install Day</TableCell>
-                              <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Supervisor</TableCell>
-                              <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Incharge(s)</TableCell>
-                              <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Location</TableCell>
-                              <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Report</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {(row.projects || []).map((project, idx) => (
-                              <TableRow key={project._id || idx} hover sx={{ "&:nth-of-type(even)": { bgcolor: "#f8fafc" } }}>
-                                <TableCell sx={{ fontWeight: 700 }}>{idx + 1}</TableCell>
-                                <TableCell sx={{ whiteSpace: "nowrap", fontSize: "0.8rem", color: "#64748b" }}>
-                                  {getProjectTimestamp(project, row)}
-                                </TableCell>
-                                <TableCell>
-                                  <Chip
-                                    size="small"
-                                    label={text(project.projectType)}
-                                    sx={{
-                                      fontSize: "0.72rem",
-                                      fontWeight: 700,
-                                      bgcolor: "#e0f2fe",
-                                      color: "#0369a1",
-                                    }}
-                                  />
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: 700, color: "#0f2f57" }}>
-                                  {text(project.consumerName || project.siteLocation)}
-                                </TableCell>
-                                <TableCell sx={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
-                                  {text(project.consumerAccountNo)}
-                                </TableCell>
-                                <TableCell>{text(project.capacityKw ? `${project.capacityKw} KW` : "-")}</TableCell>
-                                <TableCell>{text(project.installationDay ? `${project.installationDay} Days` : "-")}</TableCell>
-                                <TableCell sx={{ fontWeight: 600, color: "#854d0e" }}>
-                                  {personName(project.supervisor)}
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: 700, color: "#1d4ed8" }}>
-                                  {inchargeNames(project)}
-                                </TableCell>
-                                <TableCell sx={{ maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                  <Tooltip title={text(project.address || project.siteLocation || project.gpsLocation?.address)}>
-                                    <span>{text(project.address || project.siteLocation || project.gpsLocation?.address)}</span>
-                                  </Tooltip>
-                                </TableCell>
-                                <TableCell sx={{ maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                  <Tooltip title={text(project.report)}>
-                                    <span>{text(project.report)}</span>
-                                  </Tooltip>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    </Box>
-
-                    {/* SECTION 2: SITE GEO-TAGGED PHOTOS GALLERY */}
-                    <Box>
-                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-                        <FmdGoodRounded sx={{ color: "#ef4444", fontSize: 20 }} />
-                        <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#0f2f57" }}>
-                          Site Geo-Tagged Photographs ({allPhotos.length})
-                        </Typography>
-                      </Stack>
-
-                      {allPhotos.length === 0 ? (
+                        {/* Modern Stats Grid: Equal 3-Columns with Clean Dividers */}
                         <Box
                           sx={{
-                            p: 3,
-                            textAlign: "center",
-                            borderRadius: 2,
+                            display: "grid",
+                            gridTemplateColumns: "repeat(3, 1fr)",
                             bgcolor: "#f8fafc",
-                            border: "1px dashed #cbd5e1",
+                            borderRadius: 2.5,
+                            border: "1px solid #e2e8f0",
+                            p: 1.2,
+                            mb: 2,
+                            textAlign: "center",
                           }}
                         >
-                          <Typography variant="body2" sx={{ color: "#94a3b8" }}>
-                            No geo-tagged site images uploaded for this worksheet.
-                          </Typography>
+                          <Box sx={{ py: 0.5 }}>
+                            <Typography sx={{ fontSize: "0.65rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                              Worksheets
+                            </Typography>
+                            <Typography sx={{ fontSize: "1.25rem", fontWeight: 800, color: "#0f2f57", mt: 0.3, lineHeight: 1 }}>
+                              {user.worksheets.length}
+                            </Typography>
+                          </Box>
+
+                          <Box sx={{ py: 0.5, borderLeft: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0" }}>
+                            <Typography sx={{ fontSize: "0.65rem", fontWeight: 700, color: "#0284c7", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                              Projects
+                            </Typography>
+                            <Typography sx={{ fontSize: "1.25rem", fontWeight: 800, color: "#0284c7", mt: 0.3, lineHeight: 1 }}>
+                              {user.totalProjects}
+                            </Typography>
+                          </Box>
+
+                          <Box sx={{ py: 0.5 }}>
+                            <Typography sx={{ fontSize: "0.65rem", fontWeight: 700, color: "#059669", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                              Photos
+                            </Typography>
+                            <Typography sx={{ fontSize: "1.25rem", fontWeight: 800, color: "#059669", mt: 0.3, lineHeight: 1 }}>
+                              {user.totalPhotos}
+                            </Typography>
+                          </Box>
                         </Box>
-                      ) : (
-                        <Grid container spacing={2}>
-                          {allPhotos.map((photo, pIdx) => {
-                            const fullUrl = resolvePhotoUrl(photo.url);
-                            const lat = photo.latitude;
-                            const lng = photo.longitude;
-                            const hasCoords = lat && lng;
-                            return (
-                              <Grid item xs={12} sm={6} md={4} key={pIdx}>
-                                <Card
-                                  elevation={0}
+
+                        {/* Footer: Latest Activity + Action Button */}
+                        <Stack
+                          direction="row"
+                          justifyContent="space-between"
+                          alignItems="center"
+                          sx={{ pt: 1.5, borderTop: "1px solid #f1f5f9" }}
+                        >
+                          <Box sx={{ minWidth: 0, pr: 1 }}>
+                            <Typography sx={{ fontSize: "0.62rem", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", mb: 0.3 }}>
+                              Latest Submission
+                            </Typography>
+                            <Stack direction="row" spacing={0.6} alignItems="center" sx={{ flexWrap: "wrap", gap: 0.4 }}>
+                              <Stack direction="row" spacing={0.4} alignItems="center">
+                                <CalendarTodayRounded sx={{ fontSize: 13, color: "#475569" }} />
+                                <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: "#1e293b" }}>
+                                  {latestDateFormatted}
+                                </Typography>
+                              </Stack>
+                              <Typography sx={{ fontSize: "0.75rem", color: "#cbd5e1" }}>•</Typography>
+                              <Stack direction="row" spacing={0.4} alignItems="center">
+                                <AccessTimeRounded sx={{ fontSize: 13, color: roleBadgeColor.timeColor }} />
+                                <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: roleBadgeColor.timeColor }}>
+                                  {latestTimeFormatted}
+                                </Typography>
+                              </Stack>
+                            </Stack>
+                          </Box>
+
+                          <Button
+                            className="view-btn"
+                            size="small"
+                            variant="contained"
+                            endIcon={<ArrowForwardRounded sx={{ fontSize: "14px !important" }} />}
+                            sx={{
+                              borderRadius: 2,
+                              textTransform: "none",
+                              fontWeight: 700,
+                              fontSize: "0.75rem",
+                              px: 1.8,
+                              py: 0.7,
+                              whiteSpace: "nowrap",
+                              bgcolor: roleBadgeColor.main,
+                              boxShadow: `0 3px 10px ${roleBadgeColor.btnShadow}`,
+                              transition: "all 0.2s ease",
+                            }}
+                          >
+                            Worksheets
+                          </Button>
+                        </Stack>
+                      </Box>
+                    </Card>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          )}
+        </Box>
+      )}
+
+      {/* ─── CASE 2: SELECTED USER DRILL-DOWN VIEW (Showing Their Worksheets with Date & Time) ─── */}
+      {roleTab !== "ALL" && selectedUser && (
+        <Box sx={{ mb: 4 }}>
+          {/* Top Breadcrumb & Back Navigation */}
+          <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={1.5} sx={{ mb: 2.5 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ArrowBackRounded sx={{ fontSize: "16px !important" }} />}
+              onClick={() => setSelectedUser(null)}
+              sx={{
+                borderRadius: 2.5,
+                textTransform: "none",
+                fontWeight: 700,
+                px: 2,
+                py: 0.8,
+                color: "#0f2f57",
+                borderColor: "#cbd5e1",
+                bgcolor: "#ffffff",
+                boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
+                "&:hover": { bgcolor: "#f1f5f9", borderColor: "#94a3b8" },
+              }}
+            >
+              Back to All {roleTab === "INCHARGE" ? "Incharges" : roleTab === "SUPERVISOR" ? "Supervisors" : "Managers"}
+            </Button>
+
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                size="small"
+                label={`Viewing: ${selectedUser.name}`}
+                sx={{
+                  fontWeight: 800,
+                  bgcolor: "#0f2f57",
+                  color: "#ffffff",
+                  fontSize: "0.78rem",
+                  py: 0.4,
+                }}
+              />
+              <Chip
+                size="small"
+                label={`${userFilteredWorksheets.length} ${userFilteredWorksheets.length === 1 ? "Worksheet" : "Worksheets"}`}
+                sx={{
+                  fontWeight: 700,
+                  bgcolor: "#e0f2fe",
+                  color: "#0369a1",
+                  fontSize: "0.78rem",
+                }}
+              />
+            </Stack>
+          </Stack>
+
+          {/* User Profile Header Card */}
+          <Card
+            elevation={0}
+            sx={{
+              p: { xs: 2, sm: 3 },
+              mb: 3,
+              borderRadius: 3,
+              border: "1px solid #e2e8f0",
+              bgcolor: "#ffffff",
+              boxShadow: "0 4px 14px rgba(15, 23, 42, 0.05)",
+            }}
+          >
+            <Grid container spacing={2.5} alignItems="center">
+              <Grid item xs={12} md={6}>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Avatar
+                    sx={{
+                      width: 64,
+                      height: 64,
+                      background:
+                        roleTab === "INCHARGE"
+                          ? "linear-gradient(135deg, #16a34a, #15803d)"
+                          : roleTab === "SUPERVISOR"
+                          ? "linear-gradient(135deg, #eab308, #ca8a04)"
+                          : "linear-gradient(135deg, #6366f1, #4338ca)",
+                      color: "#ffffff",
+                      fontWeight: 800,
+                      fontSize: "1.4rem",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                    }}
+                  >
+                    {selectedUser.name
+                      .split(" ")
+                      .map((p) => p[0])
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .join("")
+                      .toUpperCase() || "U"}
+                  </Avatar>
+                  <Box>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.4, flexWrap: "wrap", gap: 0.5 }}>
+                      <Typography variant="h5" sx={{ fontWeight: 800, color: "#0f2f57" }}>
+                        {selectedUser.name}
+                      </Typography>
+                      {selectedUser.employeeId && (
+                        <Chip
+                          size="small"
+                          label={selectedUser.employeeId}
+                          sx={{
+                            fontWeight: 800,
+                            fontSize: "0.72rem",
+                            bgcolor: "#f1f5f9",
+                            color: "#334155",
+                          }}
+                        />
+                      )}
+                      <Chip
+                        size="small"
+                        label={selectedUser.role || (roleTab === "INCHARGE" ? "Incharge" : roleTab === "SUPERVISOR" ? "Supervisor" : "Manager")}
+                        sx={{
+                          fontWeight: 800,
+                          fontSize: "0.72rem",
+                          bgcolor: roleTab === "INCHARGE" ? "#dcfce7" : roleTab === "SUPERVISOR" ? "#fef9c3" : "#e0e7ff",
+                          color: roleTab === "INCHARGE" ? "#166534" : roleTab === "SUPERVISOR" ? "#854d0e" : "#4338ca",
+                        }}
+                      />
+                    </Stack>
+                    <Typography variant="body2" sx={{ color: "#64748b" }}>
+                      Worksheets & Site Execution Register with Exact Timestamps
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Stack direction="row" spacing={1.5} justifyContent={{ xs: "flex-start", md: "flex-end" }} sx={{ flexWrap: "wrap", gap: 1 }}>
+                  <Box sx={{ bgcolor: "#f8fafc", px: 2, py: 1, borderRadius: 2.5, border: "1px solid #e2e8f0", textAlign: "center" }}>
+                    <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700, display: "block" }}>
+                      TOTAL WORKSHEETS
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 800, color: "#0f2f57" }}>
+                      {selectedUser.worksheets.length}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ bgcolor: "#f0f9ff", px: 2, py: 1, borderRadius: 2.5, border: "1px solid #bae6fd", textAlign: "center" }}>
+                    <Typography variant="caption" sx={{ color: "#0369a1", fontWeight: 700, display: "block" }}>
+                      PROJECTS DONE
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 800, color: "#0284c7" }}>
+                      {selectedUser.totalProjects}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ bgcolor: "#ecfdf5", px: 2, py: 1, borderRadius: 2.5, border: "1px solid #a7f3d0", textAlign: "center" }}>
+                    <Typography variant="caption" sx={{ color: "#047857", fontWeight: 700, display: "block" }}>
+                      GEO-PHOTOS
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 800, color: "#059669" }}>
+                      {selectedUser.totalPhotos}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Grid>
+            </Grid>
+
+            {/* Filter toolbar inside user view */}
+            <Divider sx={{ my: 2, borderColor: "#e2e8f0" }} />
+            <Grid container spacing={1.5} alignItems="center">
+              <Grid item xs={12} sm={6} md={5}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Search consumer, account no, location, or report..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchRounded sx={{ color: "#94a3b8" }} />
+                      </InputAdornment>
+                    ),
+                    sx: { borderRadius: 2, bgcolor: "#f8fafc" },
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="user-proj-type-label" sx={{ fontSize: "0.85rem" }}>
+                    Project Type
+                  </InputLabel>
+                  <Select
+                    labelId="user-proj-type-label"
+                    label="Project Type"
+                    value={selectedProjectType}
+                    onChange={(e) => setSelectedProjectType(e.target.value)}
+                    sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                  >
+                    <MenuItem value="ALL">All Project Types</MenuItem>
+                    {projectTypeFilterOptions.map((type) => (
+                      <MenuItem key={type} value={type}>
+                        {type}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="date"
+                  label="Filter by Date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  sx={{ borderRadius: 2, bgcolor: "#f8fafc", "& input": { fontSize: "0.85rem" } }}
+                />
+              </Grid>
+
+              {(searchTerm || selectedDate || selectedProjectType !== "ALL") && (
+                <Grid item xs={12} sm={6} md={1}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    startIcon={<RestartAltRounded />}
+                    onClick={() => {
+                      setSearchTerm("");
+                      setSelectedDate("");
+                      setSelectedProjectType("ALL");
+                    }}
+                    sx={{ color: "#ef4444", fontWeight: 700, textTransform: "none", whiteSpace: "nowrap" }}
+                  >
+                    Reset
+                  </Button>
+                </Grid>
+              )}
+            </Grid>
+          </Card>
+
+          {/* User's Project Worksheets List */}
+          {userFilteredWorksheets.length === 0 ? (
+            <Paper
+              elevation={0}
+              sx={{
+                p: 6,
+                textAlign: "center",
+                borderRadius: 3,
+                border: "1px dashed #cbd5e1",
+                bgcolor: "#ffffff",
+              }}
+            >
+              <SolarPowerRounded sx={{ fontSize: 50, color: "#94a3b8", mb: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 700, color: "#334155" }}>
+                No worksheets match your filters
+              </Typography>
+              <Typography variant="body2" sx={{ color: "#64748b", mt: 0.5 }}>
+                {searchTerm || selectedDate || selectedProjectType !== "ALL"
+                  ? "Try resetting your search query or date filter."
+                  : "No worksheets registered for this user yet."}
+              </Typography>
+            </Paper>
+          ) : (
+            <Stack spacing={2.5}>
+              {userFilteredWorksheets.map((row) => {
+                const isExpanded = !!expandedRows[row._id];
+                const submittedBy = personName(row.user);
+                const isSup = isSupervisorSubmitter(row.user);
+                const submitterRoleLabel = isSup ? "Supervisor" : "Incharge";
+                const workDate = formatDate(row.workDate || row.createdAt);
+                const submissionTime = getWorksheetTimestamp(row);
+                const supervisorNames = uniqueSupervisorNames(row.projects);
+                const incharges = uniqueInchargeNames(row.projects);
+                const projectCount = row.projects?.length || 0;
+
+                const allPhotos = (row.projects || []).flatMap((p, pIdx) =>
+                  (p.photos || []).map((ph) => ({
+                    ...ph,
+                    projectName: p.consumerName || `Project #${pIdx + 1}`,
+                    consumerAccountNo: p.consumerAccountNo,
+                    projectType: p.projectType,
+                    supervisor: personName(p.supervisor),
+                    incharge: inchargeNames(p),
+                    address: ph.address || p.address || p.siteLocation,
+                    latitude: ph.latitude || p.gpsLocation?.latitude,
+                    longitude: ph.longitude || p.gpsLocation?.longitude,
+                    capturedAt: ph.capturedAt || p.createdAt || row.createdAt,
+                  }))
+                );
+
+                return (
+                  <Card
+                    key={row._id}
+                    elevation={0}
+                    sx={{
+                      borderRadius: 3,
+                      border: "1px solid #e2e8f0",
+                      bgcolor: "#ffffff",
+                      overflow: "hidden",
+                      transition: "box-shadow 0.2s ease",
+                      "&:hover": {
+                        boxShadow: "0 6px 20px rgba(15, 23, 42, 0.08)",
+                      },
+                    }}
+                  >
+                    {/* CARD TOP BAR - DATE AND TIME PROMINENT */}
+                    <Box
+                      sx={{
+                        p: { xs: 2, sm: 2.5 },
+                        bgcolor: isExpanded ? "#f8fafc" : "#ffffff",
+                        borderBottom: isExpanded ? "1px solid #e2e8f0" : "none",
+                      }}
+                    >
+                      <Grid container spacing={2} alignItems="center">
+                        {/* Left: Date & Time */}
+                        <Grid item xs={12} sm={3.5}>
+                          <Stack direction="row" spacing={1.5} alignItems="center">
+                            <Avatar
+                              sx={{
+                                bgcolor: "#eff6ff",
+                                color: "#004792",
+                                width: 44,
+                                height: 44,
+                                borderRadius: 2.5,
+                              }}
+                            >
+                              <CalendarTodayRounded sx={{ fontSize: 20 }} />
+                            </Avatar>
+                            <Box>
+                              <Typography variant="subtitle1" sx={{ fontWeight: 800, color: "#0f2f57", lineHeight: 1.2 }}>
+                                {workDate}
+                              </Typography>
+                              <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 0.5, flexWrap: "wrap", gap: 0.6 }}>
+                                <Chip
+                                  size="small"
+                                  label={`${projectCount} ${projectCount === 1 ? "Project" : "Projects"}`}
                                   sx={{
-                                    borderRadius: 2.5,
-                                    border: "1px solid #e2e8f0",
-                                    bgcolor: "#ffffff",
+                                    height: 22,
+                                    fontSize: "0.72rem",
+                                    fontWeight: 700,
+                                    bgcolor: "#f1f5f9",
+                                    color: "#475569",
+                                  }}
+                                />
+                                <Chip
+                                  size="small"
+                                  icon={<AccessTimeRounded sx={{ fontSize: "13px !important", color: "#0369a1" }} />}
+                                  label={submissionTime}
+                                  sx={{
+                                    height: 22,
+                                    fontSize: "0.72rem",
+                                    fontWeight: 800,
+                                    bgcolor: "#e0f2fe",
+                                    color: "#0369a1",
+                                    border: "1px solid #bae6fd",
+                                  }}
+                                />
+                                {Boolean(row.hasMissedProject || row.missedForDate || row.projects?.some(p => p.isMissedProject || p.missedForDate)) && (
+                                  <Chip
+                                    size="small"
+                                    label="Missed Project"
+                                    sx={{
+                                      height: 22,
+                                      fontSize: "0.70rem",
+                                      fontWeight: 800,
+                                      bgcolor: "#fef3c7",
+                                      color: "#b45309",
+                                      border: "1px solid #fcd34d",
+                                    }}
+                                  />
+                                )}
+                              </Stack>
+                            </Box>
+                          </Stack>
+                        </Grid>
+
+                        {/* Middle: Personnel Details */}
+                        <Grid item xs={12} sm={5.5}>
+                          <Grid container spacing={1.2}>
+                            {/* Submitter */}
+                            <Grid item xs={12} sm={4}>
+                              <Box
+                                sx={{
+                                  bgcolor: isSup ? "#fefce8" : "#f0fdf4",
+                                  p: 1,
+                                  borderRadius: 2,
+                                  border: `1px solid ${isSup ? "#fef08a" : "#bbf7d0"}`,
+                                }}
+                              >
+                                <Stack direction="row" spacing={0.6} alignItems="center">
+                                  {isSup ? (
+                                    <ShieldRounded sx={{ fontSize: 15, color: "#ca8a04" }} />
+                                  ) : (
+                                    <PersonRounded sx={{ fontSize: 15, color: "#16a34a" }} />
+                                  )}
+                                  <Typography
+                                    variant="caption"
+                                    sx={{ color: isSup ? "#854d0e" : "#166534", fontWeight: 700, fontSize: "0.7rem" }}
+                                  >
+                                    Submitter ({submitterRoleLabel})
+                                  </Typography>
+                                </Stack>
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontWeight: 700,
+                                    color: "#0f2f57",
+                                    mt: 0.2,
                                     overflow: "hidden",
-                                    transition: "transform 0.15s ease, box-shadow 0.15s ease",
-                                    "&:hover": {
-                                      transform: "translateY(-3px)",
-                                      boxShadow: "0 8px 24px rgba(15, 23, 42, 0.1)",
-                                    },
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    fontSize: "0.82rem",
                                   }}
                                 >
-                                  {/* Photo display */}
-                                  <Box
-                                    sx={{
-                                      position: "relative",
-                                      height: 180,
-                                      bgcolor: "#0f172a",
-                                      cursor: "pointer",
-                                    }}
-                                    onClick={() => setPreviewPhoto(photo)}
-                                  >
-                                    <Box
-                                      component="img"
-                                      src={fullUrl}
-                                      alt={photo.projectName}
-                                      sx={{
-                                        width: "100%",
-                                        height: "100%",
-                                        objectFit: "cover",
-                                      }}
-                                      onError={(e) => {
-                                        e.target.style.display = "none";
-                                      }}
-                                    />
-                                    {/* Overlay badge */}
-                                    <Chip
-                                      size="small"
-                                      icon={<FmdGoodRounded sx={{ fontSize: "14px !important", color: "#fff" }} />}
-                                      label={hasCoords ? `${Number(lat).toFixed(4)}°, ${Number(lng).toFixed(4)}°` : "Site Photo"}
-                                      sx={{
-                                        position: "absolute",
-                                        bottom: 10,
-                                        left: 10,
-                                        bgcolor: "rgba(15, 23, 42, 0.75)",
-                                        backdropFilter: "blur(4px)",
-                                        color: "#ffffff",
-                                        fontSize: "0.72rem",
-                                        fontWeight: 700,
-                                      }}
-                                    />
-                                  </Box>
+                                  {submittedBy}
+                                </Typography>
+                              </Box>
+                            </Grid>
 
-                                  {/* Info under photo */}
-                                  <Box sx={{ p: 1.8 }}>
-                                    <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "#0f2f57", lineHeight: 1.2 }}>
-                                      {photo.projectName}
-                                    </Typography>
-                                    <Typography variant="caption" sx={{ color: "#64748b", display: "block", mt: 0.4 }}>
-                                      Incharge(s): <strong style={{ color: "#1d4ed8" }}>{photo.incharge}</strong>
-                                    </Typography>
-                                    {photo.address && (
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          color: "#475569",
-                                          display: "block",
-                                          mt: 0.3,
-                                          overflow: "hidden",
-                                          textOverflow: "ellipsis",
-                                          whiteSpace: "nowrap",
-                                        }}
-                                      >
-                                        📍 {photo.address}
-                                      </Typography>
-                                    )}
-                                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1.2 }}>
-                                      <Typography variant="caption" sx={{ color: "#94a3b8", fontSize: "0.7rem" }}>
-                                        {formatDate(photo.capturedAt)} {formatTime(photo.capturedAt)}
-                                      </Typography>
-                                      <Button
-                                        size="small"
-                                        variant="text"
-                                        startIcon={<OpenInNewRounded sx={{ fontSize: "14px !important" }} />}
-                                        onClick={() => setPreviewPhoto(photo)}
-                                        sx={{ fontSize: "0.75rem", p: 0.3, textTransform: "none", fontWeight: 700 }}
-                                      >
-                                        Inspect
-                                      </Button>
-                                    </Stack>
-                                  </Box>
-                                </Card>
-                              </Grid>
-                            );
-                          })}
+                            {/* Supervisor */}
+                            <Grid item xs={12} sm={4}>
+                              <Box sx={{ bgcolor: "#fefce8", p: 1, borderRadius: 2, border: "1px solid #fef08a" }}>
+                                <Stack direction="row" spacing={0.6} alignItems="center">
+                                  <ShieldRounded sx={{ fontSize: 15, color: "#ca8a04" }} />
+                                  <Typography variant="caption" sx={{ color: "#854d0e", fontWeight: 700, fontSize: "0.7rem" }}>
+                                    Supervisor
+                                  </Typography>
+                                </Stack>
+                                <Typography
+                                  variant="body2"
+                                  sx={{ fontWeight: 700, color: "#0f2f57", mt: 0.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.82rem" }}
+                                >
+                                  {supervisorNames}
+                                </Typography>
+                              </Box>
+                            </Grid>
+
+                            {/* Incharges */}
+                            <Grid item xs={12} sm={4}>
+                              <Box sx={{ bgcolor: "#eff6ff", p: 1, borderRadius: 2, border: "1px solid #bfdbfe" }}>
+                                <Stack direction="row" spacing={0.6} alignItems="center">
+                                  <PersonRounded sx={{ fontSize: 15, color: "#2563eb" }} />
+                                  <Typography variant="caption" sx={{ color: "#1e40af", fontWeight: 700, fontSize: "0.7rem" }}>
+                                    Incharge(s)
+                                  </Typography>
+                                </Stack>
+                                <Typography
+                                  variant="body2"
+                                  sx={{ fontWeight: 700, color: "#0f2f57", mt: 0.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.82rem" }}
+                                >
+                                  {incharges}
+                                </Typography>
+                              </Box>
+                            </Grid>
+                          </Grid>
                         </Grid>
-                      )}
+
+                        {/* Right: Actions */}
+                        <Grid item xs={12} sm={3}>
+                          <Stack direction="row" spacing={1} justifyContent={{ xs: "flex-start", sm: "flex-end" }} alignItems="center">
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={<PictureAsPdfRounded />}
+                              onClick={() => downloadWorkRegisterPdf(row)}
+                              sx={{
+                                borderRadius: 2,
+                                textTransform: "none",
+                                fontWeight: 700,
+                                bgcolor: "#004792",
+                                boxShadow: "0 2px 8px rgba(0, 71, 146, 0.3)",
+                                "&:hover": { bgcolor: "#003366" },
+                              }}
+                            >
+                              Download PDF
+                            </Button>
+                            <IconButton
+                              onClick={() => toggleRow(row._id)}
+                              sx={{
+                                bgcolor: "#f1f5f9",
+                                color: "#334155",
+                                "&:hover": { bgcolor: "#e2e8f0" },
+                              }}
+                            >
+                              {isExpanded ? <ExpandLessRounded /> : <ExpandMoreRounded />}
+                            </IconButton>
+                          </Stack>
+                        </Grid>
+                      </Grid>
                     </Box>
-                  </CardContent>
-                </Collapse>
-              </Card>
-            );
-          })}
-        </Stack>
+
+                    {/* EXPANDED CONTENT */}
+                    <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                        {/* SECTION 1: PROJECTS TABLE WITH DATE AND TIME */}
+                        <Box sx={{ mb: 3.5 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#0f2f57", mb: 1.5 }}>
+                            Projects Execution Breakdown ({projectCount})
+                          </Typography>
+                          <TableContainer component={Paper} elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 2 }}>
+                            <Table size="small">
+                              <TableHead sx={{ bgcolor: "#004792" }}>
+                                <TableRow>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>#</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Time</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Project Type</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Consumer Name</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>A/C No.</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Capacity</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Install Day</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Supervisor</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Incharge(s)</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Location</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Report</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {(row.projects || []).map((project, idx) => (
+                                  <TableRow key={project._id || idx} hover sx={{ "&:nth-of-type(even)": { bgcolor: "#f8fafc" } }}>
+                                    <TableCell sx={{ fontWeight: 700 }}>{idx + 1}</TableCell>
+                                    <TableCell sx={{ whiteSpace: "nowrap", fontSize: "0.8rem", color: "#64748b", fontWeight: 700 }}>
+                                      <Stack direction="row" spacing={0.5} alignItems="center">
+                                        <AccessTimeRounded sx={{ fontSize: 13, color: "#0284c7" }} />
+                                        <span>{getProjectTimestamp(project, row)}</span>
+                                      </Stack>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Chip
+                                        size="small"
+                                        label={text(project.projectType)}
+                                        sx={{
+                                          fontSize: "0.72rem",
+                                          fontWeight: 700,
+                                          bgcolor: "#e0f2fe",
+                                          color: "#0369a1",
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell sx={{ fontWeight: 700, color: "#0f2f57" }}>
+                                      {text(project.consumerName || project.siteLocation)}
+                                    </TableCell>
+                                    <TableCell sx={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
+                                      {text(project.consumerAccountNo)}
+                                    </TableCell>
+                                    <TableCell>{text(project.capacityKw ? `${project.capacityKw} KW` : "-")}</TableCell>
+                                    <TableCell>{text(project.installationDay ? `${project.installationDay} Days` : "-")}</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, color: "#854d0e" }}>
+                                      {personName(project.supervisor)}
+                                    </TableCell>
+                                    <TableCell sx={{ fontWeight: 700, color: "#1d4ed8" }}>
+                                      {inchargeNames(project)}
+                                    </TableCell>
+                                    <TableCell sx={{ maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                      <Tooltip title={text(project.address || project.siteLocation || project.gpsLocation?.address)}>
+                                        <span>{text(project.address || project.siteLocation || project.gpsLocation?.address)}</span>
+                                      </Tooltip>
+                                    </TableCell>
+                                    <TableCell sx={{ maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                      <Tooltip title={text(project.report)}>
+                                        <span>{text(project.report)}</span>
+                                      </Tooltip>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        </Box>
+
+                        {/* SECTION 2: SITE GEO-TAGGED PHOTOS GALLERY */}
+                        <Box>
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                            <FmdGoodRounded sx={{ color: "#ef4444", fontSize: 20 }} />
+                            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#0f2f57" }}>
+                              Site Geo-Tagged Photographs ({allPhotos.length})
+                            </Typography>
+                          </Stack>
+
+                          {allPhotos.length === 0 ? (
+                            <Box
+                              sx={{
+                                p: 3,
+                                textAlign: "center",
+                                borderRadius: 2,
+                                bgcolor: "#f8fafc",
+                                border: "1px dashed #cbd5e1",
+                              }}
+                            >
+                              <Typography variant="body2" sx={{ color: "#94a3b8" }}>
+                                No geo-tagged site images uploaded for this worksheet.
+                              </Typography>
+                            </Box>
+                          ) : (
+                            <Grid container spacing={2}>
+                              {allPhotos.map((photo, pIdx) => {
+                                const fullUrl = resolvePhotoUrl(photo.url);
+                                const lat = photo.latitude;
+                                const lng = photo.longitude;
+                                const hasCoords = lat && lng;
+                                return (
+                                  <Grid item xs={12} sm={6} md={4} key={pIdx}>
+                                    <Card
+                                      elevation={0}
+                                      sx={{
+                                        borderRadius: 2.5,
+                                        border: "1px solid #e2e8f0",
+                                        bgcolor: "#ffffff",
+                                        overflow: "hidden",
+                                        transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                                        "&:hover": {
+                                          transform: "translateY(-3px)",
+                                          boxShadow: "0 8px 24px rgba(15, 23, 42, 0.1)",
+                                        },
+                                      }}
+                                    >
+                                      <Box
+                                        sx={{
+                                          position: "relative",
+                                          height: 180,
+                                          bgcolor: "#0f172a",
+                                          cursor: "pointer",
+                                        }}
+                                        onClick={() => setPreviewPhoto(photo)}
+                                      >
+                                        <Box
+                                          component="img"
+                                          src={fullUrl}
+                                          alt={photo.projectName}
+                                          sx={{
+                                            width: "100%",
+                                            height: "100%",
+                                            objectFit: "cover",
+                                          }}
+                                          onError={(e) => {
+                                            e.target.style.display = "none";
+                                          }}
+                                        />
+                                        <Chip
+                                          size="small"
+                                          icon={<FmdGoodRounded sx={{ fontSize: "14px !important", color: "#fff" }} />}
+                                          label={hasCoords ? `${Number(lat).toFixed(4)}°, ${Number(lng).toFixed(4)}°` : "Site Photo"}
+                                          sx={{
+                                            position: "absolute",
+                                            bottom: 10,
+                                            left: 10,
+                                            bgcolor: "rgba(15, 23, 42, 0.75)",
+                                            backdropFilter: "blur(4px)",
+                                            color: "#ffffff",
+                                            fontSize: "0.72rem",
+                                            fontWeight: 700,
+                                          }}
+                                        />
+                                      </Box>
+
+                                      <Box sx={{ p: 1.8 }}>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "#0f2f57", lineHeight: 1.2 }}>
+                                          {photo.projectName}
+                                        </Typography>
+                                        <Typography variant="caption" sx={{ color: "#64748b", display: "block", mt: 0.4 }}>
+                                          Incharge(s): <strong style={{ color: "#1d4ed8" }}>{photo.incharge}</strong>
+                                        </Typography>
+                                        {photo.address && (
+                                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.3 }}>
+                                            <FmdGoodRounded sx={{ fontSize: 13, color: "#64748b", flexShrink: 0 }} />
+                                            <Typography
+                                              variant="caption"
+                                              noWrap
+                                              sx={{
+                                                color: "#475569",
+                                                display: "block",
+                                              }}
+                                            >
+                                              {photo.address}
+                                            </Typography>
+                                          </Stack>
+                                        )}
+                                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1.2 }}>
+                                          <Stack direction="row" spacing={0.5} alignItems="center">
+                                            <AccessTimeRounded sx={{ fontSize: 13, color: "#0284c7" }} />
+                                            <Typography variant="caption" sx={{ color: "#0284c7", fontSize: "0.72rem", fontWeight: 700 }}>
+                                              {formatDate(photo.capturedAt)} {formatTime(photo.capturedAt)}
+                                            </Typography>
+                                          </Stack>
+                                          <Button
+                                            size="small"
+                                            variant="text"
+                                            startIcon={<OpenInNewRounded sx={{ fontSize: "14px !important" }} />}
+                                            onClick={() => setPreviewPhoto(photo)}
+                                            sx={{ fontSize: "0.75rem", p: 0.3, textTransform: "none", fontWeight: 700 }}
+                                          >
+                                            Inspect
+                                          </Button>
+                                        </Stack>
+                                      </Box>
+                                    </Card>
+                                  </Grid>
+                                );
+                              })}
+                            </Grid>
+                          )}
+                        </Box>
+                      </CardContent>
+                    </Collapse>
+                  </Card>
+                );
+              })}
+            </Stack>
+          )}
+        </Box>
+      )}
+
+      {/* ─── CASE 3: ALL WORKSHEETS VIEW (Flat List across all roles) ─── */}
+      {roleTab === "ALL" && (
+        <Box sx={{ mb: 4 }}>
+          {/* Search Input and Filter Action Row */}
+          <Card
+            elevation={0}
+            sx={{
+              p: 2,
+              mb: 3,
+              borderRadius: 3,
+              border: "1px solid #e2e8f0",
+              bgcolor: "#ffffff",
+              boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+            }}
+          >
+            <Stack spacing={2}>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems="center">
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Search by Employee, Supervisor, Incharge, Consumer, A/C No, or Location..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchRounded sx={{ color: "#94a3b8" }} />
+                      </InputAdornment>
+                    ),
+                    sx: { borderRadius: 2, bgcolor: "#f8fafc" },
+                  }}
+                />
+
+                <Button
+                  variant={showFilters || activeFilterCount > 0 ? "contained" : "outlined"}
+                  size="small"
+                  startIcon={<FilterListRounded />}
+                  onClick={() => setShowFilters((prev) => !prev)}
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: "none",
+                    fontWeight: 700,
+                    px: 2.2,
+                    py: 0.9,
+                    whiteSpace: "nowrap",
+                    minWidth: "fit-content",
+                    bgcolor: showFilters || activeFilterCount > 0 ? "#0f2f57" : "#fff",
+                    color: showFilters || activeFilterCount > 0 ? "#fff" : "#334155",
+                    borderColor: "#cbd5e1",
+                    "&:hover": {
+                      bgcolor: showFilters || activeFilterCount > 0 ? "#0a1f3a" : "#f1f5f9",
+                      borderColor: "#94a3b8",
+                    },
+                  }}
+                >
+                  {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
+                </Button>
+
+                {activeFilterCount > 0 && (
+                  <Button
+                    variant="text"
+                    size="small"
+                    startIcon={<RestartAltRounded />}
+                    onClick={clearAllFilters}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: "none",
+                      fontWeight: 600,
+                      color: "#ef4444",
+                      whiteSpace: "nowrap",
+                      "&:hover": { bgcolor: "#fef2f2" },
+                    }}
+                  >
+                    Reset
+                  </Button>
+                )}
+              </Stack>
+
+              {/* Collapsible Filter Panel */}
+              <Collapse in={showFilters}>
+                <Divider sx={{ my: 1.5, borderColor: "#e2e8f0" }} />
+                <Grid container spacing={1.5} alignItems="center">
+                  {/* Supervisor Dropdown */}
+                  <Grid item xs={12} sm={6} md={3}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel id="sup-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
+                        Supervisor
+                      </InputLabel>
+                      <Select
+                        labelId="sup-filter-label"
+                        label="Supervisor"
+                        value={selectedSupervisor}
+                        onChange={(e) => setSelectedSupervisor(e.target.value)}
+                        sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                      >
+                        <MenuItem value="ALL">All Supervisors</MenuItem>
+                        {supervisorFilterOptions.map((name) => (
+                          <MenuItem key={name} value={name}>
+                            {name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  {/* Incharge Dropdown */}
+                  <Grid item xs={12} sm={6} md={3}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel id="inc-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
+                        Incharge
+                      </InputLabel>
+                      <Select
+                        labelId="inc-filter-label"
+                        label="Incharge"
+                        value={selectedIncharge}
+                        onChange={(e) => setSelectedIncharge(e.target.value)}
+                        sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                      >
+                        <MenuItem value="ALL">All Incharges</MenuItem>
+                        {inchargeFilterOptions.map((name) => (
+                          <MenuItem key={name} value={name}>
+                            {name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  {/* Project Type Dropdown */}
+                  <Grid item xs={12} sm={6} md={3}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel id="proj-type-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
+                        Project Type
+                      </InputLabel>
+                      <Select
+                        labelId="proj-type-filter-label"
+                        label="Project Type"
+                        value={selectedProjectType}
+                        onChange={(e) => setSelectedProjectType(e.target.value)}
+                        sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                      >
+                        <MenuItem value="ALL">All Types</MenuItem>
+                        {projectTypeFilterOptions.map((type) => (
+                          <MenuItem key={type} value={type}>
+                            {type}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  {/* Single Date Picker */}
+                  <Grid item xs={12} sm={6} md={3}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="date"
+                      label="Select Date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      InputLabelProps={{ shrink: true }}
+                      sx={{ borderRadius: 2, bgcolor: "#f8fafc", "& input": { fontSize: "0.85rem" } }}
+                    />
+                  </Grid>
+                </Grid>
+              </Collapse>
+            </Stack>
+          </Card>
+
+          {/* All Worksheets List */}
+          {loading ? (
+            <Box sx={{ p: 8, textAlign: "center" }}>
+              <CircularProgress size={38} sx={{ color: "#004792" }} />
+              <Typography sx={{ mt: 2, color: "#64748b", fontWeight: 500 }}>
+                Loading daily worksheets...
+              </Typography>
+            </Box>
+          ) : filteredRows.length === 0 ? (
+            <Paper
+              elevation={0}
+              sx={{
+                p: 6,
+                textAlign: "center",
+                borderRadius: 3,
+                border: "1px dashed #cbd5e1",
+                bgcolor: "#ffffff",
+              }}
+            >
+              <SolarPowerRounded sx={{ fontSize: 50, color: "#94a3b8", mb: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 700, color: "#334155" }}>
+                No worksheets found
+              </Typography>
+              <Typography variant="body2" sx={{ color: "#64748b", mt: 0.5 }}>
+                {searchTerm
+                  ? "No worksheets match your current search query."
+                  : "No approved worksheets have been registered yet."}
+              </Typography>
+            </Paper>
+          ) : (
+            <Stack spacing={2.5}>
+              {filteredRows.map((row) => {
+                const isExpanded = !!expandedRows[row._id];
+                const submittedBy = personName(row.user);
+                const isSup = isSupervisorSubmitter(row.user);
+                const submitterRoleLabel = isSup ? "Supervisor" : "Incharge";
+                const workDate = formatDate(row.workDate || row.createdAt);
+                const submissionTime = getWorksheetTimestamp(row);
+                const supervisorNames = uniqueSupervisorNames(row.projects);
+                const incharges = uniqueInchargeNames(row.projects);
+                const projectCount = row.projects?.length || 0;
+
+                const allPhotos = (row.projects || []).flatMap((p, pIdx) =>
+                  (p.photos || []).map((ph) => ({
+                    ...ph,
+                    projectName: p.consumerName || `Project #${pIdx + 1}`,
+                    consumerAccountNo: p.consumerAccountNo,
+                    projectType: p.projectType,
+                    supervisor: personName(p.supervisor),
+                    incharge: inchargeNames(p),
+                    address: ph.address || p.address || p.siteLocation,
+                    latitude: ph.latitude || p.gpsLocation?.latitude,
+                    longitude: ph.longitude || p.gpsLocation?.longitude,
+                    capturedAt: ph.capturedAt || p.createdAt || row.createdAt,
+                  }))
+                );
+
+                return (
+                  <Card
+                    key={row._id}
+                    elevation={0}
+                    sx={{
+                      borderRadius: 3,
+                      border: "1px solid #e2e8f0",
+                      bgcolor: "#ffffff",
+                      overflow: "hidden",
+                      transition: "box-shadow 0.2s ease",
+                      "&:hover": {
+                        boxShadow: "0 6px 20px rgba(15, 23, 42, 0.08)",
+                      },
+                    }}
+                  >
+                    {/* CARD TOP BAR - DATE AND TIME PROMINENT */}
+                    <Box
+                      sx={{
+                        p: { xs: 2, sm: 2.5 },
+                        bgcolor: isExpanded ? "#f8fafc" : "#ffffff",
+                        borderBottom: isExpanded ? "1px solid #e2e8f0" : "none",
+                      }}
+                    >
+                      <Grid container spacing={2} alignItems="center">
+                        {/* Left: Date & Time */}
+                        <Grid item xs={12} sm={3.5}>
+                          <Stack direction="row" spacing={1.5} alignItems="center">
+                            <Avatar
+                              sx={{
+                                bgcolor: "#eff6ff",
+                                color: "#004792",
+                                width: 44,
+                                height: 44,
+                                borderRadius: 2.5,
+                              }}
+                            >
+                              <CalendarTodayRounded sx={{ fontSize: 20 }} />
+                            </Avatar>
+                            <Box>
+                              <Typography variant="subtitle1" sx={{ fontWeight: 800, color: "#0f2f57", lineHeight: 1.2 }}>
+                                {workDate}
+                              </Typography>
+                              <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 0.5, flexWrap: "wrap", gap: 0.6 }}>
+                                <Chip
+                                  size="small"
+                                  label={`${projectCount} ${projectCount === 1 ? "Project" : "Projects"}`}
+                                  sx={{
+                                    height: 22,
+                                    fontSize: "0.72rem",
+                                    fontWeight: 700,
+                                    bgcolor: "#f1f5f9",
+                                    color: "#475569",
+                                  }}
+                                />
+                                <Chip
+                                  size="small"
+                                  icon={<AccessTimeRounded sx={{ fontSize: "13px !important", color: "#0369a1" }} />}
+                                  label={submissionTime}
+                                  sx={{
+                                    height: 22,
+                                    fontSize: "0.72rem",
+                                    fontWeight: 800,
+                                    bgcolor: "#e0f2fe",
+                                    color: "#0369a1",
+                                    border: "1px solid #bae6fd",
+                                  }}
+                                />
+                                {Boolean(row.hasMissedProject || row.missedForDate || row.projects?.some(p => p.isMissedProject || p.missedForDate)) && (
+                                  <Chip
+                                    size="small"
+                                    label="Missed Project"
+                                    sx={{
+                                      height: 22,
+                                      fontSize: "0.70rem",
+                                      fontWeight: 800,
+                                      bgcolor: "#fef3c7",
+                                      color: "#b45309",
+                                      border: "1px solid #fcd34d",
+                                    }}
+                                  />
+                                )}
+                              </Stack>
+                            </Box>
+                          </Stack>
+                        </Grid>
+
+                        {/* Middle: Personnel Details (Clickable Pills) */}
+                        <Grid item xs={12} sm={5.5}>
+                          <Grid container spacing={1.2}>
+                            {/* Submitter */}
+                            <Grid item xs={12} sm={4}>
+                              <Box
+                                onClick={() => openUserDetail(submittedBy, isSup ? "SUPERVISOR" : "INCHARGE")}
+                                sx={{
+                                  bgcolor: isSup ? "#fefce8" : "#f0fdf4",
+                                  p: 1,
+                                  borderRadius: 2,
+                                  border: `1px solid ${isSup ? "#fef08a" : "#bbf7d0"}`,
+                                  cursor: "pointer",
+                                  transition: "all 0.15s ease",
+                                  "&:hover": {
+                                    transform: "translateY(-1px)",
+                                    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                                    borderColor: isSup ? "#eab308" : "#22c55e",
+                                  },
+                                }}
+                              >
+                                <Stack direction="row" spacing={0.6} alignItems="center">
+                                  {isSup ? (
+                                    <ShieldRounded sx={{ fontSize: 15, color: "#ca8a04" }} />
+                                  ) : (
+                                    <PersonRounded sx={{ fontSize: 15, color: "#16a34a" }} />
+                                  )}
+                                  <Typography
+                                    variant="caption"
+                                    sx={{ color: isSup ? "#854d0e" : "#166534", fontWeight: 700, fontSize: "0.7rem" }}
+                                  >
+                                    Submitter ({submitterRoleLabel})
+                                  </Typography>
+                                </Stack>
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontWeight: 700,
+                                    color: "#0f2f57",
+                                    mt: 0.2,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    fontSize: "0.82rem",
+                                  }}
+                                >
+                                  {submittedBy}
+                                </Typography>
+                              </Box>
+                            </Grid>
+
+                            {/* Supervisor */}
+                            <Grid item xs={12} sm={4}>
+                              <Box
+                                onClick={() => openUserDetail(supervisorNames, "SUPERVISOR")}
+                                sx={{
+                                  bgcolor: "#fefce8",
+                                  p: 1,
+                                  borderRadius: 2,
+                                  border: "1px solid #fef08a",
+                                  cursor: supervisorNames !== "-" ? "pointer" : "default",
+                                  transition: "all 0.15s ease",
+                                  "&:hover": supervisorNames !== "-" ? {
+                                    transform: "translateY(-1px)",
+                                    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                                    borderColor: "#eab308",
+                                  } : {},
+                                }}
+                              >
+                                <Stack direction="row" spacing={0.6} alignItems="center">
+                                  <ShieldRounded sx={{ fontSize: 15, color: "#ca8a04" }} />
+                                  <Typography variant="caption" sx={{ color: "#854d0e", fontWeight: 700, fontSize: "0.7rem" }}>
+                                    Supervisor
+                                  </Typography>
+                                </Stack>
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontWeight: 700,
+                                    color: "#0f2f57",
+                                    mt: 0.2,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    fontSize: "0.82rem",
+                                  }}
+                                >
+                                  {supervisorNames}
+                                </Typography>
+                              </Box>
+                            </Grid>
+
+                            {/* Incharges */}
+                            <Grid item xs={12} sm={4}>
+                              <Box
+                                onClick={() => openUserDetail(incharges, "INCHARGE")}
+                                sx={{
+                                  bgcolor: "#eff6ff",
+                                  p: 1,
+                                  borderRadius: 2,
+                                  border: "1px solid #bfdbfe",
+                                  cursor: incharges !== "-" ? "pointer" : "default",
+                                  transition: "all 0.15s ease",
+                                  "&:hover": incharges !== "-" ? {
+                                    transform: "translateY(-1px)",
+                                    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                                    borderColor: "#3b82f6",
+                                  } : {},
+                                }}
+                              >
+                                <Stack direction="row" spacing={0.6} alignItems="center">
+                                  <PersonRounded sx={{ fontSize: 15, color: "#2563eb" }} />
+                                  <Typography variant="caption" sx={{ color: "#1e40af", fontWeight: 700, fontSize: "0.7rem" }}>
+                                    Incharge(s)
+                                  </Typography>
+                                </Stack>
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontWeight: 700,
+                                    color: "#0f2f57",
+                                    mt: 0.2,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    fontSize: "0.82rem",
+                                  }}
+                                >
+                                  {incharges}
+                                </Typography>
+                              </Box>
+                            </Grid>
+                          </Grid>
+                        </Grid>
+
+                        {/* Right: Actions */}
+                        <Grid item xs={12} sm={3}>
+                          <Stack direction="row" spacing={1} justifyContent={{ xs: "flex-start", sm: "flex-end" }} alignItems="center">
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={<PictureAsPdfRounded />}
+                              onClick={() => downloadWorkRegisterPdf(row)}
+                              sx={{
+                                borderRadius: 2,
+                                textTransform: "none",
+                                fontWeight: 700,
+                                bgcolor: "#004792",
+                                boxShadow: "0 2px 8px rgba(0, 71, 146, 0.3)",
+                                "&:hover": { bgcolor: "#003366" },
+                              }}
+                            >
+                              Download PDF
+                            </Button>
+                            <IconButton
+                              onClick={() => toggleRow(row._id)}
+                              sx={{
+                                bgcolor: "#f1f5f9",
+                                color: "#334155",
+                                "&:hover": { bgcolor: "#e2e8f0" },
+                              }}
+                            >
+                              {isExpanded ? <ExpandLessRounded /> : <ExpandMoreRounded />}
+                            </IconButton>
+                          </Stack>
+                        </Grid>
+                      </Grid>
+                    </Box>
+
+                    {/* EXPANDED CONTENT */}
+                    <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                        {/* SECTION 1: PROJECTS TABLE WITH DATE AND TIME */}
+                        <Box sx={{ mb: 3.5 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#0f2f57", mb: 1.5 }}>
+                            Projects Execution Breakdown ({projectCount})
+                          </Typography>
+                          <TableContainer component={Paper} elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 2 }}>
+                            <Table size="small">
+                              <TableHead sx={{ bgcolor: "#004792" }}>
+                                <TableRow>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>#</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Time</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Project Type</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Consumer Name</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>A/C No.</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Capacity</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Install Day</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Supervisor</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Incharge(s)</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Location</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Report</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {(row.projects || []).map((project, idx) => (
+                                  <TableRow key={project._id || idx} hover sx={{ "&:nth-of-type(even)": { bgcolor: "#f8fafc" } }}>
+                                    <TableCell sx={{ fontWeight: 700 }}>{idx + 1}</TableCell>
+                                    <TableCell sx={{ whiteSpace: "nowrap", fontSize: "0.8rem", color: "#64748b", fontWeight: 700 }}>
+                                      <Stack direction="row" spacing={0.5} alignItems="center">
+                                        <AccessTimeRounded sx={{ fontSize: 13, color: "#0284c7" }} />
+                                        <span>{getProjectTimestamp(project, row)}</span>
+                                      </Stack>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Chip
+                                        size="small"
+                                        label={text(project.projectType)}
+                                        sx={{
+                                          fontSize: "0.72rem",
+                                          fontWeight: 700,
+                                          bgcolor: "#e0f2fe",
+                                          color: "#0369a1",
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell sx={{ fontWeight: 700, color: "#0f2f57" }}>
+                                      {text(project.consumerName || project.siteLocation)}
+                                    </TableCell>
+                                    <TableCell sx={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
+                                      {text(project.consumerAccountNo)}
+                                    </TableCell>
+                                    <TableCell>{text(project.capacityKw ? `${project.capacityKw} KW` : "-")}</TableCell>
+                                    <TableCell>{text(project.installationDay ? `${project.installationDay} Days` : "-")}</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, color: "#854d0e" }}>
+                                      {personName(project.supervisor)}
+                                    </TableCell>
+                                    <TableCell sx={{ fontWeight: 700, color: "#1d4ed8" }}>
+                                      {inchargeNames(project)}
+                                    </TableCell>
+                                    <TableCell sx={{ maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                      <Tooltip title={text(project.address || project.siteLocation || project.gpsLocation?.address)}>
+                                        <span>{text(project.address || project.siteLocation || project.gpsLocation?.address)}</span>
+                                      </Tooltip>
+                                    </TableCell>
+                                    <TableCell sx={{ maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                      <Tooltip title={text(project.report)}>
+                                        <span>{text(project.report)}</span>
+                                      </Tooltip>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        </Box>
+
+                        {/* SECTION 2: SITE GEO-TAGGED PHOTOS GALLERY */}
+                        <Box>
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                            <FmdGoodRounded sx={{ color: "#ef4444", fontSize: 20 }} />
+                            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#0f2f57" }}>
+                              Site Geo-Tagged Photographs ({allPhotos.length})
+                            </Typography>
+                          </Stack>
+
+                          {allPhotos.length === 0 ? (
+                            <Box
+                              sx={{
+                                p: 3,
+                                textAlign: "center",
+                                borderRadius: 2,
+                                bgcolor: "#f8fafc",
+                                border: "1px dashed #cbd5e1",
+                              }}
+                            >
+                              <Typography variant="body2" sx={{ color: "#94a3b8" }}>
+                                No geo-tagged site images uploaded for this worksheet.
+                              </Typography>
+                            </Box>
+                          ) : (
+                            <Grid container spacing={2}>
+                              {allPhotos.map((photo, pIdx) => {
+                                const fullUrl = resolvePhotoUrl(photo.url);
+                                const lat = photo.latitude;
+                                const lng = photo.longitude;
+                                const hasCoords = lat && lng;
+                                return (
+                                  <Grid item xs={12} sm={6} md={4} key={pIdx}>
+                                    <Card
+                                      elevation={0}
+                                      sx={{
+                                        borderRadius: 2.5,
+                                        border: "1px solid #e2e8f0",
+                                        bgcolor: "#ffffff",
+                                        overflow: "hidden",
+                                        transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                                        "&:hover": {
+                                          transform: "translateY(-3px)",
+                                          boxShadow: "0 8px 24px rgba(15, 23, 42, 0.1)",
+                                        },
+                                      }}
+                                    >
+                                      <Box
+                                        sx={{
+                                          position: "relative",
+                                          height: 180,
+                                          bgcolor: "#0f172a",
+                                          cursor: "pointer",
+                                        }}
+                                        onClick={() => setPreviewPhoto(photo)}
+                                      >
+                                        <Box
+                                          component="img"
+                                          src={fullUrl}
+                                          alt={photo.projectName}
+                                          sx={{
+                                            width: "100%",
+                                            height: "100%",
+                                            objectFit: "cover",
+                                          }}
+                                          onError={(e) => {
+                                            e.target.style.display = "none";
+                                          }}
+                                        />
+                                        <Chip
+                                          size="small"
+                                          icon={<FmdGoodRounded sx={{ fontSize: "14px !important", color: "#fff" }} />}
+                                          label={hasCoords ? `${Number(lat).toFixed(4)}°, ${Number(lng).toFixed(4)}°` : "Site Photo"}
+                                          sx={{
+                                            position: "absolute",
+                                            bottom: 10,
+                                            left: 10,
+                                            bgcolor: "rgba(15, 23, 42, 0.75)",
+                                            backdropFilter: "blur(4px)",
+                                            color: "#ffffff",
+                                            fontSize: "0.72rem",
+                                            fontWeight: 700,
+                                          }}
+                                        />
+                                      </Box>
+
+                                      <Box sx={{ p: 1.8 }}>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "#0f2f57", lineHeight: 1.2 }}>
+                                          {photo.projectName}
+                                        </Typography>
+                                        <Typography variant="caption" sx={{ color: "#64748b", display: "block", mt: 0.4 }}>
+                                          Incharge(s): <strong style={{ color: "#1d4ed8" }}>{photo.incharge}</strong>
+                                        </Typography>
+                                        {photo.address && (
+                                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.3 }}>
+                                            <FmdGoodRounded sx={{ fontSize: 13, color: "#64748b", flexShrink: 0 }} />
+                                            <Typography
+                                              variant="caption"
+                                              noWrap
+                                              sx={{
+                                                color: "#475569",
+                                                display: "block",
+                                              }}
+                                            >
+                                              {photo.address}
+                                            </Typography>
+                                          </Stack>
+                                        )}
+                                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1.2 }}>
+                                          <Stack direction="row" spacing={0.5} alignItems="center">
+                                            <AccessTimeRounded sx={{ fontSize: 13, color: "#0284c7" }} />
+                                            <Typography variant="caption" sx={{ color: "#0284c7", fontSize: "0.72rem", fontWeight: 700 }}>
+                                              {formatDate(photo.capturedAt)} {formatTime(photo.capturedAt)}
+                                            </Typography>
+                                          </Stack>
+                                          <Button
+                                            size="small"
+                                            variant="text"
+                                            startIcon={<OpenInNewRounded sx={{ fontSize: "14px !important" }} />}
+                                            onClick={() => setPreviewPhoto(photo)}
+                                            sx={{ fontSize: "0.75rem", p: 0.3, textTransform: "none", fontWeight: 700 }}
+                                          >
+                                            Inspect
+                                          </Button>
+                                        </Stack>
+                                      </Box>
+                                    </Card>
+                                  </Grid>
+                                );
+                              })}
+                            </Grid>
+                          )}
+                        </Box>
+                      </CardContent>
+                    </Collapse>
+                  </Card>
+                );
+              })}
+            </Stack>
+          )}
+        </Box>
       )}
 
       {/* ─── PHOTO PREVIEW DIALOG ─── */}
