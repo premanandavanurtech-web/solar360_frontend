@@ -16,7 +16,7 @@ import {
   ArrowBack, OpenInNew, ReceiptLong,
   Wifi, WifiOff, SignalCellularAlt, SignalCellularOff, Lan, LocationOff,
   Speed, ZoomIn, CompareArrows, Visibility, ImageNotSupported,
-  PlayArrow, Pause, SkipPrevious, SkipNext,
+  PlayArrow, Pause, SkipPrevious, SkipNext, Edit,
 } from "@mui/icons-material";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
@@ -1208,22 +1208,78 @@ const TripOdometerPointBox = ({
           )}
         </Box>
 
-        {/* Bold KM */}
-        <Typography
-          sx={{
-            fontWeight: 800,
-            fontSize: "1.02rem",
-            color: textTitle,
-            fontFamily: "monospace",
-            letterSpacing: "-0.4px",
-            lineHeight: 1.15,
-          }}
-        >
-          {Number(km || 0).toLocaleString("en-IN")}{" "}
-          <Typography component="span" sx={{ fontSize: "0.70rem", fontWeight: 700, color: textSub }}>
-            KM
-          </Typography>
-        </Typography>
+        {/* Bold KM + Manual / AI Scanned Badge */}
+        {(() => {
+          const isStart = tagLabel && String(tagLabel).includes("START");
+          const isManual = isStart
+            ? Boolean(tripInfo?.isManualStartKm || (tripInfo?.manualStartKm !== undefined && tripInfo?.manualStartKm !== null && String(tripInfo?.manualStartKm).trim() !== ""))
+            : Boolean(tripInfo?.isManualEndKm || (tripInfo?.manualEndKm !== undefined && tripInfo?.manualEndKm !== null && String(tripInfo?.manualEndKm).trim() !== ""));
+          const aiKm = isStart ? tripInfo?.aiDetectedStartKm : tripInfo?.aiDetectedEndKm;
+
+          return (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.2 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.1 }}>
+                <Typography
+                  sx={{
+                    fontWeight: 800,
+                    fontSize: "1.05rem",
+                    color: textTitle,
+                    fontFamily: "monospace",
+                    letterSpacing: "-0.4px",
+                    lineHeight: 1.15,
+                  }}
+                >
+                  {Number(km || 0).toLocaleString("en-IN")}{" "}
+                  <Typography component="span" sx={{ fontSize: "0.70rem", fontWeight: 700, color: textSub }}>
+                    KM
+                  </Typography>
+                </Typography>
+
+                {isManual ? (
+                  <Chip
+                    icon={<Edit sx={{ fontSize: "10px !important", color: isDark ? "#fbbf24" : "#92400e" }} />}
+                    label="Manual Entry"
+                    size="small"
+                    sx={{
+                      height: 19,
+                      bgcolor: isDark ? "rgba(245, 158, 11, 0.22)" : "#fef3c7",
+                      color: isDark ? "#fbbf24" : "#92400e",
+                      fontWeight: 800,
+                      fontSize: "0.62rem",
+                      borderRadius: "6px",
+                      border: "1px solid rgba(245, 158, 11, 0.5)",
+                      px: 0.2,
+                      "& .MuiChip-icon": { ml: "4px", mr: "-4px" },
+                    }}
+                  />
+                ) : (
+                  <Chip
+                    icon={<CheckCircle sx={{ fontSize: "10px !important", color: isDark ? "#34d399" : "#166534" }} />}
+                    label="AI Scanned"
+                    size="small"
+                    sx={{
+                      height: 19,
+                      bgcolor: isDark ? "rgba(34, 197, 94, 0.15)" : "#dcfce7",
+                      color: isDark ? "#34d399" : "#166534",
+                      fontWeight: 800,
+                      fontSize: "0.62rem",
+                      borderRadius: "6px",
+                      border: "1px solid rgba(34, 197, 94, 0.35)",
+                      px: 0.2,
+                      "& .MuiChip-icon": { ml: "4px", mr: "-4px" },
+                    }}
+                  />
+                )}
+              </Box>
+
+              {isManual && aiKm && String(aiKm) !== String(km) && (
+                <Typography sx={{ fontSize: "0.63rem", color: isDark ? "#fbbf24" : "#b45309", fontWeight: 700 }}>
+                  AI detected: {Number(aiKm).toLocaleString("en-IN")} KM
+                </Typography>
+              )}
+            </Box>
+          );
+        })()}
 
         {/* Location Pin + Address */}
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.4, mt: 0.15 }}>
@@ -1309,7 +1365,31 @@ const TripItemCardExact = ({ trip, index, onOpenPreview, onShowOnMap }) => {
         </Box>
 
         {/* Right: Status badge + Show on Map button */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+          {(trip.isManualStartKm || trip.isManualEndKm || trip.manualStartKm || trip.manualEndKm) && (
+            <Chip
+              icon={<Edit sx={{ fontSize: "11px !important", color: isDark ? "#fbbf24" : "#92400e" }} />}
+              label={
+                (trip.isManualStartKm || trip.manualStartKm) && (trip.isManualEndKm || trip.manualEndKm)
+                  ? "Manual Start & End"
+                  : (trip.isManualStartKm || trip.manualStartKm)
+                  ? "Manual Start KM"
+                  : "Manual End KM"
+              }
+              size="small"
+              sx={{
+                height: 22,
+                bgcolor: isDark ? "rgba(245, 158, 11, 0.22)" : "#fef3c7",
+                color: isDark ? "#fbbf24" : "#92400e",
+                fontWeight: 800,
+                fontSize: "0.68rem",
+                borderRadius: "6px",
+                border: "1px solid rgba(245, 158, 11, 0.45)",
+                "& .MuiChip-icon": { ml: "4px", mr: "-4px" },
+              }}
+            />
+          )}
+
           <Chip
             icon={isOngoing ? <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#2563eb", animation: "livePulse 1.5s infinite", "@keyframes livePulse": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } } }} /> : undefined}
             label={isCompleted ? `Completed (+${diffKm} KM)` : isCancelled ? "Cancelled / Inactive" : `Ongoing Trip (Running)`}
@@ -1531,6 +1611,24 @@ const DailyTripsBreakdownCard = ({ trips }) => {
                 <Typography sx={{ fontWeight: 800, fontSize: "0.78rem", color: textTitle }}>
                   {trip.title || trip.workType || "Other"}
                 </Typography>
+                {(trip.isManualStartKm || trip.isManualEndKm || trip.manualStartKm || trip.manualEndKm) && (
+                  <Chip
+                    icon={<Edit sx={{ fontSize: "9px !important", color: isDark ? "#fbbf24" : "#92400e" }} />}
+                    label="Manual"
+                    size="small"
+                    sx={{
+                      height: 18,
+                      bgcolor: isDark ? "rgba(245, 158, 11, 0.22)" : "#fef3c7",
+                      color: isDark ? "#fbbf24" : "#92400e",
+                      fontWeight: 800,
+                      fontSize: "0.60rem",
+                      borderRadius: "5px",
+                      border: "1px solid rgba(245, 158, 11, 0.45)",
+                      px: 0.2,
+                      "& .MuiChip-icon": { ml: "3px", mr: "-4px" },
+                    }}
+                  />
+                )}
                 <Typography sx={{ fontSize: "0.70rem", color: textSub, fontWeight: 500 }}>
                   ({startNum.toLocaleString("en-IN")} KM → {endNum.toLocaleString("en-IN")} KM)
                 </Typography>
@@ -1624,24 +1722,77 @@ const OdometerLightboxModal = ({ previewData, onClose, memberName }) => {
           cursor: "default",
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.3 }}>
-          <Chip
-            label={previewData.title || "Odometer Photo"}
-            size="small"
-            sx={{
-              bgcolor: alpha(primaryColor, 0.25),
-              color: "#60a5fa",
-              fontWeight: 800,
-              fontSize: "0.72rem",
-              height: 22,
-            }}
-          />
-          {previewData.km !== undefined && previewData.km !== null && (
-            <Typography sx={{ fontWeight: 800, fontSize: "0.95rem", color: "#fff", fontFamily: "monospace" }}>
-              {Number(previewData.km).toLocaleString("en-IN")} KM
-            </Typography>
-          )}
-        </Box>
+        {(() => {
+          const isStart = previewData.title && String(previewData.title).includes("START");
+          const tripInfo = previewData.tripInfo;
+          const isManual = isStart
+            ? Boolean(tripInfo?.isManualStartKm || (tripInfo?.manualStartKm !== undefined && tripInfo?.manualStartKm !== null && String(tripInfo?.manualStartKm).trim() !== ""))
+            : Boolean(tripInfo?.isManualEndKm || (tripInfo?.manualEndKm !== undefined && tripInfo?.manualEndKm !== null && String(tripInfo?.manualEndKm).trim() !== ""));
+          const aiKm = isStart ? tripInfo?.aiDetectedStartKm : tripInfo?.aiDetectedEndKm;
+
+          return (
+            <>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.3, flexWrap: "wrap" }}>
+                <Chip
+                  label={previewData.title || "Odometer Photo"}
+                  size="small"
+                  sx={{
+                    bgcolor: alpha(primaryColor, 0.25),
+                    color: "#60a5fa",
+                    fontWeight: 800,
+                    fontSize: "0.72rem",
+                    height: 22,
+                  }}
+                />
+                {previewData.km !== undefined && previewData.km !== null && (
+                  <Typography sx={{ fontWeight: 800, fontSize: "0.95rem", color: "#fff", fontFamily: "monospace" }}>
+                    {Number(previewData.km).toLocaleString("en-IN")} KM
+                  </Typography>
+                )}
+
+                {isManual ? (
+                  <Chip
+                    icon={<Edit sx={{ fontSize: "11px !important", color: "#fbbf24" }} />}
+                    label="Manual Entry"
+                    size="small"
+                    sx={{
+                      height: 22,
+                      bgcolor: "rgba(245, 158, 11, 0.25)",
+                      color: "#fbbf24",
+                      fontWeight: 800,
+                      fontSize: "0.68rem",
+                      borderRadius: "6px",
+                      border: "1px solid rgba(245, 158, 11, 0.5)",
+                      "& .MuiChip-icon": { ml: "4px", mr: "-4px" },
+                    }}
+                  />
+                ) : (
+                  <Chip
+                    icon={<CheckCircle sx={{ fontSize: "11px !important", color: "#34d399" }} />}
+                    label="AI Scanned"
+                    size="small"
+                    sx={{
+                      height: 22,
+                      bgcolor: "rgba(34, 197, 94, 0.2)",
+                      color: "#34d399",
+                      fontWeight: 800,
+                      fontSize: "0.68rem",
+                      borderRadius: "6px",
+                      border: "1px solid rgba(34, 197, 94, 0.4)",
+                      "& .MuiChip-icon": { ml: "4px", mr: "-4px" },
+                    }}
+                  />
+                )}
+              </Box>
+
+              {isManual && aiKm && String(aiKm) !== String(previewData.km) && (
+                <Typography sx={{ fontSize: "0.72rem", color: "#fbbf24", fontWeight: 700, mb: 0.3 }}>
+                  ⚠️ User manually wrote reading (AI camera detected: {Number(aiKm).toLocaleString("en-IN")} KM)
+                </Typography>
+              )}
+            </>
+          );
+        })()}
         <Typography sx={{ fontSize: "0.75rem", color: "#cbd5e1" }}>
           User: <strong>{memberName}</strong> · {previewData.time ? new Date(previewData.time).toLocaleString("en-IN") : ""}
         </Typography>
