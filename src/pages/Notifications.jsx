@@ -34,7 +34,12 @@ import {
   Info,
   Logout,
 } from "@mui/icons-material";
+import { useAuth } from "../contexts/AuthContext";
 import { API_BASE_URL } from "../utils/apiConfig";
+import {
+  filterNotificationsForUser,
+  silentlyMarkHiddenNotificationsAsRead,
+} from "../utils/notificationUtils";
 
 const PRIMARY = "#0f1f3d";
 const API = API_BASE_URL;
@@ -132,6 +137,7 @@ const getCategoryDetails = (type = "", title = "", message = "") => {
 export default function Notifications() {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
+  const { user } = useAuth();
 
   // Dynamic Theme Colors
   const pageBg = isDark ? "#050811" : "#f8f9fa";
@@ -177,8 +183,15 @@ export default function Notifications() {
       const payload = await res.json();
       const data = payload?.data || payload?.result || {};
       const list = data?.notifications || [];
+
+      // Silently mark any hidden punch-in/absent notifications as read on the backend
+      silentlyMarkHiddenNotificationsAsRead(list, user, API, token);
+
+      // Filter out admin punch-in reminders while keeping all other employee notifications
+      const visibleList = filterNotificationsForUser(list, user);
+
       setNotifications(
-        list.map((item) => {
+        visibleList.map((item) => {
           const rawDate = item.createdAt ? new Date(item.createdAt) : new Date();
           return {
             id: item._id || item.id,
@@ -201,7 +214,7 @@ export default function Notifications() {
 
   useEffect(() => {
     loadNotifications();
-  }, []);
+  }, [user]);
 
   const handleMarkAllRead = () => {
     const token = getToken();

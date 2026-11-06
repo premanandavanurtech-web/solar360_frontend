@@ -50,6 +50,10 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from "../contexts/AuthContext";
 import { toBackendAssetUrl } from "../utils/backendAssetUrl";
+import {
+  filterNotificationsForUser,
+  silentlyMarkHiddenNotificationsAsRead,
+} from "../utils/notificationUtils";
 import { API_BASE_URL } from "../utils/apiConfig";
 
 const API = API_BASE_URL;
@@ -114,7 +118,7 @@ const Topbar = ({
       const token = getToken();
       if (!token) return;
 
-      const res = await fetch(`${API}/notifications?limit=8`, {
+      const res = await fetch(`${API}/notifications?limit=30`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -126,8 +130,10 @@ const Topbar = ({
       const data = payload?.data || payload?.result || {};
       const list = data?.notifications || [];
 
+      silentlyMarkHiddenNotificationsAsRead(list, user, API, token);
+
       setNotifications(
-        list.map((item) => ({
+        filterNotificationsForUser(list, user).slice(0, 10).map((item) => ({
           id: item._id || item.id,
           title: item.title,
           message: item.message,
@@ -139,12 +145,17 @@ const Topbar = ({
     } catch (error) {
       console.error("Notification fetch failed:", error.message);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    const onUpdate = () => fetchNotifications();
+    window.addEventListener("notificationsUpdated", onUpdate);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("notificationsUpdated", onUpdate);
+    };
   }, [fetchNotifications]);
 
   const handleProfileMenu = useCallback((event) => setAnchorEl(event.currentTarget), []);
