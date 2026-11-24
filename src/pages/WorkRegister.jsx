@@ -31,6 +31,7 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useTheme,
 } from "@mui/material";
 import {
   AccessTimeRounded,
@@ -126,10 +127,14 @@ const formatTime = (value) => {
 
 const resolvePhotoUrl = (url) => {
   if (!url) return "";
-  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
-    return url;
+  let clean = String(url).trim();
+  if (clean.includes("solar-backend-6vaa.onrender.com")) {
+    clean = clean.replace(/https?:\/\/solar-backend-6vaa\.onrender\.com/i, API_ORIGIN);
   }
-  const cleanPath = url.startsWith("/") ? url : `/${url}`;
+  if (clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("data:")) {
+    return clean;
+  }
+  const cleanPath = clean.startsWith("/") ? clean : `/${clean}`;
   return `${API_ORIGIN}${cleanPath}`;
 };
 
@@ -644,9 +649,141 @@ const downloadWorkRegisterPdf = async (row) => {
   doc.save(`daily-worksheet-${safeSubmitter}-${workDate.replace(/\//g, "-")}.pdf`);
 };
 
+// ─── GROUP BY DATE HELPER ───────────────────────────────────────────────────
+
+const groupWorksheetsByDate = (worksheets = []) => {
+  const map = new Map();
+
+  worksheets.forEach((w) => {
+    const rawDate = w.workDate || w.createdAt;
+    const formatted = formatDate(rawDate);
+    const dateKey = formatted && formatted !== "-" ? formatted : "Unknown Date";
+
+    if (!map.has(dateKey)) {
+      map.set(dateKey, {
+        _id: `group-${dateKey.replace(/[^a-zA-Z0-9]/g, "-")}`,
+        dateKey,
+        workDate: rawDate,
+        formattedDate: dateKey,
+        worksheets: [],
+        projects: [],
+        submitters: [],
+        supervisors: new Set(),
+        incharges: new Set(),
+        hasMissedProject: false,
+        timestamps: [],
+        isDateGroup: true,
+      });
+    }
+
+    const group = map.get(dateKey);
+    group.worksheets.push(w);
+
+    if (Boolean(w.hasMissedProject || w.missedForDate || w.projects?.some((p) => p.isMissedProject || p.missedForDate))) {
+      group.hasMissedProject = true;
+    }
+
+    const subName = personName(w.user);
+    const isSup = isSupervisorSubmitter(w.user);
+    if (subName && subName !== "-" && !group.submitters.some((s) => s.name === subName)) {
+      group.submitters.push({
+        name: subName,
+        role: isSup ? "Supervisor" : "Incharge",
+        isSup,
+      });
+    }
+
+    const timeStr = getWorksheetTimestamp(w);
+    const rawTime = new Date(w.submittedAt || w.createdAt || rawDate).getTime();
+    if (timeStr && timeStr !== "-") {
+      group.timestamps.push({
+        timeStr,
+        rawTime: !Number.isNaN(rawTime) ? rawTime : 0,
+      });
+    }
+
+    (w.projects || []).forEach((p) => {
+      group.projects.push({
+        ...p,
+        parentWorksheet: w,
+      });
+
+      const sup = personName(p.supervisor);
+      if (sup && sup !== "-") group.supervisors.add(sup);
+
+      if (Array.isArray(p.incharges)) {
+        p.incharges.forEach((inc) => {
+          const incName = personName(inc);
+          if (incName && incName !== "-") group.incharges.add(incName);
+        });
+      }
+      if (p.incharge) {
+        const incName = personName(p.incharge);
+        if (incName && incName !== "-") group.incharges.add(incName);
+      }
+    });
+  });
+
+  const list = Array.from(map.values());
+
+  list.sort((a, b) => {
+    const parseDateToMs = (dStr) => {
+      const match = String(dStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (match) {
+        return new Date(`${match[3]}-${match[2]}-${match[1]}`).getTime();
+      }
+      const t = new Date(dStr).getTime();
+      return Number.isNaN(t) ? 0 : t;
+    };
+    return parseDateToMs(b.formattedDate) - parseDateToMs(a.formattedDate);
+  });
+
+  list.forEach((g) => {
+    g.projects.sort((p1, p2) => {
+      const t1 = new Date(p1.capturedAt || p1.createdAt || p1.parentWorksheet?.createdAt || g.workDate).getTime();
+      const t2 = new Date(p2.capturedAt || p2.createdAt || p2.parentWorksheet?.createdAt || g.workDate).getTime();
+      return (Number.isNaN(t2) ? 0 : t2) - (Number.isNaN(t1) ? 0 : t1);
+    });
+
+    g.supervisorNames = Array.from(g.supervisors).join(", ") || "-";
+    g.inchargeNames = Array.from(g.incharges).join(", ") || "-";
+
+    if (g.timestamps.length > 1) {
+      g.timestamps.sort((t1, t2) => t1.rawTime - t2.rawTime);
+      const earliest = g.timestamps[0].timeStr;
+      const latest = g.timestamps[g.timestamps.length - 1].timeStr;
+      g.submissionTime = earliest === latest ? earliest : `${earliest} – ${latest}`;
+    } else if (g.timestamps.length === 1) {
+      g.submissionTime = g.timestamps[0].timeStr;
+    } else {
+      g.submissionTime = "-";
+    }
+
+    if (g.submitters.length === 1) {
+      g.submittedBy = g.submitters[0].name;
+      g.submitterRoleLabel = g.submitters[0].role;
+      g.isSup = g.submitters[0].isSup;
+    } else if (g.submitters.length > 1) {
+      g.submittedBy = g.submitters.map((s) => s.name).join(", ");
+      g.submitterRoleLabel = `${g.submitters.length} Submitters`;
+      g.isSup = g.submitters.some((s) => s.isSup);
+    } else {
+      g.submittedBy = "-";
+      g.submitterRoleLabel = "Submitter";
+      g.isSup = false;
+    }
+
+    g.user = g.worksheets[0]?.user || { name: g.submittedBy };
+  });
+
+  return list;
+};
+
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 export default function WorkRegister() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   const { fetchAPI } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -662,6 +799,7 @@ export default function WorkRegister() {
   const [selectedDate, setSelectedDate] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
+  const [groupByDate, setGroupByDate] = useState(true); // Default: Group into 1 box per date
   const [previewPhoto, setPreviewPhoto] = useState(null);
 
   const load = useCallback(async () => {
@@ -1028,6 +1166,12 @@ export default function WorkRegister() {
     return list;
   }, [selectedUser, selectedDate, selectedProjectType, searchTerm]);
 
+  // Combined / Grouped by Date view (1 Box per Date) for Selected User
+  const userDisplayWorksheets = useMemo(() => {
+    if (!groupByDate) return userFilteredWorksheets;
+    return groupWorksheetsByDate(userFilteredWorksheets);
+  }, [userFilteredWorksheets, groupByDate]);
+
   // Filtered rows for "All Worksheets" view
   const filteredRows = useMemo(() => {
     let list = rows;
@@ -1097,8 +1241,14 @@ export default function WorkRegister() {
     searchTerm,
   ]);
 
+  // Combined / Grouped by Date view (1 Box per Date) for All Worksheets view
+  const allDisplayWorksheets = useMemo(() => {
+    if (!groupByDate) return filteredRows;
+    return groupWorksheetsByDate(filteredRows);
+  }, [filteredRows, groupByDate]);
+
   return (
-    <Box sx={{ p: { xs: 2, md: 3.5 }, bgcolor: "#f8fafc", minHeight: "100vh" }}>
+    <Box sx={{ p: { xs: 2, md: 3.5 }, bgcolor: isDark ? "#060a12" : "#f8fafc", minHeight: "100vh" }}>
       {/* ─── PAGE HEADER ─── */}
       <Box sx={{ mb: 3 }}>
         <Stack
@@ -1120,10 +1270,10 @@ export default function WorkRegister() {
                 <SolarPowerRounded sx={{ color: "#fff", fontSize: 26 }} />
               </Avatar>
               <Box>
-                <Typography variant="h5" sx={{ fontWeight: 800, color: "#0f2f57", letterSpacing: -0.5 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, color: isDark ? "#f8fafc" : "#0f2f57", letterSpacing: -0.5 }}>
                   Daily Worksheet & Site Verification
                 </Typography>
-                <Typography variant="body2" sx={{ color: "#64748b" }}>
+                <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "#64748b" }}>
                   Daily field records, site geo-tagged photographs, supervisors & incharges
                 </Typography>
               </Box>
@@ -1139,10 +1289,10 @@ export default function WorkRegister() {
                 borderRadius: 2,
                 textTransform: "none",
                 fontWeight: 600,
-                borderColor: "#cbd5e1",
-                color: "#334155",
-                bgcolor: "#fff",
-                "&:hover": { borderColor: "#94a3b8", bgcolor: "#f1f5f9" },
+                borderColor: isDark ? "rgba(255,255,255,0.15)" : "#cbd5e1",
+                color: isDark ? "#f8fafc" : "#334155",
+                bgcolor: isDark ? "#0e1424" : "#fff",
+                "&:hover": { borderColor: isDark ? "rgba(255,255,255,0.25)" : "#94a3b8", bgcolor: isDark ? "#131b30" : "#f1f5f9" },
               }}
             >
               Refresh
@@ -1159,21 +1309,21 @@ export default function WorkRegister() {
             sx={{
               p: 2.2,
               borderRadius: 3,
-              border: "1px solid #e2e8f0",
-              bgcolor: "#ffffff",
-              boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+              bgcolor: isDark ? "#0e1424" : "#ffffff",
+              boxShadow: isDark ? "0 4px 20px rgba(0, 0, 0, 0.3)" : "0 2px 8px rgba(15, 23, 42, 0.04)",
             }}
           >
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Box>
-                <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
+                <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
                   Total Worksheets
                 </Typography>
-                <Typography variant="h4" sx={{ fontWeight: 800, color: "#0f2f57", mt: 0.5 }}>
+                <Typography variant="h4" sx={{ fontWeight: 800, color: isDark ? "#60a5fa" : "#0f2f57", mt: 0.5 }}>
                   {stats.worksheets}
                 </Typography>
               </Box>
-              <Avatar sx={{ bgcolor: "#eff6ff", color: "#004792", width: 48, height: 48 }}>
+              <Avatar sx={{ bgcolor: isDark ? "rgba(37,99,235,0.2)" : "#eff6ff", color: isDark ? "#60a5fa" : "#004792", width: 48, height: 48 }}>
                 <CalendarTodayRounded />
               </Avatar>
             </Stack>
@@ -1185,21 +1335,21 @@ export default function WorkRegister() {
             sx={{
               p: 2.2,
               borderRadius: 3,
-              border: "1px solid #e2e8f0",
-              bgcolor: "#ffffff",
-              boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+              bgcolor: isDark ? "#0e1424" : "#ffffff",
+              boxShadow: isDark ? "0 4px 20px rgba(0, 0, 0, 0.3)" : "0 2px 8px rgba(15, 23, 42, 0.04)",
             }}
           >
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Box>
-                <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
+                <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
                   Projects Completed
                 </Typography>
                 <Typography variant="h4" sx={{ fontWeight: 800, color: "#0284c7", mt: 0.5 }}>
                   {stats.projects}
                 </Typography>
               </Box>
-              <Avatar sx={{ bgcolor: "#f0f9ff", color: "#0284c7", width: 48, height: 48 }}>
+              <Avatar sx={{ bgcolor: isDark ? "rgba(2,132,199,0.2)" : "#f0f9ff", color: "#0284c7", width: 48, height: 48 }}>
                 <SpeedRounded />
               </Avatar>
             </Stack>
@@ -1211,21 +1361,21 @@ export default function WorkRegister() {
             sx={{
               p: 2.2,
               borderRadius: 3,
-              border: "1px solid #e2e8f0",
-              bgcolor: "#ffffff",
-              boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+              bgcolor: isDark ? "#0e1424" : "#ffffff",
+              boxShadow: isDark ? "0 4px 20px rgba(0, 0, 0, 0.3)" : "0 2px 8px rgba(15, 23, 42, 0.04)",
             }}
           >
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Box>
-                <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
+                <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
                   Geo-Tagged Photos
                 </Typography>
                 <Typography variant="h4" sx={{ fontWeight: 800, color: "#059669", mt: 0.5 }}>
                   {stats.photos}
                 </Typography>
               </Box>
-              <Avatar sx={{ bgcolor: "#ecfdf5", color: "#059669", width: 48, height: 48 }}>
+              <Avatar sx={{ bgcolor: isDark ? "rgba(5,150,105,0.2)" : "#ecfdf5", color: "#059669", width: 48, height: 48 }}>
                 <ImageRounded />
               </Avatar>
             </Stack>
@@ -1240,9 +1390,9 @@ export default function WorkRegister() {
           p: 1.2,
           mb: 3,
           borderRadius: 3,
-          border: "1px solid #e2e8f0",
-          bgcolor: "#f8fafc",
-          boxShadow: "0 2px 8px rgba(15, 23, 42, 0.03)",
+          border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+          bgcolor: isDark ? "#0e1424" : "#f8fafc",
+          boxShadow: isDark ? "0 4px 16px rgba(0, 0, 0, 0.2)" : "0 2px 8px rgba(15, 23, 42, 0.03)",
         }}
       >
         <Stack
@@ -1263,11 +1413,11 @@ export default function WorkRegister() {
               px: 2.4,
               py: 0.9,
               bgcolor: roleTab === "INCHARGE" ? "#16a34a" : "transparent",
-              color: roleTab === "INCHARGE" ? "#ffffff" : "#475569",
+              color: roleTab === "INCHARGE" ? "#ffffff" : (isDark ? "#94a3b8" : "#475569"),
               boxShadow: roleTab === "INCHARGE" ? "0 4px 14px rgba(22, 163, 74, 0.3)" : "none",
               "&:hover": {
-                bgcolor: roleTab === "INCHARGE" ? "#15803d" : "#e2e8f0",
-                color: roleTab === "INCHARGE" ? "#ffffff" : "#0f172a",
+                bgcolor: roleTab === "INCHARGE" ? "#15803d" : (isDark ? "rgba(255,255,255,0.06)" : "#e2e8f0"),
+                color: roleTab === "INCHARGE" ? "#ffffff" : (isDark ? "#f8fafc" : "#0f172a"),
               },
             }}
           >
@@ -1286,11 +1436,11 @@ export default function WorkRegister() {
               px: 2.4,
               py: 0.9,
               bgcolor: roleTab === "SUPERVISOR" ? "#ca8a04" : "transparent",
-              color: roleTab === "SUPERVISOR" ? "#ffffff" : "#475569",
+              color: roleTab === "SUPERVISOR" ? "#ffffff" : (isDark ? "#94a3b8" : "#475569"),
               boxShadow: roleTab === "SUPERVISOR" ? "0 4px 14px rgba(202, 138, 4, 0.3)" : "none",
               "&:hover": {
-                bgcolor: roleTab === "SUPERVISOR" ? "#a16207" : "#e2e8f0",
-                color: roleTab === "SUPERVISOR" ? "#ffffff" : "#0f172a",
+                bgcolor: roleTab === "SUPERVISOR" ? "#a16207" : (isDark ? "rgba(255,255,255,0.06)" : "#e2e8f0"),
+                color: roleTab === "SUPERVISOR" ? "#ffffff" : (isDark ? "#f8fafc" : "#0f172a"),
               },
             }}
           >
@@ -1309,11 +1459,11 @@ export default function WorkRegister() {
               px: 2.4,
               py: 0.9,
               bgcolor: roleTab === "MANAGER" ? "#4f46e5" : "transparent",
-              color: roleTab === "MANAGER" ? "#ffffff" : "#475569",
+              color: roleTab === "MANAGER" ? "#ffffff" : (isDark ? "#94a3b8" : "#475569"),
               boxShadow: roleTab === "MANAGER" ? "0 4px 14px rgba(79, 70, 229, 0.3)" : "none",
               "&:hover": {
-                bgcolor: roleTab === "MANAGER" ? "#4338ca" : "#e2e8f0",
-                color: roleTab === "MANAGER" ? "#ffffff" : "#0f172a",
+                bgcolor: roleTab === "MANAGER" ? "#4338ca" : (isDark ? "rgba(255,255,255,0.06)" : "#e2e8f0"),
+                color: roleTab === "MANAGER" ? "#ffffff" : (isDark ? "#f8fafc" : "#0f172a"),
               },
             }}
           >
@@ -1333,12 +1483,12 @@ export default function WorkRegister() {
               fontWeight: 700,
               px: 2.4,
               py: 0.9,
-              bgcolor: roleTab === "ALL" ? "#0f2f57" : "transparent",
-              color: roleTab === "ALL" ? "#ffffff" : "#475569",
-              boxShadow: roleTab === "ALL" ? "0 4px 14px rgba(15, 47, 87, 0.3)" : "none",
+              bgcolor: roleTab === "ALL" ? (isDark ? "#2563eb" : "#0f2f57") : "transparent",
+              color: roleTab === "ALL" ? "#ffffff" : (isDark ? "#94a3b8" : "#475569"),
+              boxShadow: roleTab === "ALL" ? "0 4px 14px rgba(37, 99, 235, 0.3)" : "none",
               "&:hover": {
-                bgcolor: roleTab === "ALL" ? "#0a1f3a" : "#e2e8f0",
-                color: roleTab === "ALL" ? "#ffffff" : "#0f172a",
+                bgcolor: roleTab === "ALL" ? (isDark ? "#1d4ed8" : "#0a1f3a") : (isDark ? "rgba(255,255,255,0.06)" : "#e2e8f0"),
+                color: roleTab === "ALL" ? "#ffffff" : (isDark ? "#f8fafc" : "#0f172a"),
               },
             }}
           >
@@ -1363,9 +1513,9 @@ export default function WorkRegister() {
               p: 2,
               mb: 3,
               borderRadius: 3,
-              border: "1px solid #e2e8f0",
-              bgcolor: "#ffffff",
-              boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+              bgcolor: isDark ? "#0e1424" : "#ffffff",
+              boxShadow: isDark ? "0 4px 16px rgba(0, 0, 0, 0.2)" : "0 2px 8px rgba(15, 23, 42, 0.04)",
             }}
           >
             <Stack
@@ -1388,17 +1538,17 @@ export default function WorkRegister() {
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <SearchRounded sx={{ color: "#94a3b8" }} />
+                      <SearchRounded sx={{ color: isDark ? "#64748b" : "#94a3b8" }} />
                     </InputAdornment>
                   ),
-                  sx: { borderRadius: 2, bgcolor: "#f8fafc" },
+                  sx: { borderRadius: 2, bgcolor: isDark ? "#060a12" : "#f8fafc", color: isDark ? "#f8fafc" : "inherit" },
                 }}
                 sx={{ flex: 1 }}
               />
 
               <Stack direction="row" spacing={1.5} alignItems="center">
                 <FormControl size="small" sx={{ minWidth: 170 }}>
-                  <InputLabel id="user-sort-label" sx={{ fontSize: "0.85rem" }}>
+                  <InputLabel id="user-sort-label" sx={{ fontSize: "0.85rem", color: isDark ? "#94a3b8" : undefined }}>
                     Sort Members
                   </InputLabel>
                   <Select
@@ -1406,7 +1556,7 @@ export default function WorkRegister() {
                     label="Sort Members"
                     value={userSortBy}
                     onChange={(e) => setUserSortBy(e.target.value)}
-                    sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                    sx={{ borderRadius: 2, bgcolor: isDark ? "#060a12" : "#f8fafc", fontSize: "0.85rem", color: isDark ? "#f8fafc" : "inherit" }}
                   >
                     <MenuItem value="worksheets">Most Worksheets</MenuItem>
                     <MenuItem value="projects">Most Projects</MenuItem>
@@ -1434,7 +1584,7 @@ export default function WorkRegister() {
           {loading ? (
             <Box sx={{ p: 8, textAlign: "center" }}>
               <CircularProgress size={38} sx={{ color: "#004792" }} />
-              <Typography sx={{ mt: 2, color: "#64748b", fontWeight: 500 }}>
+              <Typography sx={{ mt: 2, color: isDark ? "#94a3b8" : "#64748b", fontWeight: 500 }}>
                 Loading personnel directory...
               </Typography>
             </Box>
@@ -1445,15 +1595,15 @@ export default function WorkRegister() {
                 p: 6,
                 textAlign: "center",
                 borderRadius: 3,
-                border: "1px dashed #cbd5e1",
-                bgcolor: "#ffffff",
+                border: isDark ? "1px dashed rgba(255,255,255,0.15)" : "1px dashed #cbd5e1",
+                bgcolor: isDark ? "#0e1424" : "#ffffff",
               }}
             >
-              <GroupRounded sx={{ fontSize: 50, color: "#94a3b8", mb: 1 }} />
-              <Typography variant="h6" sx={{ fontWeight: 700, color: "#334155" }}>
+              <GroupRounded sx={{ fontSize: 50, color: isDark ? "#475569" : "#94a3b8", mb: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 700, color: isDark ? "#f8fafc" : "#334155" }}>
                 No {roleTab === "INCHARGE" ? "Incharges" : roleTab === "SUPERVISOR" ? "Supervisors" : "Managers"} found
               </Typography>
-              <Typography variant="body2" sx={{ color: "#64748b", mt: 0.5 }}>
+              <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "#64748b", mt: 0.5 }}>
                 {userSearchTerm
                   ? "No personnel match your search term."
                   : `No ${roleTab.toLowerCase()} records have been registered in worksheets yet.`}
@@ -1468,11 +1618,11 @@ export default function WorkRegister() {
                         main: "#16a34a",
                         dark: "#15803d",
                         btnHover: "#15803d",
-                        bg: "#f0fdf4",
-                        border: "#bbf7d0",
+                        bg: isDark ? "rgba(22,163,74,0.18)" : "#f0fdf4",
+                        border: isDark ? "rgba(22,163,74,0.3)" : "#bbf7d0",
                         borderHover: "#86efac",
-                        text: "#166534",
-                        timeColor: "#15803d",
+                        text: isDark ? "#4ade80" : "#166534",
+                        timeColor: isDark ? "#4ade80" : "#15803d",
                         gradient: "linear-gradient(135deg, #22c55e 0%, #15803d 100%)",
                         avatarShadow: "rgba(34, 197, 94, 0.35)",
                         hoverShadow: "rgba(22, 163, 74, 0.15)",
@@ -1483,11 +1633,11 @@ export default function WorkRegister() {
                         main: "#ca8a04",
                         dark: "#a16207",
                         btnHover: "#a16207",
-                        bg: "#fefce8",
-                        border: "#fef08a",
+                        bg: isDark ? "rgba(202,138,4,0.18)" : "#fefce8",
+                        border: isDark ? "rgba(202,138,4,0.3)" : "#fef08a",
                         borderHover: "#fde047",
-                        text: "#854d0e",
-                        timeColor: "#b45309",
+                        text: isDark ? "#facc15" : "#854d0e",
+                        timeColor: isDark ? "#facc15" : "#b45309",
                         gradient: "linear-gradient(135deg, #f59e0b 0%, #b45309 100%)",
                         avatarShadow: "rgba(245, 158, 11, 0.35)",
                         hoverShadow: "rgba(202, 138, 4, 0.15)",
@@ -1497,11 +1647,11 @@ export default function WorkRegister() {
                         main: "#4f46e5",
                         dark: "#4338ca",
                         btnHover: "#4338ca",
-                        bg: "#eef2ff",
-                        border: "#c7d2fe",
+                        bg: isDark ? "rgba(79,70,229,0.18)" : "#eef2ff",
+                        border: isDark ? "rgba(79,70,229,0.3)" : "#c7d2fe",
                         borderHover: "#a5b4fc",
-                        text: "#4338ca",
-                        timeColor: "#4338ca",
+                        text: isDark ? "#818cf8" : "#4338ca",
+                        timeColor: isDark ? "#818cf8" : "#4338ca",
                         gradient: "linear-gradient(135deg, #6366f1 0%, #4338ca 100%)",
                         avatarShadow: "rgba(99, 102, 241, 0.35)",
                         hoverShadow: "rgba(79, 70, 229, 0.15)",
@@ -1530,16 +1680,18 @@ export default function WorkRegister() {
                       }}
                       sx={{
                         borderRadius: 3.5,
-                        border: "1px solid #e2e8f0",
-                        bgcolor: "#ffffff",
+                        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+                        bgcolor: isDark ? "#0e1424" : "#ffffff",
                         cursor: "pointer",
                         transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
                         position: "relative",
                         overflow: "hidden",
-                        boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+                        boxShadow: isDark ? "0 4px 16px rgba(0, 0, 0, 0.25)" : "0 2px 8px rgba(15, 23, 42, 0.04)",
                         "&:hover": {
                           transform: "translateY(-4px)",
-                          boxShadow: `0 16px 32px -8px ${roleBadgeColor.hoverShadow}, 0 4px 12px rgba(15, 23, 42, 0.05)`,
+                          boxShadow: isDark
+                            ? "0 16px 32px -8px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.4)"
+                            : `0 16px 32px -8px ${roleBadgeColor.hoverShadow}, 0 4px 12px rgba(15, 23, 42, 0.05)`,
                           borderColor: roleBadgeColor.borderHover,
                           "& .view-btn": {
                             bgcolor: roleBadgeColor.btnHover,
@@ -1574,7 +1726,7 @@ export default function WorkRegister() {
                               fontSize: "1.05rem",
                               letterSpacing: "0.5px",
                               boxShadow: `0 6px 16px ${roleBadgeColor.avatarShadow}`,
-                              border: "2px solid #ffffff",
+                              border: isDark ? "2px solid #1e293b" : "2px solid #ffffff",
                               transition: "transform 0.25s ease",
                               flexShrink: 0,
                             }}
@@ -1589,7 +1741,7 @@ export default function WorkRegister() {
                                 noWrap
                                 sx={{
                                   fontWeight: 800,
-                                  color: "#0f2f57",
+                                  color: isDark ? "#f8fafc" : "#0f2f57",
                                   fontSize: "1.02rem",
                                   lineHeight: 1.25,
                                 }}
@@ -1617,14 +1769,14 @@ export default function WorkRegister() {
                               {user.employeeId && (
                                 <Chip
                                   size="small"
-                                  icon={<BadgeRounded sx={{ fontSize: "13px !important", color: "#475569" }} />}
+                                  icon={<BadgeRounded sx={{ fontSize: "13px !important", color: isDark ? "#94a3b8" : "#475569" }} />}
                                   label={user.employeeId}
                                   sx={{
                                     height: 20,
                                     fontWeight: 700,
                                     fontSize: "0.7rem",
-                                    bgcolor: "#f1f5f9",
-                                    color: "#334155",
+                                    bgcolor: isDark ? "rgba(255,255,255,0.06)" : "#f1f5f9",
+                                    color: isDark ? "#cbd5e1" : "#334155",
                                     borderRadius: "6px",
                                     "& .MuiChip-icon": { ml: 0.4 },
                                   }}
@@ -1633,13 +1785,13 @@ export default function WorkRegister() {
 
                               {user.phoneNumber ? (
                                 <Stack direction="row" spacing={0.4} alignItems="center">
-                                  <PhoneRounded sx={{ fontSize: 13, color: "#64748b" }} />
-                                  <Typography sx={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>
+                                  <PhoneRounded sx={{ fontSize: 13, color: isDark ? "#94a3b8" : "#64748b" }} />
+                                  <Typography sx={{ fontSize: "0.75rem", color: isDark ? "#94a3b8" : "#64748b", fontWeight: 600 }}>
                                     {user.phoneNumber}
                                   </Typography>
                                 </Stack>
                               ) : user.email ? (
-                                <Typography noWrap sx={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 500, maxWidth: 160 }}>
+                                <Typography noWrap sx={{ fontSize: "0.75rem", color: isDark ? "#94a3b8" : "#64748b", fontWeight: 500, maxWidth: 160 }}>
                                   {user.email}
                                 </Typography>
                               ) : null}
@@ -1652,24 +1804,24 @@ export default function WorkRegister() {
                           sx={{
                             display: "grid",
                             gridTemplateColumns: "repeat(3, 1fr)",
-                            bgcolor: "#f8fafc",
+                            bgcolor: isDark ? "#060a12" : "#f8fafc",
                             borderRadius: 2.5,
-                            border: "1px solid #e2e8f0",
+                            border: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid #e2e8f0",
                             p: 1.2,
                             mb: 2,
                             textAlign: "center",
                           }}
                         >
                           <Box sx={{ py: 0.5 }}>
-                            <Typography sx={{ fontSize: "0.65rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                            <Typography sx={{ fontSize: "0.65rem", fontWeight: 700, color: isDark ? "#94a3b8" : "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                               Worksheets
                             </Typography>
-                            <Typography sx={{ fontSize: "1.25rem", fontWeight: 800, color: "#0f2f57", mt: 0.3, lineHeight: 1 }}>
+                            <Typography sx={{ fontSize: "1.25rem", fontWeight: 800, color: isDark ? "#f8fafc" : "#0f2f57", mt: 0.3, lineHeight: 1 }}>
                               {user.worksheets.length}
                             </Typography>
                           </Box>
 
-                          <Box sx={{ py: 0.5, borderLeft: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0" }}>
+                          <Box sx={{ py: 0.5, borderLeft: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid #e2e8f0", borderRight: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid #e2e8f0" }}>
                             <Typography sx={{ fontSize: "0.65rem", fontWeight: 700, color: "#0284c7", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                               Projects
                             </Typography>
@@ -1693,20 +1845,20 @@ export default function WorkRegister() {
                           direction="row"
                           justifyContent="space-between"
                           alignItems="center"
-                          sx={{ pt: 1.5, borderTop: "1px solid #f1f5f9" }}
+                          sx={{ pt: 1.5, borderTop: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid #f1f5f9" }}
                         >
                           <Box sx={{ minWidth: 0, pr: 1 }}>
-                            <Typography sx={{ fontSize: "0.62rem", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", mb: 0.3 }}>
+                            <Typography sx={{ fontSize: "0.62rem", fontWeight: 700, color: isDark ? "#64748b" : "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", mb: 0.3 }}>
                               Latest Submission
                             </Typography>
                             <Stack direction="row" spacing={0.6} alignItems="center" sx={{ flexWrap: "wrap", gap: 0.4 }}>
                               <Stack direction="row" spacing={0.4} alignItems="center">
-                                <CalendarTodayRounded sx={{ fontSize: 13, color: "#475569" }} />
-                                <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: "#1e293b" }}>
+                                <CalendarTodayRounded sx={{ fontSize: 13, color: isDark ? "#94a3b8" : "#475569" }} />
+                                <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: isDark ? "#f8fafc" : "#1e293b" }}>
                                   {latestDateFormatted}
                                 </Typography>
                               </Stack>
-                              <Typography sx={{ fontSize: "0.75rem", color: "#cbd5e1" }}>•</Typography>
+                              <Typography sx={{ fontSize: "0.75rem", color: isDark ? "#475569" : "#cbd5e1" }}>•</Typography>
                               <Stack direction="row" spacing={0.4} alignItems="center">
                                 <AccessTimeRounded sx={{ fontSize: 13, color: roleBadgeColor.timeColor }} />
                                 <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: roleBadgeColor.timeColor }}>
@@ -1763,11 +1915,11 @@ export default function WorkRegister() {
                 fontWeight: 700,
                 px: 2,
                 py: 0.8,
-                color: "#0f2f57",
-                borderColor: "#cbd5e1",
-                bgcolor: "#ffffff",
+                color: isDark ? "#f8fafc" : "#0f2f57",
+                borderColor: isDark ? "rgba(255,255,255,0.15)" : "#cbd5e1",
+                bgcolor: isDark ? "#0e1424" : "#ffffff",
                 boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
-                "&:hover": { bgcolor: "#f1f5f9", borderColor: "#94a3b8" },
+                "&:hover": { bgcolor: isDark ? "#131b30" : "#f1f5f9", borderColor: isDark ? "rgba(255,255,255,0.25)" : "#94a3b8" },
               }}
             >
               Back to All {roleTab === "INCHARGE" ? "Incharges" : roleTab === "SUPERVISOR" ? "Supervisors" : "Managers"}
@@ -1779,7 +1931,7 @@ export default function WorkRegister() {
                 label={`Viewing: ${selectedUser.name}`}
                 sx={{
                   fontWeight: 800,
-                  bgcolor: "#0f2f57",
+                  bgcolor: isDark ? "#1e3a8a" : "#0f2f57",
                   color: "#ffffff",
                   fontSize: "0.78rem",
                   py: 0.4,
@@ -1787,11 +1939,15 @@ export default function WorkRegister() {
               />
               <Chip
                 size="small"
-                label={`${userFilteredWorksheets.length} ${userFilteredWorksheets.length === 1 ? "Worksheet" : "Worksheets"}`}
+                label={
+                  groupByDate
+                    ? `${userDisplayWorksheets.length} ${userDisplayWorksheets.length === 1 ? "Date Box" : "Date Boxes"} (${userFilteredWorksheets.length} Reports · ${userFilteredWorksheets.reduce((acc, w) => acc + (w.projects?.length || 0), 0)} Projects)`
+                    : `${userFilteredWorksheets.length} ${userFilteredWorksheets.length === 1 ? "Worksheet" : "Worksheets"}`
+                }
                 sx={{
                   fontWeight: 700,
-                  bgcolor: "#e0f2fe",
-                  color: "#0369a1",
+                  bgcolor: isDark ? "rgba(2,132,199,0.2)" : "#e0f2fe",
+                  color: isDark ? "#38bdf8" : "#0369a1",
                   fontSize: "0.78rem",
                 }}
               />
@@ -1805,9 +1961,9 @@ export default function WorkRegister() {
               p: { xs: 2, sm: 3 },
               mb: 3,
               borderRadius: 3,
-              border: "1px solid #e2e8f0",
-              bgcolor: "#ffffff",
-              boxShadow: "0 4px 14px rgba(15, 23, 42, 0.05)",
+              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+              bgcolor: isDark ? "#0e1424" : "#ffffff",
+              boxShadow: isDark ? "0 4px 16px rgba(0,0,0,0.2)" : "0 4px 14px rgba(15, 23, 42, 0.05)",
             }}
           >
             <Grid container spacing={2.5} alignItems="center">
@@ -1839,7 +1995,7 @@ export default function WorkRegister() {
                   </Avatar>
                   <Box>
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.4, flexWrap: "wrap", gap: 0.5 }}>
-                      <Typography variant="h5" sx={{ fontWeight: 800, color: "#0f2f57" }}>
+                      <Typography variant="h5" sx={{ fontWeight: 800, color: isDark ? "#f8fafc" : "#0f2f57" }}>
                         {selectedUser.name}
                       </Typography>
                       {selectedUser.employeeId && (
@@ -1849,8 +2005,8 @@ export default function WorkRegister() {
                           sx={{
                             fontWeight: 800,
                             fontSize: "0.72rem",
-                            bgcolor: "#f1f5f9",
-                            color: "#334155",
+                            bgcolor: isDark ? "rgba(255,255,255,0.06)" : "#f1f5f9",
+                            color: isDark ? "#cbd5e1" : "#334155",
                           }}
                         />
                       )}
@@ -1860,12 +2016,12 @@ export default function WorkRegister() {
                         sx={{
                           fontWeight: 800,
                           fontSize: "0.72rem",
-                          bgcolor: roleTab === "INCHARGE" ? "#dcfce7" : roleTab === "SUPERVISOR" ? "#fef9c3" : "#e0e7ff",
-                          color: roleTab === "INCHARGE" ? "#166534" : roleTab === "SUPERVISOR" ? "#854d0e" : "#4338ca",
+                          bgcolor: isDark ? "rgba(255,255,255,0.08)" : (roleTab === "INCHARGE" ? "#dcfce7" : roleTab === "SUPERVISOR" ? "#fef9c3" : "#e0e7ff"),
+                          color: isDark ? "#f8fafc" : (roleTab === "INCHARGE" ? "#166534" : roleTab === "SUPERVISOR" ? "#854d0e" : "#4338ca"),
                         }}
                       />
                     </Stack>
-                    <Typography variant="body2" sx={{ color: "#64748b" }}>
+                    <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "#64748b" }}>
                       Worksheets & Site Execution Register with Exact Timestamps
                     </Typography>
                   </Box>
@@ -1874,17 +2030,17 @@ export default function WorkRegister() {
 
               <Grid item xs={12} md={6}>
                 <Stack direction="row" spacing={1.5} justifyContent={{ xs: "flex-start", md: "flex-end" }} sx={{ flexWrap: "wrap", gap: 1 }}>
-                  <Box sx={{ bgcolor: "#f8fafc", px: 2, py: 1, borderRadius: 2.5, border: "1px solid #e2e8f0", textAlign: "center" }}>
-                    <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700, display: "block" }}>
+                  <Box sx={{ bgcolor: isDark ? "#060a12" : "#f8fafc", px: 2, py: 1, borderRadius: 2.5, border: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #e2e8f0", textAlign: "center" }}>
+                    <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700, display: "block" }}>
                       TOTAL WORKSHEETS
                     </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 800, color: "#0f2f57" }}>
+                    <Typography variant="h6" sx={{ fontWeight: 800, color: isDark ? "#f8fafc" : "#0f2f57" }}>
                       {selectedUser.worksheets.length}
                     </Typography>
                   </Box>
 
-                  <Box sx={{ bgcolor: "#f0f9ff", px: 2, py: 1, borderRadius: 2.5, border: "1px solid #bae6fd", textAlign: "center" }}>
-                    <Typography variant="caption" sx={{ color: "#0369a1", fontWeight: 700, display: "block" }}>
+                  <Box sx={{ bgcolor: isDark ? "rgba(2,132,199,0.15)" : "#f0f9ff", px: 2, py: 1, borderRadius: 2.5, border: isDark ? "1px solid rgba(2,132,199,0.3)" : "1px solid #bae6fd", textAlign: "center" }}>
+                    <Typography variant="caption" sx={{ color: isDark ? "#38bdf8" : "#0369a1", fontWeight: 700, display: "block" }}>
                       PROJECTS DONE
                     </Typography>
                     <Typography variant="h6" sx={{ fontWeight: 800, color: "#0284c7" }}>
@@ -1892,8 +2048,8 @@ export default function WorkRegister() {
                     </Typography>
                   </Box>
 
-                  <Box sx={{ bgcolor: "#ecfdf5", px: 2, py: 1, borderRadius: 2.5, border: "1px solid #a7f3d0", textAlign: "center" }}>
-                    <Typography variant="caption" sx={{ color: "#047857", fontWeight: 700, display: "block" }}>
+                  <Box sx={{ bgcolor: isDark ? "rgba(5,150,105,0.15)" : "#ecfdf5", px: 2, py: 1, borderRadius: 2.5, border: isDark ? "1px solid rgba(5,150,105,0.3)" : "1px solid #a7f3d0", textAlign: "center" }}>
+                    <Typography variant="caption" sx={{ color: isDark ? "#34d399" : "#047857", fontWeight: 700, display: "block" }}>
                       GEO-PHOTOS
                     </Typography>
                     <Typography variant="h6" sx={{ fontWeight: 800, color: "#059669" }}>
@@ -1905,9 +2061,32 @@ export default function WorkRegister() {
             </Grid>
 
             {/* Filter toolbar inside user view */}
-            <Divider sx={{ my: 2, borderColor: "#e2e8f0" }} />
+            <Divider sx={{ my: 2, borderColor: isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0" }} />
             <Grid container spacing={1.5} alignItems="center">
-              <Grid item xs={12} sm={6} md={5}>
+              <Grid item xs={12} sm={6} md={3.5}>
+                <Button
+                  fullWidth
+                  size="small"
+                  variant={groupByDate ? "contained" : "outlined"}
+                  onClick={() => setGroupByDate(!groupByDate)}
+                  startIcon={<CalendarTodayRounded sx={{ fontSize: 15 }} />}
+                  sx={{
+                    height: 40,
+                    borderRadius: 2,
+                    textTransform: "none",
+                    fontWeight: 800,
+                    fontSize: "0.76rem",
+                    bgcolor: groupByDate ? (isDark ? "#2563eb" : "#004792") : "transparent",
+                    color: groupByDate ? "#fff" : (isDark ? "#60a5fa" : "#004792"),
+                    borderColor: isDark ? "#2563eb" : "#004792",
+                    boxShadow: groupByDate ? "0 2px 8px rgba(0, 71, 146, 0.25)" : "none",
+                    "&:hover": { bgcolor: groupByDate ? (isDark ? "#1d4ed8" : "#003366") : (isDark ? "rgba(37,99,235,0.1)" : "rgba(0, 71, 146, 0.08)") },
+                  }}
+                >
+                  {groupByDate ? "1 Box Per Date (Active)" : "Separate Report Boxes"}
+                </Button>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3.5}>
                 <TextField
                   fullWidth
                   size="small"
@@ -1917,17 +2096,17 @@ export default function WorkRegister() {
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
-                        <SearchRounded sx={{ color: "#94a3b8" }} />
+                        <SearchRounded sx={{ color: isDark ? "#64748b" : "#94a3b8" }} />
                       </InputAdornment>
                     ),
-                    sx: { borderRadius: 2, bgcolor: "#f8fafc" },
+                    sx: { borderRadius: 2, bgcolor: isDark ? "#060a12" : "#f8fafc", color: isDark ? "#f8fafc" : "inherit" },
                   }}
                 />
               </Grid>
 
               <Grid item xs={12} sm={6} md={3}>
                 <FormControl fullWidth size="small">
-                  <InputLabel id="user-proj-type-label" sx={{ fontSize: "0.85rem" }}>
+                  <InputLabel id="user-proj-type-label" sx={{ fontSize: "0.85rem", color: isDark ? "#94a3b8" : undefined }}>
                     Project Type
                   </InputLabel>
                   <Select
@@ -1935,7 +2114,7 @@ export default function WorkRegister() {
                     label="Project Type"
                     value={selectedProjectType}
                     onChange={(e) => setSelectedProjectType(e.target.value)}
-                    sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                    sx={{ borderRadius: 2, bgcolor: isDark ? "#060a12" : "#f8fafc", fontSize: "0.85rem", color: isDark ? "#f8fafc" : "inherit" }}
                   >
                     <MenuItem value="ALL">All Project Types</MenuItem>
                     {projectTypeFilterOptions.map((type) => (
@@ -1956,7 +2135,7 @@ export default function WorkRegister() {
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                   InputLabelProps={{ shrink: true }}
-                  sx={{ borderRadius: 2, bgcolor: "#f8fafc", "& input": { fontSize: "0.85rem" } }}
+                  sx={{ borderRadius: 2, bgcolor: isDark ? "#060a12" : "#f8fafc", "& input": { fontSize: "0.85rem", color: isDark ? "#f8fafc" : "inherit" } }}
                 />
               </Grid>
 
@@ -1988,15 +2167,15 @@ export default function WorkRegister() {
                 p: 6,
                 textAlign: "center",
                 borderRadius: 3,
-                border: "1px dashed #cbd5e1",
-                bgcolor: "#ffffff",
+                border: isDark ? "1px dashed rgba(255,255,255,0.15)" : "1px dashed #cbd5e1",
+                bgcolor: isDark ? "#0e1424" : "#ffffff",
               }}
             >
-              <SolarPowerRounded sx={{ fontSize: 50, color: "#94a3b8", mb: 1 }} />
-              <Typography variant="h6" sx={{ fontWeight: 700, color: "#334155" }}>
+              <SolarPowerRounded sx={{ fontSize: 50, color: isDark ? "#475569" : "#94a3b8", mb: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 700, color: isDark ? "#f8fafc" : "#334155" }}>
                 No worksheets match your filters
               </Typography>
-              <Typography variant="body2" sx={{ color: "#64748b", mt: 0.5 }}>
+              <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "#64748b", mt: 0.5 }}>
                 {searchTerm || selectedDate || selectedProjectType !== "ALL"
                   ? "Try resetting your search query or date filter."
                   : "No worksheets registered for this user yet."}
@@ -2004,16 +2183,18 @@ export default function WorkRegister() {
             </Paper>
           ) : (
             <Stack spacing={2.5}>
-              {userFilteredWorksheets.map((row) => {
+              {userDisplayWorksheets.map((row) => {
                 const isExpanded = !!expandedRows[row._id];
-                const submittedBy = personName(row.user);
-                const isSup = isSupervisorSubmitter(row.user);
-                const submitterRoleLabel = isSup ? "Supervisor" : "Incharge";
-                const workDate = formatDate(row.workDate || row.createdAt);
-                const submissionTime = getWorksheetTimestamp(row);
-                const supervisorNames = uniqueSupervisorNames(row.projects);
-                const incharges = uniqueInchargeNames(row.projects);
+                const isGroup = !!row.isDateGroup;
+                const submittedBy = row.submittedBy || personName(row.user);
+                const isSup = row.isSup !== undefined ? row.isSup : isSupervisorSubmitter(row.user);
+                const submitterRoleLabel = row.submitterRoleLabel || (isSup ? "Supervisor" : "Incharge");
+                const workDate = row.formattedDate || formatDate(row.workDate || row.createdAt);
+                const submissionTime = row.submissionTime || getWorksheetTimestamp(row);
+                const supervisorNames = row.supervisorNames || uniqueSupervisorNames(row.projects);
+                const incharges = row.inchargeNames || uniqueInchargeNames(row.projects);
                 const projectCount = row.projects?.length || 0;
+                const reportsCount = row.worksheets ? row.worksheets.length : 1;
 
                 const allPhotos = (row.projects || []).flatMap((p, pIdx) =>
                   (p.photos || []).map((ph) => ({
@@ -2036,12 +2217,12 @@ export default function WorkRegister() {
                     elevation={0}
                     sx={{
                       borderRadius: 3,
-                      border: "1px solid #e2e8f0",
-                      bgcolor: "#ffffff",
+                      border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+                      bgcolor: isDark ? "#0e1424" : "#ffffff",
                       overflow: "hidden",
                       transition: "box-shadow 0.2s ease",
                       "&:hover": {
-                        boxShadow: "0 6px 20px rgba(15, 23, 42, 0.08)",
+                        boxShadow: isDark ? "0 8px 24px rgba(0, 0, 0, 0.4)" : "0 6px 20px rgba(15, 23, 42, 0.08)",
                       },
                     }}
                   >
@@ -2049,8 +2230,8 @@ export default function WorkRegister() {
                     <Box
                       sx={{
                         p: { xs: 2, sm: 2.5 },
-                        bgcolor: isExpanded ? "#f8fafc" : "#ffffff",
-                        borderBottom: isExpanded ? "1px solid #e2e8f0" : "none",
+                        bgcolor: isExpanded ? (isDark ? "#111a30" : "#f8fafc") : (isDark ? "#0e1424" : "#ffffff"),
+                        borderBottom: isExpanded ? (isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0") : "none",
                       }}
                     >
                       <Grid container spacing={2} alignItems="center">
@@ -2059,8 +2240,8 @@ export default function WorkRegister() {
                           <Stack direction="row" spacing={1.5} alignItems="center">
                             <Avatar
                               sx={{
-                                bgcolor: "#eff6ff",
-                                color: "#004792",
+                                bgcolor: isDark ? "rgba(37,99,235,0.2)" : "#eff6ff",
+                                color: isDark ? "#60a5fa" : "#004792",
                                 width: 44,
                                 height: 44,
                                 borderRadius: 2.5,
@@ -2069,7 +2250,7 @@ export default function WorkRegister() {
                               <CalendarTodayRounded sx={{ fontSize: 20 }} />
                             </Avatar>
                             <Box>
-                              <Typography variant="subtitle1" sx={{ fontWeight: 800, color: "#0f2f57", lineHeight: 1.2 }}>
+                              <Typography variant="subtitle1" sx={{ fontWeight: 800, color: isDark ? "#f8fafc" : "#0f2f57", lineHeight: 1.2 }}>
                                 {workDate}
                               </Typography>
                               <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 0.5, flexWrap: "wrap", gap: 0.6 }}>
@@ -2079,22 +2260,36 @@ export default function WorkRegister() {
                                   sx={{
                                     height: 22,
                                     fontSize: "0.72rem",
-                                    fontWeight: 700,
-                                    bgcolor: "#f1f5f9",
-                                    color: "#475569",
+                                    fontWeight: 800,
+                                    bgcolor: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
+                                    color: isDark ? "#f8fafc" : "#1e293b",
                                   }}
                                 />
+                                {reportsCount > 1 && (
+                                  <Chip
+                                    size="small"
+                                    label={`${reportsCount} Reports Combined`}
+                                    sx={{
+                                      height: 22,
+                                      fontSize: "0.70rem",
+                                      fontWeight: 800,
+                                      bgcolor: isDark ? "rgba(5,150,105,0.2)" : "#ecfdf5",
+                                      color: isDark ? "#34d399" : "#047857",
+                                      border: isDark ? "1px solid rgba(5,150,105,0.4)" : "1px solid #a7f3d0",
+                                    }}
+                                  />
+                                )}
                                 <Chip
                                   size="small"
-                                  icon={<AccessTimeRounded sx={{ fontSize: "13px !important", color: "#0369a1" }} />}
+                                  icon={<AccessTimeRounded sx={{ fontSize: "13px !important", color: isDark ? "#38bdf8" : "#0369a1" }} />}
                                   label={submissionTime}
                                   sx={{
                                     height: 22,
                                     fontSize: "0.72rem",
                                     fontWeight: 800,
-                                    bgcolor: "#e0f2fe",
-                                    color: "#0369a1",
-                                    border: "1px solid #bae6fd",
+                                    bgcolor: isDark ? "rgba(2,132,199,0.2)" : "#e0f2fe",
+                                    color: isDark ? "#38bdf8" : "#0369a1",
+                                    border: isDark ? "1px solid rgba(2,132,199,0.4)" : "1px solid #bae6fd",
                                   }}
                                 />
                                 {Boolean(row.hasMissedProject || row.missedForDate || row.projects?.some(p => p.isMissedProject || p.missedForDate)) && (
@@ -2105,9 +2300,9 @@ export default function WorkRegister() {
                                       height: 22,
                                       fontSize: "0.70rem",
                                       fontWeight: 800,
-                                      bgcolor: "#fef3c7",
-                                      color: "#b45309",
-                                      border: "1px solid #fcd34d",
+                                      bgcolor: isDark ? "rgba(245,158,11,0.2)" : "#fef3c7",
+                                      color: isDark ? "#fbbf24" : "#b45309",
+                                      border: isDark ? "1px solid rgba(245,158,11,0.4)" : "1px solid #fcd34d",
                                     }}
                                   />
                                 )}
@@ -2116,85 +2311,52 @@ export default function WorkRegister() {
                           </Stack>
                         </Grid>
 
-                        {/* Middle: Personnel Details */}
+                        {/* Middle: Submitter (Who Submitted the Report) */}
                         <Grid item xs={12} sm={5.5}>
-                          <Grid container spacing={1.2}>
-                            {/* Submitter */}
-                            <Grid item xs={12} sm={4}>
-                              <Box
+                          <Box
+                            sx={{
+                              bgcolor: isDark
+                                ? (isSup ? "rgba(202, 138, 4, 0.15)" : "rgba(22, 163, 74, 0.15)")
+                                : (isSup ? "#fefce8" : "#f0fdf4"),
+                              p: 1.1,
+                              px: 1.6,
+                              borderRadius: 2,
+                              border: isDark
+                                ? (isSup ? "1px solid rgba(202, 138, 4, 0.3)" : "1px solid rgba(22, 163, 74, 0.3)")
+                                : `1px solid ${isSup ? "#fef08a" : "#bbf7d0"}`,
+                            }}
+                          >
+                            <Stack direction="row" spacing={0.6} alignItems="center">
+                              {isSup ? (
+                                <ShieldRounded sx={{ fontSize: 16, color: isDark ? "#fbbf24" : "#ca8a04" }} />
+                              ) : (
+                                <PersonRounded sx={{ fontSize: 16, color: isDark ? "#4ade80" : "#16a34a" }} />
+                              )}
+                              <Typography
+                                variant="caption"
+                                sx={{ color: isDark ? (isSup ? "#fbbf24" : "#4ade80") : (isSup ? "#854d0e" : "#166534"), fontWeight: 700, fontSize: "0.72rem" }}
+                              >
+                                Submitted By ({submitterRoleLabel})
+                              </Typography>
+                            </Stack>
+                            <Tooltip title={submittedBy} arrow>
+                              <Typography
+                                variant="body2"
                                 sx={{
-                                  bgcolor: isSup ? "#fefce8" : "#f0fdf4",
-                                  p: 1,
-                                  borderRadius: 2,
-                                  border: `1px solid ${isSup ? "#fef08a" : "#bbf7d0"}`,
+                                  fontWeight: 700,
+                                  color: isDark ? "#f8fafc" : "#0f2f57",
+                                  mt: 0.2,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  fontSize: "0.85rem",
+                                  cursor: "default",
                                 }}
                               >
-                                <Stack direction="row" spacing={0.6} alignItems="center">
-                                  {isSup ? (
-                                    <ShieldRounded sx={{ fontSize: 15, color: "#ca8a04" }} />
-                                  ) : (
-                                    <PersonRounded sx={{ fontSize: 15, color: "#16a34a" }} />
-                                  )}
-                                  <Typography
-                                    variant="caption"
-                                    sx={{ color: isSup ? "#854d0e" : "#166534", fontWeight: 700, fontSize: "0.7rem" }}
-                                  >
-                                    Submitter ({submitterRoleLabel})
-                                  </Typography>
-                                </Stack>
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    fontWeight: 700,
-                                    color: "#0f2f57",
-                                    mt: 0.2,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                    fontSize: "0.82rem",
-                                  }}
-                                >
-                                  {submittedBy}
-                                </Typography>
-                              </Box>
-                            </Grid>
-
-                            {/* Supervisor */}
-                            <Grid item xs={12} sm={4}>
-                              <Box sx={{ bgcolor: "#fefce8", p: 1, borderRadius: 2, border: "1px solid #fef08a" }}>
-                                <Stack direction="row" spacing={0.6} alignItems="center">
-                                  <ShieldRounded sx={{ fontSize: 15, color: "#ca8a04" }} />
-                                  <Typography variant="caption" sx={{ color: "#854d0e", fontWeight: 700, fontSize: "0.7rem" }}>
-                                    Supervisor
-                                  </Typography>
-                                </Stack>
-                                <Typography
-                                  variant="body2"
-                                  sx={{ fontWeight: 700, color: "#0f2f57", mt: 0.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.82rem" }}
-                                >
-                                  {supervisorNames}
-                                </Typography>
-                              </Box>
-                            </Grid>
-
-                            {/* Incharges */}
-                            <Grid item xs={12} sm={4}>
-                              <Box sx={{ bgcolor: "#eff6ff", p: 1, borderRadius: 2, border: "1px solid #bfdbfe" }}>
-                                <Stack direction="row" spacing={0.6} alignItems="center">
-                                  <PersonRounded sx={{ fontSize: 15, color: "#2563eb" }} />
-                                  <Typography variant="caption" sx={{ color: "#1e40af", fontWeight: 700, fontSize: "0.7rem" }}>
-                                    Incharge(s)
-                                  </Typography>
-                                </Stack>
-                                <Typography
-                                  variant="body2"
-                                  sx={{ fontWeight: 700, color: "#0f2f57", mt: 0.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.82rem" }}
-                                >
-                                  {incharges}
-                                </Typography>
-                              </Box>
-                            </Grid>
-                          </Grid>
+                                {submittedBy}
+                              </Typography>
+                            </Tooltip>
+                          </Box>
                         </Grid>
 
                         {/* Right: Actions */}
@@ -2209,9 +2371,9 @@ export default function WorkRegister() {
                                 borderRadius: 2,
                                 textTransform: "none",
                                 fontWeight: 700,
-                                bgcolor: "#004792",
+                                bgcolor: isDark ? "#2563eb" : "#004792",
                                 boxShadow: "0 2px 8px rgba(0, 71, 146, 0.3)",
-                                "&:hover": { bgcolor: "#003366" },
+                                "&:hover": { bgcolor: isDark ? "#1d4ed8" : "#003366" },
                               }}
                             >
                               Download PDF
@@ -2219,9 +2381,9 @@ export default function WorkRegister() {
                             <IconButton
                               onClick={() => toggleRow(row._id)}
                               sx={{
-                                bgcolor: "#f1f5f9",
-                                color: "#334155",
-                                "&:hover": { bgcolor: "#e2e8f0" },
+                                bgcolor: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
+                                color: isDark ? "#f8fafc" : "#334155",
+                                "&:hover": { bgcolor: isDark ? "rgba(255,255,255,0.15)" : "#e2e8f0" },
                               }}
                             >
                               {isExpanded ? <ExpandLessRounded /> : <ExpandMoreRounded />}
@@ -2233,15 +2395,15 @@ export default function WorkRegister() {
 
                     {/* EXPANDED CONTENT */}
                     <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                      <CardContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: isDark ? "#0b1120" : "#ffffff" }}>
                         {/* SECTION 1: PROJECTS TABLE WITH DATE AND TIME */}
                         <Box sx={{ mb: 3.5 }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#0f2f57", mb: 1.5 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: isDark ? "#f8fafc" : "#0f2f57", mb: 1.5 }}>
                             Projects Execution Breakdown ({projectCount})
                           </Typography>
-                          <TableContainer component={Paper} elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 2 }}>
+                          <TableContainer component={Paper} elevation={0} sx={{ border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0", borderRadius: 2, bgcolor: isDark ? "#090d16" : "#ffffff" }}>
                             <Table size="small">
-                              <TableHead sx={{ bgcolor: "#004792" }}>
+                              <TableHead sx={{ bgcolor: isDark ? "#1d4ed8" : "#004792" }}>
                                 <TableRow>
                                   <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>#</TableCell>
                                   <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Time</TableCell>
@@ -2258,46 +2420,46 @@ export default function WorkRegister() {
                               </TableHead>
                               <TableBody>
                                 {(row.projects || []).map((project, idx) => (
-                                  <TableRow key={project._id || idx} hover sx={{ "&:nth-of-type(even)": { bgcolor: "#f8fafc" } }}>
-                                    <TableCell sx={{ fontWeight: 700 }}>{idx + 1}</TableCell>
-                                    <TableCell sx={{ whiteSpace: "nowrap", fontSize: "0.8rem", color: "#64748b", fontWeight: 700 }}>
+                                  <TableRow key={project._id || idx} hover sx={{ "&:nth-of-type(even)": { bgcolor: isDark ? "rgba(255,255,255,0.02)" : "#f8fafc" } }}>
+                                    <TableCell sx={{ fontWeight: 700, color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>{idx + 1}</TableCell>
+                                    <TableCell sx={{ whiteSpace: "nowrap", fontSize: "0.8rem", color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700, borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       <Stack direction="row" spacing={0.5} alignItems="center">
                                         <AccessTimeRounded sx={{ fontSize: 13, color: "#0284c7" }} />
                                         <span>{getProjectTimestamp(project, row)}</span>
                                       </Stack>
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell sx={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       <Chip
                                         size="small"
                                         label={text(project.projectType)}
                                         sx={{
                                           fontSize: "0.72rem",
                                           fontWeight: 700,
-                                          bgcolor: "#e0f2fe",
-                                          color: "#0369a1",
+                                          bgcolor: isDark ? "rgba(2,132,199,0.2)" : "#e0f2fe",
+                                          color: isDark ? "#38bdf8" : "#0369a1",
                                         }}
                                       />
                                     </TableCell>
-                                    <TableCell sx={{ fontWeight: 700, color: "#0f2f57" }}>
+                                    <TableCell sx={{ fontWeight: 700, color: isDark ? "#f8fafc" : "#0f2f57", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       {text(project.consumerName || project.siteLocation)}
                                     </TableCell>
-                                    <TableCell sx={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
+                                    <TableCell sx={{ fontFamily: "monospace", fontSize: "0.8rem", color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       {text(project.consumerAccountNo)}
                                     </TableCell>
-                                    <TableCell>{text(project.capacityKw ? `${project.capacityKw} KW` : "-")}</TableCell>
-                                    <TableCell>{text(project.installationDay ? `${project.installationDay} Days` : "-")}</TableCell>
-                                    <TableCell sx={{ fontWeight: 600, color: "#854d0e" }}>
+                                    <TableCell sx={{ color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>{text(project.capacityKw ? `${project.capacityKw} KW` : "-")}</TableCell>
+                                    <TableCell sx={{ color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>{text(project.installationDay ? `${project.installationDay} Days` : "-")}</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, color: isDark ? "#facc15" : "#854d0e", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       {personName(project.supervisor)}
                                     </TableCell>
-                                    <TableCell sx={{ fontWeight: 700, color: "#1d4ed8" }}>
+                                    <TableCell sx={{ fontWeight: 700, color: isDark ? "#60a5fa" : "#1d4ed8", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       {inchargeNames(project)}
                                     </TableCell>
-                                    <TableCell sx={{ maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    <TableCell sx={{ maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       <Tooltip title={text(project.address || project.siteLocation || project.gpsLocation?.address)}>
                                         <span>{text(project.address || project.siteLocation || project.gpsLocation?.address)}</span>
                                       </Tooltip>
                                     </TableCell>
-                                    <TableCell sx={{ maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    <TableCell sx={{ maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       <Tooltip title={text(project.report)}>
                                         <span>{text(project.report)}</span>
                                       </Tooltip>
@@ -2313,7 +2475,7 @@ export default function WorkRegister() {
                         <Box>
                           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
                             <FmdGoodRounded sx={{ color: "#ef4444", fontSize: 20 }} />
-                            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#0f2f57" }}>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: isDark ? "#f8fafc" : "#0f2f57" }}>
                               Site Geo-Tagged Photographs ({allPhotos.length})
                             </Typography>
                           </Stack>
@@ -2324,11 +2486,11 @@ export default function WorkRegister() {
                                 p: 3,
                                 textAlign: "center",
                                 borderRadius: 2,
-                                bgcolor: "#f8fafc",
-                                border: "1px dashed #cbd5e1",
+                                bgcolor: isDark ? "rgba(255,255,255,0.02)" : "#f8fafc",
+                                border: isDark ? "1px dashed rgba(255,255,255,0.1)" : "1px dashed #cbd5e1",
                               }}
                             >
-                              <Typography variant="body2" sx={{ color: "#94a3b8" }}>
+                              <Typography variant="body2" sx={{ color: isDark ? "#64748b" : "#94a3b8" }}>
                                 No geo-tagged site images uploaded for this worksheet.
                               </Typography>
                             </Box>
@@ -2345,13 +2507,13 @@ export default function WorkRegister() {
                                       elevation={0}
                                       sx={{
                                         borderRadius: 2.5,
-                                        border: "1px solid #e2e8f0",
-                                        bgcolor: "#ffffff",
+                                        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+                                        bgcolor: isDark ? "#0e1424" : "#ffffff",
                                         overflow: "hidden",
                                         transition: "transform 0.15s ease, box-shadow 0.15s ease",
                                         "&:hover": {
                                           transform: "translateY(-3px)",
-                                          boxShadow: "0 8px 24px rgba(15, 23, 42, 0.1)",
+                                          boxShadow: isDark ? "0 8px 24px rgba(0, 0, 0, 0.5)" : "0 8px 24px rgba(15, 23, 42, 0.1)",
                                         },
                                       }}
                                     >
@@ -2395,20 +2557,20 @@ export default function WorkRegister() {
                                       </Box>
 
                                       <Box sx={{ p: 1.8 }}>
-                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "#0f2f57", lineHeight: 1.2 }}>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: isDark ? "#f8fafc" : "#0f2f57", lineHeight: 1.2 }}>
                                           {photo.projectName}
                                         </Typography>
-                                        <Typography variant="caption" sx={{ color: "#64748b", display: "block", mt: 0.4 }}>
-                                          Incharge(s): <strong style={{ color: "#1d4ed8" }}>{photo.incharge}</strong>
+                                        <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", display: "block", mt: 0.4 }}>
+                                          Incharge(s): <strong style={{ color: isDark ? "#60a5fa" : "#1d4ed8" }}>{photo.incharge}</strong>
                                         </Typography>
                                         {photo.address && (
                                           <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.3 }}>
-                                            <FmdGoodRounded sx={{ fontSize: 13, color: "#64748b", flexShrink: 0 }} />
+                                            <FmdGoodRounded sx={{ fontSize: 13, color: isDark ? "#64748b" : "#64748b", flexShrink: 0 }} />
                                             <Typography
                                               variant="caption"
                                               noWrap
                                               sx={{
-                                                color: "#475569",
+                                                color: isDark ? "#cbd5e1" : "#475569",
                                                 display: "block",
                                               }}
                                             >
@@ -2461,9 +2623,9 @@ export default function WorkRegister() {
               p: 2,
               mb: 3,
               borderRadius: 3,
-              border: "1px solid #e2e8f0",
-              bgcolor: "#ffffff",
-              boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+              bgcolor: isDark ? "#0e1424" : "#ffffff",
+              boxShadow: isDark ? "0 4px 16px rgba(0, 0, 0, 0.2)" : "0 2px 8px rgba(15, 23, 42, 0.04)",
             }}
           >
             <Stack spacing={2}>
@@ -2477,10 +2639,10 @@ export default function WorkRegister() {
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
-                        <SearchRounded sx={{ color: "#94a3b8" }} />
+                        <SearchRounded sx={{ color: isDark ? "#64748b" : "#94a3b8" }} />
                       </InputAdornment>
                     ),
-                    sx: { borderRadius: 2, bgcolor: "#f8fafc" },
+                    sx: { borderRadius: 2, bgcolor: isDark ? "#060a12" : "#f8fafc", color: isDark ? "#f8fafc" : "inherit" },
                   }}
                 />
 
@@ -2497,12 +2659,12 @@ export default function WorkRegister() {
                     py: 0.9,
                     whiteSpace: "nowrap",
                     minWidth: "fit-content",
-                    bgcolor: showFilters || activeFilterCount > 0 ? "#0f2f57" : "#fff",
-                    color: showFilters || activeFilterCount > 0 ? "#fff" : "#334155",
-                    borderColor: "#cbd5e1",
+                    bgcolor: showFilters || activeFilterCount > 0 ? (isDark ? "#2563eb" : "#0f2f57") : (isDark ? "#0e1424" : "#fff"),
+                    color: showFilters || activeFilterCount > 0 ? "#fff" : (isDark ? "#f8fafc" : "#334155"),
+                    borderColor: isDark ? "rgba(255,255,255,0.15)" : "#cbd5e1",
                     "&:hover": {
-                      bgcolor: showFilters || activeFilterCount > 0 ? "#0a1f3a" : "#f1f5f9",
-                      borderColor: "#94a3b8",
+                      bgcolor: showFilters || activeFilterCount > 0 ? (isDark ? "#1d4ed8" : "#0a1f3a") : (isDark ? "#131b30" : "#f1f5f9"),
+                      borderColor: isDark ? "rgba(255,255,255,0.25)" : "#94a3b8",
                     },
                   }}
                 >
@@ -2521,7 +2683,7 @@ export default function WorkRegister() {
                       fontWeight: 600,
                       color: "#ef4444",
                       whiteSpace: "nowrap",
-                      "&:hover": { bgcolor: "#fef2f2" },
+                      "&:hover": { bgcolor: isDark ? "rgba(239,68,68,0.1)" : "#fef2f2" },
                     }}
                   >
                     Reset
@@ -2531,12 +2693,12 @@ export default function WorkRegister() {
 
               {/* Collapsible Filter Panel */}
               <Collapse in={showFilters}>
-                <Divider sx={{ my: 1.5, borderColor: "#e2e8f0" }} />
+                <Divider sx={{ my: 1.5, borderColor: isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0" }} />
                 <Grid container spacing={1.5} alignItems="center">
                   {/* Supervisor Dropdown */}
                   <Grid item xs={12} sm={6} md={3}>
                     <FormControl fullWidth size="small">
-                      <InputLabel id="sup-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
+                      <InputLabel id="sup-filter-label" sx={{ fontSize: "0.85rem", color: isDark ? "#94a3b8" : "#64748b" }}>
                         Supervisor
                       </InputLabel>
                       <Select
@@ -2544,7 +2706,7 @@ export default function WorkRegister() {
                         label="Supervisor"
                         value={selectedSupervisor}
                         onChange={(e) => setSelectedSupervisor(e.target.value)}
-                        sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                        sx={{ borderRadius: 2, bgcolor: isDark ? "#060a12" : "#f8fafc", fontSize: "0.85rem", color: isDark ? "#f8fafc" : "inherit" }}
                       >
                         <MenuItem value="ALL">All Supervisors</MenuItem>
                         {supervisorFilterOptions.map((name) => (
@@ -2559,7 +2721,7 @@ export default function WorkRegister() {
                   {/* Incharge Dropdown */}
                   <Grid item xs={12} sm={6} md={3}>
                     <FormControl fullWidth size="small">
-                      <InputLabel id="inc-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
+                      <InputLabel id="inc-filter-label" sx={{ fontSize: "0.85rem", color: isDark ? "#94a3b8" : "#64748b" }}>
                         Incharge
                       </InputLabel>
                       <Select
@@ -2567,7 +2729,7 @@ export default function WorkRegister() {
                         label="Incharge"
                         value={selectedIncharge}
                         onChange={(e) => setSelectedIncharge(e.target.value)}
-                        sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                        sx={{ borderRadius: 2, bgcolor: isDark ? "#060a12" : "#f8fafc", fontSize: "0.85rem", color: isDark ? "#f8fafc" : "inherit" }}
                       >
                         <MenuItem value="ALL">All Incharges</MenuItem>
                         {inchargeFilterOptions.map((name) => (
@@ -2582,7 +2744,7 @@ export default function WorkRegister() {
                   {/* Project Type Dropdown */}
                   <Grid item xs={12} sm={6} md={3}>
                     <FormControl fullWidth size="small">
-                      <InputLabel id="proj-type-filter-label" sx={{ fontSize: "0.85rem", color: "#64748b" }}>
+                      <InputLabel id="proj-type-filter-label" sx={{ fontSize: "0.85rem", color: isDark ? "#94a3b8" : "#64748b" }}>
                         Project Type
                       </InputLabel>
                       <Select
@@ -2590,7 +2752,7 @@ export default function WorkRegister() {
                         label="Project Type"
                         value={selectedProjectType}
                         onChange={(e) => setSelectedProjectType(e.target.value)}
-                        sx={{ borderRadius: 2, bgcolor: "#f8fafc", fontSize: "0.85rem" }}
+                        sx={{ borderRadius: 2, bgcolor: isDark ? "#060a12" : "#f8fafc", fontSize: "0.85rem", color: isDark ? "#f8fafc" : "inherit" }}
                       >
                         <MenuItem value="ALL">All Types</MenuItem>
                         {projectTypeFilterOptions.map((type) => (
@@ -2612,7 +2774,7 @@ export default function WorkRegister() {
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
                       InputLabelProps={{ shrink: true }}
-                      sx={{ borderRadius: 2, bgcolor: "#f8fafc", "& input": { fontSize: "0.85rem" } }}
+                      sx={{ borderRadius: 2, bgcolor: isDark ? "#060a12" : "#f8fafc", "& input": { fontSize: "0.85rem", color: isDark ? "#f8fafc" : "inherit" } }}
                     />
                   </Grid>
                 </Grid>
@@ -2635,15 +2797,15 @@ export default function WorkRegister() {
                 p: 6,
                 textAlign: "center",
                 borderRadius: 3,
-                border: "1px dashed #cbd5e1",
-                bgcolor: "#ffffff",
+                border: isDark ? "1px dashed rgba(255, 255, 255, 0.15)" : "1px dashed #cbd5e1",
+                bgcolor: isDark ? "#0e1424" : "#ffffff",
               }}
             >
-              <SolarPowerRounded sx={{ fontSize: 50, color: "#94a3b8", mb: 1 }} />
-              <Typography variant="h6" sx={{ fontWeight: 700, color: "#334155" }}>
+              <SolarPowerRounded sx={{ fontSize: 50, color: isDark ? "#64748b" : "#94a3b8", mb: 1 }} />
+              <Typography variant="h6" sx={{ fontWeight: 700, color: isDark ? "#f8fafc" : "#334155" }}>
                 No worksheets found
               </Typography>
-              <Typography variant="body2" sx={{ color: "#64748b", mt: 0.5 }}>
+              <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "#64748b", mt: 0.5 }}>
                 {searchTerm
                   ? "No worksheets match your current search query."
                   : "No approved worksheets have been registered yet."}
@@ -2651,16 +2813,18 @@ export default function WorkRegister() {
             </Paper>
           ) : (
             <Stack spacing={2.5}>
-              {filteredRows.map((row) => {
+              {allDisplayWorksheets.map((row) => {
                 const isExpanded = !!expandedRows[row._id];
-                const submittedBy = personName(row.user);
-                const isSup = isSupervisorSubmitter(row.user);
-                const submitterRoleLabel = isSup ? "Supervisor" : "Incharge";
-                const workDate = formatDate(row.workDate || row.createdAt);
-                const submissionTime = getWorksheetTimestamp(row);
-                const supervisorNames = uniqueSupervisorNames(row.projects);
-                const incharges = uniqueInchargeNames(row.projects);
+                const isGroup = !!row.isDateGroup;
+                const submittedBy = row.submittedBy || personName(row.user);
+                const isSup = row.isSup !== undefined ? row.isSup : isSupervisorSubmitter(row.user);
+                const submitterRoleLabel = row.submitterRoleLabel || (isSup ? "Supervisor" : "Incharge");
+                const workDate = row.formattedDate || formatDate(row.workDate || row.createdAt);
+                const submissionTime = row.submissionTime || getWorksheetTimestamp(row);
+                const supervisorNames = row.supervisorNames || uniqueSupervisorNames(row.projects);
+                const incharges = row.inchargeNames || uniqueInchargeNames(row.projects);
                 const projectCount = row.projects?.length || 0;
+                const reportsCount = row.worksheets ? row.worksheets.length : 1;
 
                 const allPhotos = (row.projects || []).flatMap((p, pIdx) =>
                   (p.photos || []).map((ph) => ({
@@ -2683,12 +2847,14 @@ export default function WorkRegister() {
                     elevation={0}
                     sx={{
                       borderRadius: 3,
-                      border: "1px solid #e2e8f0",
-                      bgcolor: "#ffffff",
+                      border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+                      bgcolor: isDark ? "#0e1424" : "#ffffff",
                       overflow: "hidden",
                       transition: "box-shadow 0.2s ease",
                       "&:hover": {
-                        boxShadow: "0 6px 20px rgba(15, 23, 42, 0.08)",
+                        boxShadow: isDark
+                          ? "0 6px 20px rgba(0, 0, 0, 0.4)"
+                          : "0 6px 20px rgba(15, 23, 42, 0.08)",
                       },
                     }}
                   >
@@ -2696,8 +2862,8 @@ export default function WorkRegister() {
                     <Box
                       sx={{
                         p: { xs: 2, sm: 2.5 },
-                        bgcolor: isExpanded ? "#f8fafc" : "#ffffff",
-                        borderBottom: isExpanded ? "1px solid #e2e8f0" : "none",
+                        bgcolor: isExpanded ? (isDark ? "#111a30" : "#f8fafc") : (isDark ? "#0e1424" : "#ffffff"),
+                        borderBottom: isExpanded ? (isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0") : "none",
                       }}
                     >
                       <Grid container spacing={2} alignItems="center">
@@ -2706,8 +2872,8 @@ export default function WorkRegister() {
                           <Stack direction="row" spacing={1.5} alignItems="center">
                             <Avatar
                               sx={{
-                                bgcolor: "#eff6ff",
-                                color: "#004792",
+                                bgcolor: isDark ? "rgba(37, 99, 235, 0.2)" : "#eff6ff",
+                                color: isDark ? "#60a5fa" : "#004792",
                                 width: 44,
                                 height: 44,
                                 borderRadius: 2.5,
@@ -2716,7 +2882,7 @@ export default function WorkRegister() {
                               <CalendarTodayRounded sx={{ fontSize: 20 }} />
                             </Avatar>
                             <Box>
-                              <Typography variant="subtitle1" sx={{ fontWeight: 800, color: "#0f2f57", lineHeight: 1.2 }}>
+                              <Typography variant="subtitle1" sx={{ fontWeight: 800, color: isDark ? "#f8fafc" : "#0f2f57", lineHeight: 1.2 }}>
                                 {workDate}
                               </Typography>
                               <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 0.5, flexWrap: "wrap", gap: 0.6 }}>
@@ -2727,21 +2893,21 @@ export default function WorkRegister() {
                                     height: 22,
                                     fontSize: "0.72rem",
                                     fontWeight: 700,
-                                    bgcolor: "#f1f5f9",
-                                    color: "#475569",
+                                    bgcolor: isDark ? "rgba(255, 255, 255, 0.06)" : "#f1f5f9",
+                                    color: isDark ? "#cbd5e1" : "#475569",
                                   }}
                                 />
                                 <Chip
                                   size="small"
-                                  icon={<AccessTimeRounded sx={{ fontSize: "13px !important", color: "#0369a1" }} />}
+                                  icon={<AccessTimeRounded sx={{ fontSize: "13px !important", color: isDark ? "#38bdf8" : "#0369a1" }} />}
                                   label={submissionTime}
                                   sx={{
                                     height: 22,
                                     fontSize: "0.72rem",
                                     fontWeight: 800,
-                                    bgcolor: "#e0f2fe",
-                                    color: "#0369a1",
-                                    border: "1px solid #bae6fd",
+                                    bgcolor: isDark ? "rgba(56, 189, 248, 0.15)" : "#e0f2fe",
+                                    color: isDark ? "#38bdf8" : "#0369a1",
+                                    border: isDark ? "1px solid rgba(56, 189, 248, 0.3)" : "1px solid #bae6fd",
                                   }}
                                 />
                                 {Boolean(row.hasMissedProject || row.missedForDate || row.projects?.some(p => p.isMissedProject || p.missedForDate)) && (
@@ -2752,9 +2918,9 @@ export default function WorkRegister() {
                                       height: 22,
                                       fontSize: "0.70rem",
                                       fontWeight: 800,
-                                      bgcolor: "#fef3c7",
-                                      color: "#b45309",
-                                      border: "1px solid #fcd34d",
+                                      bgcolor: isDark ? "rgba(245, 158, 11, 0.15)" : "#fef3c7",
+                                      color: isDark ? "#fbbf24" : "#b45309",
+                                      border: isDark ? "1px solid rgba(245, 158, 11, 0.3)" : "1px solid #fcd34d",
                                     }}
                                   />
                                 )}
@@ -2763,139 +2929,69 @@ export default function WorkRegister() {
                           </Stack>
                         </Grid>
 
-                        {/* Middle: Personnel Details (Clickable Pills) */}
+                        {/* Middle: Submitter (Who Submitted the Report) */}
                         <Grid item xs={12} sm={5.5}>
-                          <Grid container spacing={1.2}>
-                            {/* Submitter */}
-                            <Grid item xs={12} sm={4}>
-                              <Box
-                                onClick={() => openUserDetail(submittedBy, isSup ? "SUPERVISOR" : "INCHARGE")}
+                          <Box
+                            onClick={() => !isGroup && openUserDetail(submittedBy, isSup ? "SUPERVISOR" : "INCHARGE")}
+                            sx={{
+                              bgcolor: isDark
+                                ? isSup
+                                  ? "rgba(202, 138, 4, 0.12)"
+                                  : "rgba(22, 163, 74, 0.12)"
+                                : isSup
+                                ? "#fefce8"
+                                : "#f0fdf4",
+                              p: 1.1,
+                              px: 1.6,
+                              borderRadius: 2,
+                              border: `1px solid ${
+                                isDark
+                                  ? isSup
+                                    ? "rgba(202, 138, 4, 0.3)"
+                                    : "rgba(22, 163, 74, 0.3)"
+                                  : isSup
+                                  ? "#fef08a"
+                                  : "#bbf7d0"
+                              }`,
+                              cursor: !isGroup ? "pointer" : "default",
+                              transition: "all 0.15s ease",
+                              "&:hover": !isGroup ? {
+                                transform: "translateY(-1px)",
+                                boxShadow: isDark ? "0 2px 8px rgba(0,0,0,0.3)" : "0 2px 8px rgba(0,0,0,0.06)",
+                                borderColor: isSup ? "#eab308" : "#22c55e",
+                              } : {},
+                            }}
+                          >
+                            <Stack direction="row" spacing={0.6} alignItems="center">
+                              {isSup ? (
+                                <ShieldRounded sx={{ fontSize: 16, color: isDark ? "#facc15" : "#ca8a04" }} />
+                              ) : (
+                                <PersonRounded sx={{ fontSize: 16, color: isDark ? "#4ade80" : "#16a34a" }} />
+                              )}
+                              <Typography
+                                variant="caption"
+                                sx={{ color: isDark ? (isSup ? "#fef08a" : "#bbf7d0") : (isSup ? "#854d0e" : "#166534"), fontWeight: 700, fontSize: "0.72rem" }}
+                              >
+                                Submitted By ({submitterRoleLabel})
+                              </Typography>
+                            </Stack>
+                            <Tooltip title={submittedBy} arrow>
+                              <Typography
+                                variant="body2"
                                 sx={{
-                                  bgcolor: isSup ? "#fefce8" : "#f0fdf4",
-                                  p: 1,
-                                  borderRadius: 2,
-                                  border: `1px solid ${isSup ? "#fef08a" : "#bbf7d0"}`,
-                                  cursor: "pointer",
-                                  transition: "all 0.15s ease",
-                                  "&:hover": {
-                                    transform: "translateY(-1px)",
-                                    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-                                    borderColor: isSup ? "#eab308" : "#22c55e",
-                                  },
+                                  fontWeight: 700,
+                                  color: isDark ? "#f8fafc" : "#0f2f57",
+                                  mt: 0.2,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  fontSize: "0.85rem",
                                 }}
                               >
-                                <Stack direction="row" spacing={0.6} alignItems="center">
-                                  {isSup ? (
-                                    <ShieldRounded sx={{ fontSize: 15, color: "#ca8a04" }} />
-                                  ) : (
-                                    <PersonRounded sx={{ fontSize: 15, color: "#16a34a" }} />
-                                  )}
-                                  <Typography
-                                    variant="caption"
-                                    sx={{ color: isSup ? "#854d0e" : "#166534", fontWeight: 700, fontSize: "0.7rem" }}
-                                  >
-                                    Submitter ({submitterRoleLabel})
-                                  </Typography>
-                                </Stack>
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    fontWeight: 700,
-                                    color: "#0f2f57",
-                                    mt: 0.2,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                    fontSize: "0.82rem",
-                                  }}
-                                >
-                                  {submittedBy}
-                                </Typography>
-                              </Box>
-                            </Grid>
-
-                            {/* Supervisor */}
-                            <Grid item xs={12} sm={4}>
-                              <Box
-                                onClick={() => openUserDetail(supervisorNames, "SUPERVISOR")}
-                                sx={{
-                                  bgcolor: "#fefce8",
-                                  p: 1,
-                                  borderRadius: 2,
-                                  border: "1px solid #fef08a",
-                                  cursor: supervisorNames !== "-" ? "pointer" : "default",
-                                  transition: "all 0.15s ease",
-                                  "&:hover": supervisorNames !== "-" ? {
-                                    transform: "translateY(-1px)",
-                                    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-                                    borderColor: "#eab308",
-                                  } : {},
-                                }}
-                              >
-                                <Stack direction="row" spacing={0.6} alignItems="center">
-                                  <ShieldRounded sx={{ fontSize: 15, color: "#ca8a04" }} />
-                                  <Typography variant="caption" sx={{ color: "#854d0e", fontWeight: 700, fontSize: "0.7rem" }}>
-                                    Supervisor
-                                  </Typography>
-                                </Stack>
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    fontWeight: 700,
-                                    color: "#0f2f57",
-                                    mt: 0.2,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                    fontSize: "0.82rem",
-                                  }}
-                                >
-                                  {supervisorNames}
-                                </Typography>
-                              </Box>
-                            </Grid>
-
-                            {/* Incharges */}
-                            <Grid item xs={12} sm={4}>
-                              <Box
-                                onClick={() => openUserDetail(incharges, "INCHARGE")}
-                                sx={{
-                                  bgcolor: "#eff6ff",
-                                  p: 1,
-                                  borderRadius: 2,
-                                  border: "1px solid #bfdbfe",
-                                  cursor: incharges !== "-" ? "pointer" : "default",
-                                  transition: "all 0.15s ease",
-                                  "&:hover": incharges !== "-" ? {
-                                    transform: "translateY(-1px)",
-                                    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-                                    borderColor: "#3b82f6",
-                                  } : {},
-                                }}
-                              >
-                                <Stack direction="row" spacing={0.6} alignItems="center">
-                                  <PersonRounded sx={{ fontSize: 15, color: "#2563eb" }} />
-                                  <Typography variant="caption" sx={{ color: "#1e40af", fontWeight: 700, fontSize: "0.7rem" }}>
-                                    Incharge(s)
-                                  </Typography>
-                                </Stack>
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    fontWeight: 700,
-                                    color: "#0f2f57",
-                                    mt: 0.2,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                    fontSize: "0.82rem",
-                                  }}
-                                >
-                                  {incharges}
-                                </Typography>
-                              </Box>
-                            </Grid>
-                          </Grid>
+                                {submittedBy}
+                              </Typography>
+                            </Tooltip>
+                          </Box>
                         </Grid>
 
                         {/* Right: Actions */}
@@ -2910,9 +3006,9 @@ export default function WorkRegister() {
                                 borderRadius: 2,
                                 textTransform: "none",
                                 fontWeight: 700,
-                                bgcolor: "#004792",
+                                bgcolor: isDark ? "#2563eb" : "#004792",
                                 boxShadow: "0 2px 8px rgba(0, 71, 146, 0.3)",
-                                "&:hover": { bgcolor: "#003366" },
+                                "&:hover": { bgcolor: isDark ? "#1d4ed8" : "#003366" },
                               }}
                             >
                               Download PDF
@@ -2920,9 +3016,9 @@ export default function WorkRegister() {
                             <IconButton
                               onClick={() => toggleRow(row._id)}
                               sx={{
-                                bgcolor: "#f1f5f9",
-                                color: "#334155",
-                                "&:hover": { bgcolor: "#e2e8f0" },
+                                bgcolor: isDark ? "rgba(255, 255, 255, 0.08)" : "#f1f5f9",
+                                color: isDark ? "#f8fafc" : "#334155",
+                                "&:hover": { bgcolor: isDark ? "rgba(255, 255, 255, 0.15)" : "#e2e8f0" },
                               }}
                             >
                               {isExpanded ? <ExpandLessRounded /> : <ExpandMoreRounded />}
@@ -2934,71 +3030,71 @@ export default function WorkRegister() {
 
                     {/* EXPANDED CONTENT */}
                     <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                      <CardContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: isDark ? "#0b1120" : "#ffffff" }}>
                         {/* SECTION 1: PROJECTS TABLE WITH DATE AND TIME */}
                         <Box sx={{ mb: 3.5 }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#0f2f57", mb: 1.5 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: isDark ? "#f8fafc" : "#0f2f57", mb: 1.5 }}>
                             Projects Execution Breakdown ({projectCount})
                           </Typography>
-                          <TableContainer component={Paper} elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 2 }}>
+                          <TableContainer component={Paper} elevation={0} sx={{ border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0", borderRadius: 2, bgcolor: isDark ? "#090d16" : "#ffffff" }}>
                             <Table size="small">
-                              <TableHead sx={{ bgcolor: "#004792" }}>
+                              <TableHead sx={{ bgcolor: isDark ? "#1d4ed8" : "#004792" }}>
                                 <TableRow>
-                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>#</TableCell>
-                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Time</TableCell>
-                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Project Type</TableCell>
-                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Consumer Name</TableCell>
-                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>A/C No.</TableCell>
-                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Capacity</TableCell>
-                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Install Day</TableCell>
-                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Supervisor</TableCell>
-                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Incharge(s)</TableCell>
-                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Location</TableCell>
-                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem" }}>Report</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }}>#</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }}>Time</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }}>Project Type</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }}>Consumer Name</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }}>A/C No.</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }}>Capacity</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }}>Install Day</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }}>Supervisor</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }}>Incharge(s)</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }}>Location</TableCell>
+                                  <TableCell sx={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", borderColor: isDark ? "rgba(255,255,255,0.08)" : undefined }}>Report</TableCell>
                                 </TableRow>
                               </TableHead>
                               <TableBody>
                                 {(row.projects || []).map((project, idx) => (
-                                  <TableRow key={project._id || idx} hover sx={{ "&:nth-of-type(even)": { bgcolor: "#f8fafc" } }}>
-                                    <TableCell sx={{ fontWeight: 700 }}>{idx + 1}</TableCell>
-                                    <TableCell sx={{ whiteSpace: "nowrap", fontSize: "0.8rem", color: "#64748b", fontWeight: 700 }}>
+                                  <TableRow key={project._id || idx} hover sx={{ "&:nth-of-type(even)": { bgcolor: isDark ? "rgba(255, 255, 255, 0.02)" : "#f8fafc" } }}>
+                                    <TableCell sx={{ fontWeight: 700, color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>{idx + 1}</TableCell>
+                                    <TableCell sx={{ whiteSpace: "nowrap", fontSize: "0.8rem", color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700, borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       <Stack direction="row" spacing={0.5} alignItems="center">
-                                        <AccessTimeRounded sx={{ fontSize: 13, color: "#0284c7" }} />
+                                        <AccessTimeRounded sx={{ fontSize: 13, color: isDark ? "#38bdf8" : "#0284c7" }} />
                                         <span>{getProjectTimestamp(project, row)}</span>
                                       </Stack>
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell sx={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       <Chip
                                         size="small"
                                         label={text(project.projectType)}
                                         sx={{
                                           fontSize: "0.72rem",
                                           fontWeight: 700,
-                                          bgcolor: "#e0f2fe",
-                                          color: "#0369a1",
+                                          bgcolor: isDark ? "rgba(56, 189, 248, 0.15)" : "#e0f2fe",
+                                          color: isDark ? "#38bdf8" : "#0369a1",
                                         }}
                                       />
                                     </TableCell>
-                                    <TableCell sx={{ fontWeight: 700, color: "#0f2f57" }}>
+                                    <TableCell sx={{ fontWeight: 700, color: isDark ? "#f8fafc" : "#0f2f57", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       {text(project.consumerName || project.siteLocation)}
                                     </TableCell>
-                                    <TableCell sx={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
+                                    <TableCell sx={{ fontFamily: "monospace", fontSize: "0.8rem", color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       {text(project.consumerAccountNo)}
                                     </TableCell>
-                                    <TableCell>{text(project.capacityKw ? `${project.capacityKw} KW` : "-")}</TableCell>
-                                    <TableCell>{text(project.installationDay ? `${project.installationDay} Days` : "-")}</TableCell>
-                                    <TableCell sx={{ fontWeight: 600, color: "#854d0e" }}>
+                                    <TableCell sx={{ color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>{text(project.capacityKw ? `${project.capacityKw} KW` : "-")}</TableCell>
+                                    <TableCell sx={{ color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>{text(project.installationDay ? `${project.installationDay} Days` : "-")}</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, color: isDark ? "#fde047" : "#854d0e", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       {personName(project.supervisor)}
                                     </TableCell>
-                                    <TableCell sx={{ fontWeight: 700, color: "#1d4ed8" }}>
+                                    <TableCell sx={{ fontWeight: 700, color: isDark ? "#60a5fa" : "#1d4ed8", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       {inchargeNames(project)}
                                     </TableCell>
-                                    <TableCell sx={{ maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    <TableCell sx={{ maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       <Tooltip title={text(project.address || project.siteLocation || project.gpsLocation?.address)}>
                                         <span>{text(project.address || project.siteLocation || project.gpsLocation?.address)}</span>
                                       </Tooltip>
                                     </TableCell>
-                                    <TableCell sx={{ maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    <TableCell sx={{ maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: isDark ? "#cbd5e1" : "inherit", borderColor: isDark ? "rgba(255,255,255,0.06)" : undefined }}>
                                       <Tooltip title={text(project.report)}>
                                         <span>{text(project.report)}</span>
                                       </Tooltip>
@@ -3014,7 +3110,7 @@ export default function WorkRegister() {
                         <Box>
                           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
                             <FmdGoodRounded sx={{ color: "#ef4444", fontSize: 20 }} />
-                            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#0f2f57" }}>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: isDark ? "#f8fafc" : "#0f2f57" }}>
                               Site Geo-Tagged Photographs ({allPhotos.length})
                             </Typography>
                           </Stack>
@@ -3025,11 +3121,11 @@ export default function WorkRegister() {
                                 p: 3,
                                 textAlign: "center",
                                 borderRadius: 2,
-                                bgcolor: "#f8fafc",
-                                border: "1px dashed #cbd5e1",
+                                bgcolor: isDark ? "#090d16" : "#f8fafc",
+                                border: isDark ? "1px dashed rgba(255, 255, 255, 0.15)" : "1px dashed #cbd5e1",
                               }}
                             >
-                              <Typography variant="body2" sx={{ color: "#94a3b8" }}>
+                              <Typography variant="body2" sx={{ color: isDark ? "#64748b" : "#94a3b8" }}>
                                 No geo-tagged site images uploaded for this worksheet.
                               </Typography>
                             </Box>
@@ -3046,13 +3142,13 @@ export default function WorkRegister() {
                                       elevation={0}
                                       sx={{
                                         borderRadius: 2.5,
-                                        border: "1px solid #e2e8f0",
-                                        bgcolor: "#ffffff",
+                                        border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+                                        bgcolor: isDark ? "#0e1424" : "#ffffff",
                                         overflow: "hidden",
                                         transition: "transform 0.15s ease, box-shadow 0.15s ease",
                                         "&:hover": {
                                           transform: "translateY(-3px)",
-                                          boxShadow: "0 8px 24px rgba(15, 23, 42, 0.1)",
+                                          boxShadow: isDark ? "0 8px 24px rgba(0, 0, 0, 0.4)" : "0 8px 24px rgba(15, 23, 42, 0.1)",
                                         },
                                       }}
                                     >
@@ -3096,20 +3192,20 @@ export default function WorkRegister() {
                                       </Box>
 
                                       <Box sx={{ p: 1.8 }}>
-                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "#0f2f57", lineHeight: 1.2 }}>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: isDark ? "#f8fafc" : "#0f2f57", lineHeight: 1.2 }}>
                                           {photo.projectName}
                                         </Typography>
-                                        <Typography variant="caption" sx={{ color: "#64748b", display: "block", mt: 0.4 }}>
-                                          Incharge(s): <strong style={{ color: "#1d4ed8" }}>{photo.incharge}</strong>
+                                        <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", display: "block", mt: 0.4 }}>
+                                          Incharge(s): <strong style={{ color: isDark ? "#60a5fa" : "#1d4ed8" }}>{photo.incharge}</strong>
                                         </Typography>
                                         {photo.address && (
                                           <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.3 }}>
-                                            <FmdGoodRounded sx={{ fontSize: 13, color: "#64748b", flexShrink: 0 }} />
+                                            <FmdGoodRounded sx={{ fontSize: 13, color: isDark ? "#94a3b8" : "#64748b", flexShrink: 0 }} />
                                             <Typography
                                               variant="caption"
                                               noWrap
                                               sx={{
-                                                color: "#475569",
+                                                color: isDark ? "#cbd5e1" : "#475569",
                                                 display: "block",
                                               }}
                                             >
@@ -3119,8 +3215,8 @@ export default function WorkRegister() {
                                         )}
                                         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1.2 }}>
                                           <Stack direction="row" spacing={0.5} alignItems="center">
-                                            <AccessTimeRounded sx={{ fontSize: 13, color: "#0284c7" }} />
-                                            <Typography variant="caption" sx={{ color: "#0284c7", fontSize: "0.72rem", fontWeight: 700 }}>
+                                            <AccessTimeRounded sx={{ fontSize: 13, color: isDark ? "#38bdf8" : "#0284c7" }} />
+                                            <Typography variant="caption" sx={{ color: isDark ? "#38bdf8" : "#0284c7", fontSize: "0.72rem", fontWeight: 700 }}>
                                               {formatDate(photo.capturedAt)} {formatTime(photo.capturedAt)}
                                             </Typography>
                                           </Stack>
@@ -3129,7 +3225,7 @@ export default function WorkRegister() {
                                             variant="text"
                                             startIcon={<OpenInNewRounded sx={{ fontSize: "14px !important" }} />}
                                             onClick={() => setPreviewPhoto(photo)}
-                                            sx={{ fontSize: "0.75rem", p: 0.3, textTransform: "none", fontWeight: 700 }}
+                                            sx={{ fontSize: "0.75rem", p: 0.3, textTransform: "none", fontWeight: 700, color: isDark ? "#60a5fa" : "#004792" }}
                                           >
                                             Inspect
                                           </Button>
@@ -3159,14 +3255,19 @@ export default function WorkRegister() {
         maxWidth="md"
         fullWidth
         PaperProps={{
-          sx: { borderRadius: 3, overflow: "hidden" },
+          sx: {
+            borderRadius: 3,
+            overflow: "hidden",
+            bgcolor: isDark ? "#0e1424" : "#ffffff",
+            border: isDark ? "1px solid rgba(255, 255, 255, 0.1)" : "none",
+          },
         }}
       >
         {previewPhoto && (
           <>
             <DialogTitle
               sx={{
-                bgcolor: "#004792",
+                bgcolor: isDark ? "#1d4ed8" : "#004792",
                 color: "#ffffff",
                 p: 2,
                 display: "flex",
@@ -3197,47 +3298,47 @@ export default function WorkRegister() {
                   bgcolor: "#0f172a",
                 }}
               />
-              <Box sx={{ p: 2.5, bgcolor: "#ffffff" }}>
+              <Box sx={{ p: 2.5, bgcolor: isDark ? "#0e1424" : "#ffffff" }}>
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
-                    <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700 }}>
+                    <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700 }}>
                       CONSUMER & PROJECT
                     </Typography>
-                    <Typography variant="body1" sx={{ fontWeight: 800, color: "#0f2f57" }}>
+                    <Typography variant="body1" sx={{ fontWeight: 800, color: isDark ? "#f8fafc" : "#0f2f57" }}>
                       {previewPhoto.projectName}
                     </Typography>
-                    <Typography variant="body2" sx={{ color: "#475569" }}>
+                    <Typography variant="body2" sx={{ color: isDark ? "#cbd5e1" : "#475569" }}>
                       A/C No: {previewPhoto.consumerAccountNo || "N/A"} • Type: {previewPhoto.projectType || "General"}
                     </Typography>
                   </Grid>
 
                   <Grid item xs={12} sm={6}>
-                    <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700 }}>
+                    <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700 }}>
                       ASSIGNED PERSONNEL (WHO IS WHO)
                     </Typography>
-                    <Typography variant="body2" sx={{ color: "#0f2f57" }}>
+                    <Typography variant="body2" sx={{ color: isDark ? "#f8fafc" : "#0f2f57" }}>
                       <strong>Supervisor:</strong> {previewPhoto.supervisor}
                     </Typography>
-                    <Typography variant="body2" sx={{ color: "#1d4ed8", fontWeight: 700 }}>
+                    <Typography variant="body2" sx={{ color: isDark ? "#60a5fa" : "#1d4ed8", fontWeight: 700 }}>
                       <strong>Incharge(s):</strong> {previewPhoto.incharge}
                     </Typography>
                   </Grid>
 
                   <Grid item xs={12}>
-                    <Divider sx={{ my: 0.5 }} />
+                    <Divider sx={{ my: 0.5, borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : undefined }} />
                   </Grid>
 
                   <Grid item xs={12} sm={8}>
-                    <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700 }}>
+                    <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700 }}>
                       GPS LOCATION & ADDRESS
                     </Typography>
-                    <Typography variant="body2" sx={{ color: "#0f2f57", fontWeight: 600 }}>
+                    <Typography variant="body2" sx={{ color: isDark ? "#f8fafc" : "#0f2f57", fontWeight: 600 }}>
                       📍{" "}
                       {previewPhoto.latitude && previewPhoto.longitude
                         ? `${Number(previewPhoto.latitude).toFixed(6)}° N, ${Number(previewPhoto.longitude).toFixed(6)}° E`
                         : "Coordinates unavailable"}
                     </Typography>
-                    <Typography variant="body2" sx={{ color: "#64748b", mt: 0.3 }}>
+                    <Typography variant="body2" sx={{ color: isDark ? "#94a3b8" : "#64748b", mt: 0.3 }}>
                       {previewPhoto.address || "Field Site Location"}
                     </Typography>
                   </Grid>
@@ -3256,6 +3357,12 @@ export default function WorkRegister() {
                           borderRadius: 2,
                           textTransform: "none",
                           fontWeight: 700,
+                          color: isDark ? "#60a5fa" : "#004792",
+                          borderColor: isDark ? "rgba(96, 165, 250, 0.4)" : "#004792",
+                          "&:hover": {
+                            borderColor: isDark ? "#60a5fa" : "#003366",
+                            bgcolor: isDark ? "rgba(96, 165, 250, 0.08)" : "transparent",
+                          },
                         }}
                       >
                         Open in Google Maps

@@ -4,7 +4,8 @@ import {
   Box, Typography, Button, Chip, IconButton, Tooltip, alpha,
   useTheme, useMediaQuery, CircularProgress, Alert, Skeleton,
   SwipeableDrawer, Badge, Checkbox, FormControlLabel, Avatar,
-  Slider, ButtonBase,
+  Slider, ButtonBase, Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, Snackbar,
 } from "@mui/material";
 import {
   LocationOn, Refresh, MyLocation, FilterList,
@@ -35,8 +36,73 @@ const KNOWN_BACKEND_HOSTS = new Set([
   "localhost",
   "127.0.0.1",
   "::1",
+  "10.0.2.2",
   ...KNOWN_API_HOSTS,
 ]);
+
+const isBackendHost = (hostname) => {
+  if (!hostname) return false;
+  const h = String(hostname).toLowerCase().trim();
+  if (KNOWN_BACKEND_HOSTS.has(h)) return true;
+  if (h.endsWith("onrender.com")) return true;
+  if (/^192\.168\.\d+\.\d+$/.test(h)) return true;
+  if (/^10\.\d+\.\d+\.\d+$/.test(h)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(h)) return true;
+  return false;
+};
+
+const getTripStartPhoto = (trip) => {
+  if (!trip) return null;
+  return (
+    trip.startKmImage ||
+    trip.startKmImageUri ||
+    trip.startImage ||
+    trip.startOdometerPhoto ||
+    trip.startOdometerImage ||
+    trip.startPhoto ||
+    trip.startPhotoUrl ||
+    trip.startReadingPhoto ||
+    trip.startReadingImage ||
+    trip.startKmPhoto ||
+    trip.startMeterPhoto ||
+    trip.odometerPhoto ||
+    trip.meterPhoto ||
+    trip.photo ||
+    trip.photos?.start ||
+    trip.photos?.startKm ||
+    trip.startKm?.photo ||
+    trip.startKm?.image ||
+    trip.punchIn?.odometerPhoto ||
+    trip.punchIn?.photo ||
+    trip.punchInPhoto ||
+    null
+  );
+};
+
+const getTripEndPhoto = (trip) => {
+  if (!trip) return null;
+  return (
+    trip.endKmImage ||
+    trip.endKmImageUri ||
+    trip.endImage ||
+    trip.endOdometerPhoto ||
+    trip.endOdometerImage ||
+    trip.endPhoto ||
+    trip.endPhotoUrl ||
+    trip.endReadingPhoto ||
+    trip.endReadingImage ||
+    trip.endKmPhoto ||
+    trip.endMeterPhoto ||
+    trip.photos?.end ||
+    trip.photos?.endKm ||
+    trip.endKm?.photo ||
+    trip.endKm?.image ||
+    trip.punchOut?.odometerPhoto ||
+    trip.punchOut?.photo ||
+    trip.punchOutPhoto ||
+    null
+  );
+};
 
 const PRIMARY = "#0f1f3d";
 const SUCCESS = "#22c55e";
@@ -108,13 +174,17 @@ const getBatteryChipStyle = (percentage, isDark = false) => {
 
 const apiFetch = async (path, params = {}, options = {}) => {
   const token = localStorage.getItem("token") || localStorage.getItem("authToken") || localStorage.getItem("accessToken");
+  const method = (options.method || "GET").toUpperCase();
   const url   = new URL(`${BASE_URL}${path}`);
-  if (options.method !== "POST")
+  const isBodyMethod = method === "POST" || method === "PUT" || method === "PATCH";
+  if (!isBodyMethod) {
     Object.entries(params).forEach(([k, v]) => v != null && v !== "" && url.searchParams.set(k, v));
+  }
+  const bodyPayload = options.body !== undefined ? options.body : params;
   const res = await fetch(url.toString(), {
-    method:  options.method || "GET",
+    method,
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    ...(options.method === "POST" ? { body: JSON.stringify(params) } : {}),
+    ...(isBodyMethod && bodyPayload !== undefined ? { body: JSON.stringify(bodyPayload) } : {}),
   });
   if (!res.ok) {
     if (res.status === 404 && options.ignoreNotFound) return null;
@@ -173,38 +243,32 @@ const normalizePhotoUrl = (rawUrl) => {
     return withoutApiPrefix;
   }
 
-  if (withoutApiPrefix.startsWith("/public/")) {
-    return `${BACKEND_ORIGIN}${withoutApiPrefix}`;
-  }
-
-  if (withoutApiPrefix.startsWith("/uploads/")) {
-    return `${BACKEND_ORIGIN}/public${withoutApiPrefix}`;
-  }
-
-  if (withoutApiPrefix.startsWith("/")) {
-    return `${BACKEND_ORIGIN}${withoutApiPrefix}`;
-  }
-
-  if (!/^https?:\/\//i.test(withoutApiPrefix)) {
-    const cleanPath = withoutApiPrefix.replace(/^\/+/, "");
-    const pathWithoutApi = cleanPath.replace(/^api\/v1\//i, "");
-    return `${BACKEND_ORIGIN}/${pathWithoutApi.startsWith("uploads/") ? "public/" : ""}${pathWithoutApi}`;
-  }
-
-  try {
-    const parsedUrl = new URL(withoutApiPrefix);
-    const pathname = parsedUrl.pathname.replace(/^\/api\/v1(?=\/)/i, "");
-    if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname) && pathname.startsWith("/uploads/")) {
-      return `${parsedUrl.origin}/public${pathname}`;
+  if (/^https?:\/\//i.test(withoutApiPrefix)) {
+    try {
+      const parsedUrl = new URL(withoutApiPrefix.replace("/public/public/", "/public/"));
+      const pathname = parsedUrl.pathname.replace(/^\/?api\/v1(?=\/)/i, "");
+      if (isBackendHost(parsedUrl.hostname)) {
+        const publicPath = pathname.startsWith("/uploads/")
+          ? `/public${pathname}`
+          : pathname.startsWith("/public/")
+          ? pathname
+          : `/public/${pathname.replace(/^\/+/, "")}`;
+        return `${BACKEND_ORIGIN}${publicPath}`;
+      }
+      return parsedUrl.toString();
+    } catch {
+      return withoutApiPrefix;
     }
-    if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname) && pathname.startsWith("/public/")) {
-      return `${parsedUrl.origin}${pathname}`;
-    }
-    parsedUrl.pathname = pathname;
-    return parsedUrl.toString();
-  } catch {
-    return withoutApiPrefix;
   }
+
+  const cleanPath = withoutApiPrefix.replace(/^\/+/, "").replace("/public/public/", "/public/");
+  if (cleanPath.startsWith("public/")) {
+    return `${BACKEND_ORIGIN}/${cleanPath}`;
+  }
+  if (cleanPath.startsWith("uploads/")) {
+    return `${BACKEND_ORIGIN}/public/${cleanPath}`;
+  }
+  return `${BACKEND_ORIGIN}/public/${cleanPath}`;
 };
 
 const extractPhotoValue = (photoLike) => {
@@ -229,62 +293,103 @@ const extractPhotoValue = (photoLike) => {
   );
 };
 
-const getPhotoUrlCandidates = (rawPhoto) => {
-  const primaryUrl = normalizePhotoUrl(extractPhotoValue(rawPhoto));
-  if (!primaryUrl) return [];
+export const normalizeTrip = (t) => {
+  if (!t) return t;
+  const isStartManual = Boolean(
+    t.isManualStartKm ||
+    (t.manualStartKm !== undefined && t.manualStartKm !== null && String(t.manualStartKm).trim() !== "")
+  );
+  const isEndManual = Boolean(
+    t.isManualEndKm ||
+    (t.manualEndKm !== undefined && t.manualEndKm !== null && String(t.manualEndKm).trim() !== "")
+  );
 
-  const candidates = [primaryUrl];
-  const pushBackendPaths = (pathname) => {
-    const normalizedPath = pathname
-      .replace(/\\/g, "/")
-      .replace(/^\/+/, "")
-      .replace(/^api\/v1\//i, "");
-    if (!normalizedPath) return;
+  const startVal = isStartManual && t.manualStartKm !== undefined && t.manualStartKm !== null && String(t.manualStartKm).trim() !== ""
+    ? Number(t.manualStartKm)
+    : (Number(t.startKm) || 0);
 
-    const filename = normalizedPath.split("/").filter(Boolean).pop();
-    const pathVariants = [
-      `/${normalizedPath}`,
-      normalizedPath.startsWith("public/") ? `/${normalizedPath}` : `/public/${normalizedPath}`,
-    ];
+  const endVal = isEndManual && t.manualEndKm !== undefined && t.manualEndKm !== null && String(t.manualEndKm).trim() !== ""
+    ? Number(t.manualEndKm)
+    : (t.endKm !== undefined && t.endKm !== null ? Number(t.endKm) : (t.status === "completed" ? startVal : 0));
 
-    if (normalizedPath.startsWith("uploads/")) {
-      pathVariants.push(`/public/${normalizedPath}`);
-    }
+  const totalDiff = t.totalKm !== undefined && Number(t.totalKm) > 0
+    ? Number(t.totalKm)
+    : Math.max(0, endVal - startVal);
 
-    if (filename) {
-      pathVariants.push(
-        `/public/${filename}`,
-        `/public/uploads/${filename}`,
-        `/public/uploads/images/${filename}`,
-        `/uploads/${filename}`,
-        `/uploads/images/${filename}`,
-      );
-    }
-
-    PHOTO_BACKEND_ORIGINS.forEach((origin) => {
-      pathVariants.forEach((path) => candidates.push(`${origin}${path}`));
-    });
+  return {
+    ...t,
+    startKm: startVal,
+    endKm: endVal,
+    totalKm: totalDiff,
+    isManualStartKm: isStartManual,
+    isManualEndKm: isEndManual,
   };
+};
+
+const getPhotoUrlCandidates = (rawPhoto) => {
+  const photoVal = extractPhotoValue(rawPhoto);
+  if (!photoVal) return [];
+
+  const primaryUrl = normalizePhotoUrl(photoVal);
+  const candidates = [];
+  if (primaryUrl) candidates.push(primaryUrl);
+
+  const cleanVal = String(photoVal).trim().replace(/\\/g, "/");
+  let pathname = "";
+  let originalUrl = null;
 
   try {
-    const parsedUrl = new URL(primaryUrl);
-    const normalizedPathname = parsedUrl.pathname.replace(/^\/api\/v1(?=\/)/i, "");
-    if (
-      KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname) &&
-      (normalizedPathname.startsWith("/public/") || normalizedPathname.startsWith("/uploads/"))
-    ) {
-      const publicPath = normalizedPathname.startsWith("/uploads/")
-        ? `/public${normalizedPathname}`
-        : normalizedPathname;
-      PHOTO_BACKEND_ORIGINS.forEach((origin) => {
-        candidates.push(`${origin}${publicPath}`);
-      });
-    }
-    if (KNOWN_BACKEND_HOSTS.has(parsedUrl.hostname)) {
-      pushBackendPaths(parsedUrl.pathname.replace(/^\/api\/v1(?=\/)/i, ""));
+    if (/^https?:\/\//i.test(cleanVal)) {
+      const parsed = new URL(cleanVal);
+      pathname = parsed.pathname.replace(/^\/?api\/v1(?=\/)/i, "");
+      originalUrl = cleanVal;
+    } else {
+      pathname = cleanVal.replace(/^\/?api\/v1(?=\/)/i, "");
     }
   } catch {
-    pushBackendPaths(primaryUrl);
+    pathname = cleanVal;
+  }
+
+  const cleanPath = pathname.replace(/^\/+/, "").replace(/^public\//, "");
+  const filename = cleanPath.split("/").filter(Boolean).pop();
+
+  const pathVariants = [
+    `/${cleanPath}`,
+    `/public/${cleanPath}`,
+    `/public/uploads/${cleanPath}`,
+    `/uploads/${cleanPath}`,
+  ];
+
+  if (cleanPath.startsWith("uploads/")) {
+    pathVariants.push(`/public/${cleanPath}`);
+  }
+
+  if (filename) {
+    pathVariants.push(
+      `/public/${filename}`,
+      `/public/uploads/${filename}`,
+      `/public/uploads/images/${filename}`,
+      `/public/uploads/odometer/${filename}`,
+      `/public/uploads/odometer-temp/${filename}`,
+      `/uploads/${filename}`,
+      `/uploads/images/${filename}`
+    );
+  }
+
+  pathVariants.forEach((pv) => {
+    candidates.push(`${BACKEND_ORIGIN}${pv}`);
+  });
+
+  PHOTO_BACKEND_ORIGINS.forEach((origin) => {
+    if (origin && origin !== BACKEND_ORIGIN) {
+      pathVariants.forEach((pv) => {
+        candidates.push(`${origin}${pv}`);
+      });
+    }
+  });
+
+  if (originalUrl) {
+    candidates.push(originalUrl);
   }
 
   return candidates.filter((url, index, list) => url && list.indexOf(url) === index);
@@ -1005,6 +1110,7 @@ const TripOdometerPointBox = ({
   onOpenPreview,
   tripInfo,
   isOngoing = false,
+  onEditTrip,
 }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
@@ -1116,7 +1222,7 @@ const TripOdometerPointBox = ({
       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
         {currentUrl ? (
           <Box
-            onClick={() => onOpenPreview && onOpenPreview({ title: tagLabel, km, url: currentUrl, time, location, tripInfo })}
+            onClick={() => onOpenPreview && onOpenPreview({ title: tagLabel, km, url: currentUrl || (candidates && candidates[0]) || null, candidates, photoPath, time, location, tripInfo })}
             sx={{
               width: 52,
               height: 52,
@@ -1196,25 +1302,61 @@ const TripOdometerPointBox = ({
 
       {/* Details (Header, KM, Location) */}
       <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 0.3 }}>
-        {/* Top Header: Tag Label + Time */}
+        {/* Top Header: Tag Label + Time + Edit Button */}
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
           <Typography sx={{ fontWeight: 800, fontSize: "0.76rem", color: headerColor }}>
             {tagLabel}
           </Typography>
-          {time && (
-            <Typography sx={{ fontWeight: 700, fontSize: "0.72rem", color: textSub }}>
-              {fmt(time)}
-            </Typography>
-          )}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.6 }}>
+            {time && (
+              <Typography sx={{ fontWeight: 700, fontSize: "0.72rem", color: textSub }}>
+                {fmt(time)}
+              </Typography>
+            )}
+            {onEditTrip && (
+              <Tooltip title="Edit this trip's KM reading">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditTrip(tripInfo);
+                  }}
+                  sx={{
+                    width: 20,
+                    height: 20,
+                    p: 0,
+                    color: textSub,
+                    "&:hover": { color: "#2563eb", bgcolor: "rgba(37,99,235,0.12)" },
+                  }}
+                >
+                  <Edit sx={{ fontSize: 12 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
         </Box>
 
-        {/* Bold KM + Manual / AI Scanned Badge */}
+        {/* Bold KM + Written Manually / AI Scanned Badge */}
         {(() => {
           const isStart = tagLabel && String(tagLabel).includes("START");
-          const isManual = isStart
-            ? Boolean(tripInfo?.isManualStartKm || (tripInfo?.manualStartKm !== undefined && tripInfo?.manualStartKm !== null && String(tripInfo?.manualStartKm).trim() !== ""))
-            : Boolean(tripInfo?.isManualEndKm || (tripInfo?.manualEndKm !== undefined && tripInfo?.manualEndKm !== null && String(tripInfo?.manualEndKm).trim() !== ""));
+          const isAdminEdited = Boolean(tripInfo?.isAdminEdited);
           const aiKm = isStart ? tripInfo?.aiDetectedStartKm : tripInfo?.aiDetectedEndKm;
+          const manualVal = isStart ? tripInfo?.manualStartKm : tripInfo?.manualEndKm;
+          const isManual = isStart
+            ? Boolean(
+                tripInfo?.isManualStartKm ||
+                (manualVal !== undefined && manualVal !== null && String(manualVal).trim() !== "") ||
+                (aiKm !== undefined && aiKm !== null && String(aiKm).trim() !== "" && Number(aiKm) !== Number(km))
+              )
+            : Boolean(
+                tripInfo?.isManualEndKm ||
+                (manualVal !== undefined && manualVal !== null && String(manualVal).trim() !== "") ||
+                (aiKm !== undefined && aiKm !== null && String(aiKm).trim() !== "" && Number(aiKm) !== Number(km))
+              );
+
+          const effectiveKm = isManual && manualVal !== undefined && manualVal !== null && String(manualVal).trim() !== ""
+            ? Number(manualVal)
+            : Number(km || 0);
 
           return (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.2 }}>
@@ -1229,52 +1371,80 @@ const TripOdometerPointBox = ({
                     lineHeight: 1.15,
                   }}
                 >
-                  {Number(km || 0).toLocaleString("en-IN")}{" "}
+                  {Number(effectiveKm || 0).toLocaleString("en-IN")}{" "}
                   <Typography component="span" sx={{ fontSize: "0.70rem", fontWeight: 700, color: textSub }}>
                     KM
                   </Typography>
                 </Typography>
 
-                {isManual ? (
+                {isAdminEdited ? (
                   <Chip
-                    icon={<Edit sx={{ fontSize: "10px !important", color: isDark ? "#fbbf24" : "#92400e" }} />}
-                    label="Manual Entry"
+                    icon={<Edit sx={{ fontSize: "10px !important", color: isDark ? "#c4b5fd" : "#6d28d9" }} />}
+                    label="Admin Edited"
                     size="small"
                     sx={{
-                      height: 19,
-                      bgcolor: isDark ? "rgba(245, 158, 11, 0.22)" : "#fef3c7",
+                      height: 20,
+                      bgcolor: isDark ? "rgba(167, 139, 250, 0.22)" : "#ede9fe",
+                      color: isDark ? "#c4b5fd" : "#6d28d9",
+                      fontWeight: 800,
+                      fontSize: "0.64rem",
+                      borderRadius: "6px",
+                      border: "1px solid rgba(139, 92, 246, 0.45)",
+                      px: 0.3,
+                      "& .MuiChip-icon": { ml: "4px", mr: "-4px" },
+                    }}
+                  />
+                ) : isManual ? (
+                  <Chip
+                    icon={<Edit sx={{ fontSize: "11px !important", color: isDark ? "#f59e0b" : "#b45309" }} />}
+                    label="✍️ Written Manually"
+                    size="small"
+                    sx={{
+                      height: 22,
+                      bgcolor: isDark ? "rgba(245, 158, 11, 0.28)" : "#fef3c7",
                       color: isDark ? "#fbbf24" : "#92400e",
                       fontWeight: 800,
-                      fontSize: "0.62rem",
+                      fontSize: "0.68rem",
                       borderRadius: "6px",
-                      border: "1px solid rgba(245, 158, 11, 0.5)",
-                      px: 0.2,
+                      border: "1.5px solid rgba(245, 158, 11, 0.65)",
+                      px: 0.4,
                       "& .MuiChip-icon": { ml: "4px", mr: "-4px" },
                     }}
                   />
                 ) : (
                   <Chip
-                    icon={<CheckCircle sx={{ fontSize: "10px !important", color: isDark ? "#34d399" : "#166534" }} />}
-                    label="AI Scanned"
+                    icon={<CheckCircle sx={{ fontSize: "11px !important", color: isDark ? "#34d399" : "#166534" }} />}
+                    label="🤖 AI Scanned"
                     size="small"
                     sx={{
-                      height: 19,
+                      height: 22,
                       bgcolor: isDark ? "rgba(34, 197, 94, 0.15)" : "#dcfce7",
                       color: isDark ? "#34d399" : "#166534",
                       fontWeight: 800,
-                      fontSize: "0.62rem",
+                      fontSize: "0.68rem",
                       borderRadius: "6px",
                       border: "1px solid rgba(34, 197, 94, 0.35)",
-                      px: 0.2,
+                      px: 0.4,
                       "& .MuiChip-icon": { ml: "4px", mr: "-4px" },
                     }}
                   />
                 )}
               </Box>
 
-              {isManual && aiKm && String(aiKm) !== String(km) && (
+              {/* Subtitles: Clear identification for Admin */}
+              {isAdminEdited && tripInfo?.adminEditNote && (
+                <Typography sx={{ fontSize: "0.63rem", color: isDark ? "#c4b5fd" : "#6d28d9", fontWeight: 700 }}>
+                  Admin Note: {tripInfo.adminEditNote}
+                </Typography>
+              )}
+              {isManual && aiKm && String(aiKm) !== String(effectiveKm) && (
                 <Typography sx={{ fontSize: "0.63rem", color: isDark ? "#fbbf24" : "#b45309", fontWeight: 700 }}>
-                  AI detected: {Number(aiKm).toLocaleString("en-IN")} KM
+                  ⚠️ User wrote manually (AI detected: {Number(aiKm).toLocaleString("en-IN")} KM)
+                </Typography>
+              )}
+              {isManual && (!aiKm || String(aiKm) === String(effectiveKm)) && !isAdminEdited && (
+                <Typography sx={{ fontSize: "0.63rem", color: isDark ? "#fbbf24" : "#b45309", fontWeight: 600 }}>
+                  ✏️ User entered manually
                 </Typography>
               )}
             </Box>
@@ -1304,7 +1474,7 @@ const TripOdometerPointBox = ({
 };
 
 // ─── Individual Trip Card (Matching User Screenshot) ────────────────────────
-const TripItemCardExact = ({ trip, index, onOpenPreview, onShowOnMap }) => {
+const TripItemCardExact = ({ trip, index, onOpenPreview, onShowOnMap, onEditTrip }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const textTitle = isDark ? "#ffffff" : "#0f172a";
@@ -1317,8 +1487,12 @@ const TripItemCardExact = ({ trip, index, onOpenPreview, onShowOnMap }) => {
   const isCompleted = trip.status === "completed";
   const isCancelled = trip.status === "cancelled";
   const isOngoing = trip.status === "in_progress" || (!isCompleted && !isCancelled);
-  const startKm = Number(trip.startKm) || 0;
-  const endKm = Number(trip.endKm) || (isCompleted ? startKm : 0);
+  const startKm = (trip.manualStartKm !== undefined && trip.manualStartKm !== null && String(trip.manualStartKm).trim() !== "")
+    ? Number(trip.manualStartKm)
+    : (Number(trip.startKm) || 0);
+  const endKm = (trip.manualEndKm !== undefined && trip.manualEndKm !== null && String(trip.manualEndKm).trim() !== "")
+    ? Number(trip.manualEndKm)
+    : (Number(trip.endKm) || (isCompleted ? startKm : 0));
   const diffKm = trip.totalKm !== undefined && Number(trip.totalKm) > 0
     ? Number(trip.totalKm)
     : Math.max(0, endKm - startKm);
@@ -1364,27 +1538,45 @@ const TripItemCardExact = ({ trip, index, onOpenPreview, onShowOnMap }) => {
           </Typography>
         </Box>
 
-        {/* Right: Status badge + Show on Map button */}
+        {/* Right: Status badge + Edit KM button + Show on Map button */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+          {trip.isAdminEdited && (
+            <Chip
+              icon={<Edit sx={{ fontSize: "11px !important", color: isDark ? "#c4b5fd" : "#6d28d9" }} />}
+              label="Admin Edited"
+              size="small"
+              sx={{
+                height: 22,
+                bgcolor: isDark ? "rgba(167, 139, 250, 0.22)" : "#ede9fe",
+                color: isDark ? "#c4b5fd" : "#6d28d9",
+                fontWeight: 800,
+                fontSize: "0.68rem",
+                borderRadius: "6px",
+                border: "1px solid rgba(139, 92, 246, 0.45)",
+                "& .MuiChip-icon": { ml: "4px", mr: "-4px" },
+              }}
+            />
+          )}
+
           {(trip.isManualStartKm || trip.isManualEndKm || trip.manualStartKm || trip.manualEndKm) && (
             <Chip
               icon={<Edit sx={{ fontSize: "11px !important", color: isDark ? "#fbbf24" : "#92400e" }} />}
               label={
                 (trip.isManualStartKm || trip.manualStartKm) && (trip.isManualEndKm || trip.manualEndKm)
-                  ? "Manual Start & End"
+                  ? "✍️ Written Manually (Start & End)"
                   : (trip.isManualStartKm || trip.manualStartKm)
-                  ? "Manual Start KM"
-                  : "Manual End KM"
+                  ? "✍️ Written Manually (Start)"
+                  : "✍️ Written Manually (End)"
               }
               size="small"
               sx={{
                 height: 22,
-                bgcolor: isDark ? "rgba(245, 158, 11, 0.22)" : "#fef3c7",
+                bgcolor: isDark ? "rgba(245, 158, 11, 0.28)" : "#fef3c7",
                 color: isDark ? "#fbbf24" : "#92400e",
                 fontWeight: 800,
                 fontSize: "0.68rem",
                 borderRadius: "6px",
-                border: "1px solid rgba(245, 158, 11, 0.45)",
+                border: "1.5px solid rgba(245, 158, 11, 0.65)",
                 "& .MuiChip-icon": { ml: "4px", mr: "-4px" },
               }}
             />
@@ -1406,6 +1598,33 @@ const TripItemCardExact = ({ trip, index, onOpenPreview, onShowOnMap }) => {
               border: `1px solid ${isDark ? (isCompleted ? palette.darkBorder : isCancelled ? "rgba(239,68,68,0.3)" : "rgba(37,99,235,0.3)") : (isCompleted ? palette.border : isCancelled ? "#fca5a5" : "#bfdbfe")}`,
             }}
           />
+
+          {/* Edit KM Button */}
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<Edit sx={{ fontSize: 13 }} />}
+            onClick={() => onEditTrip && onEditTrip(trip)}
+            sx={{
+              height: 22,
+              borderRadius: "6px",
+              textTransform: "none",
+              fontSize: "0.70rem",
+              fontWeight: 800,
+              color: isDark ? "#60a5fa" : "#2563eb",
+              bgcolor: isDark ? "rgba(37, 99, 235, 0.15)" : "#eff6ff",
+              borderColor: isDark ? "rgba(37, 99, 235, 0.4)" : "#bfdbfe",
+              py: 0,
+              px: 1,
+              "&:hover": {
+                borderColor: "#2563eb",
+                bgcolor: isDark ? "rgba(37, 99, 235, 0.25)" : "#dbeafe",
+                color: isDark ? "#93c5fd" : "#1d4ed8",
+              },
+            }}
+          >
+            Edit KM
+          </Button>
 
           <Button
             size="small"
@@ -1447,11 +1666,12 @@ const TripItemCardExact = ({ trip, index, onOpenPreview, onShowOnMap }) => {
           tagLabel={`TRIP START (T${tripNum}S)`}
           headerColor={palette.main}
           time={trip.startTime}
-          km={trip.startKm}
-          photoPath={trip.startKmImage || trip.startKmImageUri || trip.startImage}
+          km={startKm}
+          photoPath={getTripStartPhoto(trip)}
           location={trip.startLocation}
           onOpenPreview={onOpenPreview}
           tripInfo={trip}
+          onEditTrip={onEditTrip}
         />
 
         {/* Center Distance & Arrow Indicator */}
@@ -1495,12 +1715,13 @@ const TripItemCardExact = ({ trip, index, onOpenPreview, onShowOnMap }) => {
           tagLabel={`TRIP END (T${tripNum}E)`}
           headerColor={isCompleted ? (TRIP_COLOR_PALETTES[(index + 1) % TRIP_COLOR_PALETTES.length].main) : palette.main}
           time={trip.endTime}
-          km={trip.endKm}
-          photoPath={trip.endKmImage || trip.endKmImageUri || trip.endImage}
+          km={endKm}
+          photoPath={getTripEndPhoto(trip)}
           location={trip.endLocation}
           onOpenPreview={onOpenPreview}
           tripInfo={trip}
           isOngoing={!isCompleted}
+          onEditTrip={onEditTrip}
         />
       </Box>
     </Box>
@@ -1520,15 +1741,23 @@ const DailyTripsBreakdownCard = ({ trips }) => {
   const cardBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#e8edf2";
 
   const totalDayKm = trips.reduce((sum, t) => {
-    const s = Number(t.startKm) || 0;
-    const e = Number(t.endKm) || s;
+    const s = (t.manualStartKm !== undefined && t.manualStartKm !== null && String(t.manualStartKm).trim() !== "")
+      ? Number(t.manualStartKm)
+      : (Number(t.startKm) || 0);
+    const e = (t.manualEndKm !== undefined && t.manualEndKm !== null && String(t.manualEndKm).trim() !== "")
+      ? Number(t.manualEndKm)
+      : (t.endKm !== undefined ? Number(t.endKm) : s);
     const diff = t.totalKm !== undefined && Number(t.totalKm) > 0 ? Number(t.totalKm) : Math.max(0, e - s);
     return sum + diff;
   }, 0);
 
   const calcFormulaParts = trips.map((t, i) => {
-    const s = Number(t.startKm) || 0;
-    const e = Number(t.endKm) || s;
+    const s = (t.manualStartKm !== undefined && t.manualStartKm !== null && String(t.manualStartKm).trim() !== "")
+      ? Number(t.manualStartKm)
+      : (Number(t.startKm) || 0);
+    const e = (t.manualEndKm !== undefined && t.manualEndKm !== null && String(t.manualEndKm).trim() !== "")
+      ? Number(t.manualEndKm)
+      : (t.endKm !== undefined ? Number(t.endKm) : s);
     const diff = t.totalKm !== undefined && Number(t.totalKm) > 0 ? Number(t.totalKm) : Math.max(0, e - s);
     return `${diff} KM (T${i + 1})`;
   });
@@ -1573,8 +1802,12 @@ const DailyTripsBreakdownCard = ({ trips }) => {
       <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
         {trips.map((trip, i) => {
           const palette = TRIP_COLOR_PALETTES[i % TRIP_COLOR_PALETTES.length];
-          const startNum = Number(trip.startKm) || 0;
-          const endNum = Number(trip.endKm) || startNum;
+          const startNum = (trip.manualStartKm !== undefined && trip.manualStartKm !== null && String(trip.manualStartKm).trim() !== "")
+            ? Number(trip.manualStartKm)
+            : (Number(trip.startKm) || 0);
+          const endNum = (trip.manualEndKm !== undefined && trip.manualEndKm !== null && String(trip.manualEndKm).trim() !== "")
+            ? Number(trip.manualEndKm)
+            : (trip.endKm !== undefined ? Number(trip.endKm) : startNum);
           const diff = trip.totalKm !== undefined && Number(trip.totalKm) > 0 ? Number(trip.totalKm) : Math.max(0, endNum - startNum);
 
           return (
@@ -1666,11 +1899,382 @@ const DailyTripsBreakdownCard = ({ trips }) => {
   );
 };
 
+// ─── Admin Edit Trip Dialog ─────────────────────────────────────────────────
+const AdminEditTripDialog = ({ open, trip, onClose, onTripUpdated }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  const primaryColor = isDark ? "#60a5fa" : PRIMARY;
+  const textTitle = isDark ? "#ffffff" : "#0f172a";
+  const textSub = isDark ? "#94a3b8" : "#64748b";
+
+  const [startKmVal, setStartKmVal] = useState("");
+  const [endKmVal, setEndKmVal] = useState("");
+  const [noteVal, setNoteVal] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const isCompleted = trip?.status === "completed";
+  const startPhoto = getTripStartPhoto(trip);
+  const endPhoto = getTripEndPhoto(trip);
+
+  const startPhotoCandidates = useMemo(() => getPhotoUrlCandidates(startPhoto), [startPhoto]);
+  const endPhotoCandidates = useMemo(() => getPhotoUrlCandidates(endPhoto), [endPhoto]);
+
+  useEffect(() => {
+    if (trip) {
+      const initialStart = (trip.manualStartKm !== undefined && trip.manualStartKm !== null && String(trip.manualStartKm).trim() !== "")
+        ? trip.manualStartKm
+        : (trip.startKm !== undefined && trip.startKm !== null ? trip.startKm : "");
+      const initialEnd = (trip.manualEndKm !== undefined && trip.manualEndKm !== null && String(trip.manualEndKm).trim() !== "")
+        ? trip.manualEndKm
+        : (trip.endKm !== undefined && trip.endKm !== null ? trip.endKm : "");
+
+      setStartKmVal(initialStart !== "" ? String(initialStart) : "");
+      setEndKmVal(initialEnd !== "" ? String(initialEnd) : "");
+      setNoteVal(trip.adminEditNote || "");
+      setErrorMsg("");
+    }
+  }, [trip]);
+
+  if (!trip) return null;
+
+  const numStart = Number(startKmVal);
+  const numEnd = Number(endKmVal);
+  const hasValidStart = startKmVal !== "" && !isNaN(numStart) && numStart >= 0;
+  const hasValidEnd = endKmVal !== "" && !isNaN(numEnd) && numEnd >= 0;
+  const calculatedTotal = (hasValidStart && hasValidEnd) ? Math.max(0, numEnd - numStart) : 0;
+  const isNegative = hasValidStart && hasValidEnd && numEnd < numStart;
+
+  const handleSave = async () => {
+    if (!hasValidStart) {
+      setErrorMsg("Please enter a valid Start KM (0 or greater).");
+      return;
+    }
+    if (isCompleted && !hasValidEnd) {
+      setErrorMsg("Please enter a valid End KM for completed trip.");
+      return;
+    }
+    if (isCompleted && isNegative) {
+      setErrorMsg("End KM cannot be less than Start KM.");
+      return;
+    }
+
+    setSaving(true);
+    setErrorMsg("");
+
+    try {
+      const tripId = trip._id || trip.id;
+      const payload = {
+        startKm: numStart,
+        manualStartKm: numStart,
+        isManualStartKm: true,
+        isAdminEdited: true,
+        adminEditNote: (noteVal || "").trim(),
+      };
+
+      if (hasValidEnd) {
+        payload.endKm = numEnd;
+        payload.manualEndKm = numEnd;
+        payload.isManualEndKm = true;
+        payload.totalKm = calculatedTotal;
+      }
+
+      let res = null;
+      try {
+        res = await apiFetch(`/trips/${tripId}`, {}, { method: "PUT", body: payload });
+      } catch (err) {
+        // Fallback endpoint
+        res = await apiFetch(`/trip/${tripId}`, {}, { method: "PUT", body: payload });
+      }
+
+      const updatedTrip = res?.data?.trip || res?.trip || res?.data || {
+        ...trip,
+        ...payload,
+      };
+
+      if (onTripUpdated) {
+        onTripUpdated(updatedTrip);
+      }
+      onClose();
+    } catch (err) {
+      setErrorMsg(err.message || "Failed to update trip KM. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={saving ? undefined : onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          bgcolor: isDark ? "#0f172a" : "#ffffff",
+          backgroundImage: "none",
+          borderRadius: "16px",
+          border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "#e2e8f0"}`,
+          p: 1,
+        },
+      }}
+    >
+      <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Box
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: "10px",
+              bgcolor: isDark ? "rgba(37,99,235,0.2)" : "#eff6ff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#2563eb",
+            }}
+          >
+            <Edit sx={{ fontSize: 18 }} />
+          </Box>
+          <Box>
+            <Typography sx={{ fontWeight: 800, fontSize: "1rem", color: textTitle, lineHeight: 1.2 }}>
+              Edit Odometer / KM Reading
+            </Typography>
+            <Typography sx={{ fontSize: "0.74rem", color: textSub }}>
+              {trip.title || trip.workType || "Trip Details"} • Adjust readings and save
+            </Typography>
+          </Box>
+        </Box>
+        <IconButton size="small" onClick={onClose} disabled={saving} sx={{ color: textSub }}>
+          <Close sx={{ fontSize: 18 }} />
+        </IconButton>
+      </DialogTitle>
+
+      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
+        {errorMsg && (
+          <Alert severity="error" sx={{ borderRadius: "10px", fontSize: "0.78rem" }}>
+            {errorMsg}
+          </Alert>
+        )}
+
+        {/* Start & End Side by Side */}
+        <Box sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, gap: 2, mt: 0.5 }}>
+          {/* Start KM Box */}
+          <Box
+            sx={{
+              flex: 1,
+              p: 1.5,
+              borderRadius: "12px",
+              bgcolor: isDark ? "rgba(255,255,255,0.02)" : "#f8fafc",
+              border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0"}`,
+              display: "flex",
+              flexDirection: "column",
+              gap: 1.25,
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              {startPhotoCandidates[0] ? (
+                <Box
+                  component="img"
+                  src={startPhotoCandidates[0]}
+                  alt="Start Odometer"
+                  sx={{ width: 44, height: 44, borderRadius: "8px", objectFit: "cover", border: "1px solid #cbd5e1" }}
+                />
+              ) : (
+                <Box
+                  sx={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: "8px",
+                    bgcolor: isDark ? "rgba(255,255,255,0.05)" : "#e2e8f0",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <PhotoCamera sx={{ fontSize: 18, color: textSub }} />
+                </Box>
+              )}
+              <Box>
+                <Typography sx={{ fontWeight: 800, fontSize: "0.82rem", color: "#2563eb" }}>
+                  TRIP START
+                </Typography>
+                <Typography sx={{ fontSize: "0.70rem", color: textSub }}>
+                  {trip.aiDetectedStartKm != null ? `AI: ${trip.aiDetectedStartKm} KM` : "AI: Not scanned"}
+                  {trip.manualStartKm != null ? ` • User: ${trip.manualStartKm} KM` : ""}
+                </Typography>
+              </Box>
+            </Box>
+
+            <TextField
+              label="Start KM"
+              type="number"
+              size="small"
+              fullWidth
+              value={startKmVal}
+              onChange={(e) => setStartKmVal(e.target.value)}
+              placeholder="e.g. 6230"
+              InputProps={{
+                sx: { fontWeight: 700, fontFamily: "monospace", fontSize: "0.95rem" },
+              }}
+            />
+          </Box>
+
+          {/* End KM Box */}
+          <Box
+            sx={{
+              flex: 1,
+              p: 1.5,
+              borderRadius: "12px",
+              bgcolor: isDark ? "rgba(255,255,255,0.02)" : "#f8fafc",
+              border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0"}`,
+              display: "flex",
+              flexDirection: "column",
+              gap: 1.25,
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              {endPhotoCandidates[0] ? (
+                <Box
+                  component="img"
+                  src={endPhotoCandidates[0]}
+                  alt="End Odometer"
+                  sx={{ width: 44, height: 44, borderRadius: "8px", objectFit: "cover", border: "1px solid #cbd5e1" }}
+                />
+              ) : (
+                <Box
+                  sx={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: "8px",
+                    bgcolor: isDark ? "rgba(255,255,255,0.05)" : "#e2e8f0",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <PhotoCamera sx={{ fontSize: 18, color: textSub }} />
+                </Box>
+              )}
+              <Box>
+                <Typography sx={{ fontWeight: 800, fontSize: "0.82rem", color: "#16a34a" }}>
+                  TRIP END
+                </Typography>
+                <Typography sx={{ fontSize: "0.70rem", color: textSub }}>
+                  {trip.aiDetectedEndKm != null ? `AI: ${trip.aiDetectedEndKm} KM` : "AI: Not scanned"}
+                  {trip.manualEndKm != null ? ` • User: ${trip.manualEndKm} KM` : ""}
+                </Typography>
+              </Box>
+            </Box>
+
+            <TextField
+              label="End KM"
+              type="number"
+              size="small"
+              fullWidth
+              value={endKmVal}
+              onChange={(e) => setEndKmVal(e.target.value)}
+              placeholder="e.g. 6250"
+              disabled={!isCompleted && trip.status === "in_progress"}
+              InputProps={{
+                sx: { fontWeight: 700, fontFamily: "monospace", fontSize: "0.95rem" },
+              }}
+            />
+          </Box>
+        </Box>
+
+        {/* Calculated Total KM Display */}
+        <Box
+          sx={{
+            p: 1.5,
+            borderRadius: "10px",
+            bgcolor: isNegative ? alpha("#ef4444", 0.1) : (isDark ? "rgba(34,197,94,0.12)" : "#f0fdf4"),
+            border: `1px solid ${isNegative ? alpha("#ef4444", 0.3) : (isDark ? "rgba(34,197,94,0.3)" : "#bbf7d0")}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Box>
+            <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: isNegative ? "#ef4444" : textSub }}>
+              {isNegative ? "Warning: End KM is less than Start KM" : "Calculated Distance Travelled"}
+            </Typography>
+            <Typography sx={{ fontSize: "0.70rem", color: textSub }}>
+              {hasValidStart && hasValidEnd ? `${numEnd} KM - ${numStart} KM` : "Awaiting values..."}
+            </Typography>
+          </Box>
+          <Typography
+            sx={{
+              fontWeight: 900,
+              fontSize: "1.15rem",
+              color: isNegative ? "#ef4444" : "#16a34a",
+              fontFamily: "monospace",
+            }}
+          >
+            {calculatedTotal} KM
+          </Typography>
+        </Box>
+
+        {/* Admin Audit Note */}
+        <TextField
+          label="Admin Note (Reason for Change)"
+          size="small"
+          fullWidth
+          multiline
+          rows={2}
+          value={noteVal}
+          onChange={(e) => setNoteVal(e.target.value)}
+          placeholder="e.g. Corrected odometer reading from photo; user entered manually"
+          helperText="This note will be saved in the trip history for auditing."
+        />
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2, pt: 1, gap: 1 }}>
+        <Button onClick={onClose} disabled={saving} variant="outlined" sx={{ textTransform: "none", fontWeight: 700, borderRadius: "8px" }}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSave}
+          disabled={saving || isNegative}
+          variant="contained"
+          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Edit sx={{ fontSize: 16 }} />}
+          sx={{
+            textTransform: "none",
+            fontWeight: 800,
+            borderRadius: "8px",
+            bgcolor: "#2563eb",
+            "&:hover": { bgcolor: "#1d4ed8" },
+          }}
+        >
+          {saving ? "Saving…" : "Save Changes"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
 // ─── Odometer Lightbox Modal ────────────────────────────────────────────────
 const OdometerLightboxModal = ({ previewData, onClose, memberName }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const primaryColor = isDark ? "#60a5fa" : PRIMARY;
+
+  const [lightboxError, setLightboxError] = useState(false);
+  const [candidateIdx, setCandidateIdx] = useState(0);
+
+  const candidates = useMemo(() => {
+    if (!previewData) return [];
+    if (previewData.candidates && Array.isArray(previewData.candidates) && previewData.candidates.length > 0) {
+      return previewData.candidates;
+    }
+    return getPhotoUrlCandidates(previewData.url || previewData.photoPath);
+  }, [previewData]);
+
+  const activeUrl = !lightboxError && candidates.length > 0 ? (candidates[candidateIdx] || previewData?.url) : previewData?.url;
+
+  useEffect(() => {
+    setLightboxError(false);
+    setCandidateIdx(0);
+  }, [previewData]);
 
   if (!previewData) return null;
 
@@ -1729,6 +2333,10 @@ const OdometerLightboxModal = ({ previewData, onClose, memberName }) => {
             ? Boolean(tripInfo?.isManualStartKm || (tripInfo?.manualStartKm !== undefined && tripInfo?.manualStartKm !== null && String(tripInfo?.manualStartKm).trim() !== ""))
             : Boolean(tripInfo?.isManualEndKm || (tripInfo?.manualEndKm !== undefined && tripInfo?.manualEndKm !== null && String(tripInfo?.manualEndKm).trim() !== ""));
           const aiKm = isStart ? tripInfo?.aiDetectedStartKm : tripInfo?.aiDetectedEndKm;
+          const manualVal = isStart ? tripInfo?.manualStartKm : tripInfo?.manualEndKm;
+          const effectivePreviewKm = isManual && manualVal !== undefined && manualVal !== null && String(manualVal).trim() !== ""
+            ? Number(manualVal)
+            : (previewData.km !== undefined && previewData.km !== null ? Number(previewData.km) : null);
 
           return (
             <>
@@ -1744,9 +2352,9 @@ const OdometerLightboxModal = ({ previewData, onClose, memberName }) => {
                     height: 22,
                   }}
                 />
-                {previewData.km !== undefined && previewData.km !== null && (
+                {effectivePreviewKm !== null && (
                   <Typography sx={{ fontWeight: 800, fontSize: "0.95rem", color: "#fff", fontFamily: "monospace" }}>
-                    {Number(previewData.km).toLocaleString("en-IN")} KM
+                    {Number(effectivePreviewKm).toLocaleString("en-IN")} KM
                   </Typography>
                 )}
 
@@ -1785,7 +2393,7 @@ const OdometerLightboxModal = ({ previewData, onClose, memberName }) => {
                 )}
               </Box>
 
-              {isManual && aiKm && String(aiKm) !== String(previewData.km) && (
+              {isManual && aiKm && String(aiKm) !== String(effectivePreviewKm) && (
                 <Typography sx={{ fontSize: "0.72rem", color: "#fbbf24", fontWeight: 700, mb: 0.3 }}>
                   ⚠️ User manually wrote reading (AI camera detected: {Number(aiKm).toLocaleString("en-IN")} KM)
                 </Typography>
@@ -1804,21 +2412,54 @@ const OdometerLightboxModal = ({ previewData, onClose, memberName }) => {
       </Box>
 
       {/* Full Image */}
-      <Box
-        component="img"
-        src={previewData.url}
-        alt="Odometer preview"
-        onClick={(e) => e.stopPropagation()}
-        sx={{
-          maxWidth: "92vw",
-          maxHeight: "82vh",
-          borderRadius: "16px",
-          objectFit: "contain",
-          boxShadow: "0 12px 48px rgba(0,0,0,0.8)",
-          border: "2px solid rgba(255,255,255,0.2)",
-          cursor: "default",
-        }}
-      />
+      {activeUrl && !lightboxError ? (
+        <Box
+          component="img"
+          src={activeUrl}
+          alt="Odometer preview"
+          onError={() => {
+            if (candidateIdx + 1 < candidates.length) {
+              setCandidateIdx((i) => i + 1);
+            } else {
+              setLightboxError(true);
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+          sx={{
+            maxWidth: "92vw",
+            maxHeight: "82vh",
+            borderRadius: "16px",
+            objectFit: "contain",
+            boxShadow: "0 12px 48px rgba(0,0,0,0.8)",
+            border: "2px solid rgba(255,255,255,0.2)",
+            cursor: "default",
+          }}
+        />
+      ) : (
+        <Box
+          onClick={(e) => e.stopPropagation()}
+          sx={{
+            p: 4,
+            borderRadius: "16px",
+            bgcolor: "rgba(15, 23, 42, 0.95)",
+            border: "1px solid rgba(255,255,255,0.15)",
+            color: "#fff",
+            textAlign: "center",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 1.5,
+          }}
+        >
+          <ImageNotSupported sx={{ fontSize: 48, color: "#94a3b8" }} />
+          <Typography sx={{ fontWeight: 700, fontSize: "0.95rem" }}>
+            Image File Not Found on Local Server
+          </Typography>
+          <Typography sx={{ fontSize: "0.75rem", color: "#94a3b8", maxWidth: 360 }}>
+            {previewData.url || "No image URL recorded for this odometer point."}
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 };
@@ -1975,6 +2616,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
   const [tripViewMode,     setTripViewMode]     = useState("filtered"); // "filtered" | "all"
   const [tripsLoading,     setTripsLoading]     = useState(false);
   const [odometerPreview,  setOdometerPreview]  = useState(null);
+  const [editingTrip,      setEditingTrip]      = useState(null);
   const [timelineTab,      setTimelineTab]      = useState("visits"); // "visits" | "odometer"
   const [filters,          setFilters]          = useState(() => {
     const defaultDate = location.state?.selectedDate || "today";
@@ -2468,9 +3110,10 @@ export default function MemberVisitHistory({ userId: propUserId }) {
     try {
       setTripsLoading(true);
       const selectedDay = isSingleDayFilter(filters.dateRange) ? getSelectedDayKey(filters.dateRange) : null;
-      let queryParams = { userId: targetUserId };
+      let queryParams = { userId: targetUserId, salesmanId: targetUserId };
       if (filters.dateRange === "today") {
         queryParams.filter = "today";
+        if (selectedDay) queryParams.date = selectedDay;
       } else if (filters.dateRange === "month") {
         queryParams.filter = "month";
       } else if (selectedDay) {
@@ -2480,29 +3123,40 @@ export default function MemberVisitHistory({ userId: propUserId }) {
         queryParams.filter = "all";
       }
 
+      const fetchEndpoint = async (endpoint, params) => {
+        try {
+          return await apiFetch(endpoint, params);
+        } catch (err) {
+          if (endpoint === "/trips") {
+            return await apiFetch("/trip", params).catch(() => null);
+          }
+          return null;
+        }
+      };
+
       const [filteredRes, allRes] = await Promise.allSettled([
-        apiFetch("/trips", queryParams),
-        apiFetch("/trips", { userId: targetUserId, filter: "all" }),
+        fetchEndpoint("/trips", queryParams),
+        fetchEndpoint("/trips", { userId: targetUserId, salesmanId: targetUserId, filter: "all" }),
       ]);
 
-      if (filteredRes.status === "fulfilled") {
+      if (filteredRes.status === "fulfilled" && filteredRes.value) {
         const list =
           filteredRes.value?.data?.trips ||
           filteredRes.value?.result?.trips ||
           filteredRes.value?.data ||
           filteredRes.value?.trips ||
           [];
-        setTrips(Array.isArray(list) ? list : []);
+        setTrips(Array.isArray(list) ? list.map(normalizeTrip) : []);
       }
 
-      if (allRes.status === "fulfilled") {
+      if (allRes.status === "fulfilled" && allRes.value) {
         const listAll =
           allRes.value?.data?.trips ||
           allRes.value?.result?.trips ||
           allRes.value?.data ||
           allRes.value?.trips ||
           [];
-        setAllTrips(Array.isArray(listAll) ? listAll : []);
+        setAllTrips(Array.isArray(listAll) ? listAll.map(normalizeTrip) : []);
       }
     } catch (e) {
       console.warn("Trips fetch failed:", e.message);
@@ -2512,6 +3166,22 @@ export default function MemberVisitHistory({ userId: propUserId }) {
       setTripsLoading(false);
     }
   }, [filters.dateRange, targetUserId, canLoadTargetUser]);
+
+  const handleTripUpdated = useCallback((updatedTrip) => {
+    if (!updatedTrip) return;
+    const norm = normalizeTrip(updatedTrip);
+    const tripId = norm._id || norm.id;
+    setTrips((prev) => prev.map((t) => ((t._id || t.id) === tripId ? { ...t, ...norm } : t)));
+    setAllTrips((prev) => prev.map((t) => ((t._id || t.id) === tripId ? { ...t, ...norm } : t)));
+    fetchTrips();
+  }, [fetchTrips]);
+
+  const handleShowOnMapGlobal = useCallback((trip) => {
+    if (trip?.startLocation || trip?.endLocation) {
+      const targetQuery = trip.startLocation || trip.endLocation;
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(targetQuery)}`, "_blank");
+    }
+  }, []);
 
   const fetchLatestBattery = useCallback(async () => {
     if (!targetUserId || !canLoadTargetUser) return;
@@ -2665,6 +3335,47 @@ export default function MemberVisitHistory({ userId: propUserId }) {
   const workHoursValue = attendanceRecord?.workHours !== undefined && attendanceRecord?.workHours !== null
     ? Number(attendanceRecord.workHours)
     : null;
+  const attendanceTrip = useMemo(() => {
+    if (!attendanceRecord) return null;
+    const pIn = attendanceRecord.punchIn || {};
+    const pOut = attendanceRecord.punchOut || {};
+    const startKm = pIn.odometerReading ?? pIn.odometer ?? pIn.startKm ?? pIn.reading ?? null;
+    const endKm = pOut.odometerReading ?? pOut.odometer ?? pOut.endKm ?? pOut.reading ?? null;
+    const startPhoto = pIn.odometerPhoto || pIn.odometerImage || pIn.photo || pIn.startKmImage;
+    const endPhoto = pOut.odometerPhoto || pOut.odometerImage || pOut.photo || pOut.endKmImage;
+
+    if (!startPhoto && !endPhoto && startKm === null && endKm === null) return null;
+
+    return {
+      _id: `att-odo-${attendanceRecord._id || attendanceRecord.id || "attendance"}`,
+      title: "Daily Attendance Odometer",
+      workType: "Attendance",
+      status: pOut.time ? "completed" : "in_progress",
+      startTime: pIn.time || attendanceRecord.date,
+      endTime: pOut.time || null,
+      startKm: Number(startKm) || 0,
+      endKm: Number(endKm) || 0,
+      startKmImage: startPhoto,
+      endKmImage: endPhoto,
+      startLocation: pIn.address || (pIn.location?.lat ? `${pIn.location.lat}, ${pIn.location.lng}` : ""),
+      endLocation: pOut.address || (pOut.location?.lat ? `${pOut.location.lat}, ${pOut.location.lng}` : ""),
+      totalKm: attendanceRecord.odometerKm || attendanceRecord.odometerDistance || Math.max(0, (Number(endKm) || 0) - (Number(startKm) || 0)),
+      isAttendanceOdometer: true,
+    };
+  }, [attendanceRecord]);
+
+  const effectiveTrips = useMemo(() => {
+    if (trips && trips.length > 0) return trips;
+    if (attendanceTrip) return [attendanceTrip];
+    return [];
+  }, [trips, attendanceTrip]);
+
+  const effectiveAllTrips = useMemo(() => {
+    if (allTrips && allTrips.length > 0) return allTrips;
+    if (attendanceTrip) return [attendanceTrip];
+    return [];
+  }, [allTrips, attendanceTrip]);
+
   const summaryCards = [
     { label: "Date", value: selectedDayLabel },
     { label: "Punch In", value: punchInTimeValue ? fmt(punchInTimeValue) : "—" },
@@ -2923,8 +3634,12 @@ export default function MemberVisitHistory({ userId: propUserId }) {
               <>
                 <Typography sx={{ fontSize: "1.45rem", fontWeight: 900, color: textTitle, letterSpacing: "-0.5px", lineHeight: 1.1 }}>
                   {trips.reduce((sum, t) => {
-                    const s = Number(t.startKm) || 0;
-                    const e = Number(t.endKm) || s;
+                    const s = (t.manualStartKm !== undefined && t.manualStartKm !== null && String(t.manualStartKm).trim() !== "")
+                      ? Number(t.manualStartKm)
+                      : (Number(t.startKm) || 0);
+                    const e = (t.manualEndKm !== undefined && t.manualEndKm !== null && String(t.manualEndKm).trim() !== "")
+                      ? Number(t.manualEndKm)
+                      : (t.endKm !== undefined ? Number(t.endKm) : s);
                     const diff = t.totalKm !== undefined && Number(t.totalKm) > 0 ? Number(t.totalKm) : Math.max(0, e - s);
                     return sum + diff;
                   }, 0)}{" "}
@@ -3473,10 +4188,14 @@ export default function MemberVisitHistory({ userId: propUserId }) {
 
             {/* ── Daily Trips & Odometer Tracking Section (Matching Design) ── */}
             {(() => {
-              const displayTrips = tripViewMode === "filtered" ? trips : allTrips;
+              const displayTrips = tripViewMode === "filtered" ? (effectiveTrips.length > 0 ? effectiveTrips : effectiveAllTrips) : (effectiveAllTrips.length > 0 ? effectiveAllTrips : effectiveTrips);
               const totalTripKm = displayTrips.reduce((sum, t) => {
-                const s = Number(t.startKm) || 0;
-                const e = Number(t.endKm) || s;
+                const s = (t.manualStartKm !== undefined && t.manualStartKm !== null && String(t.manualStartKm).trim() !== "")
+                  ? Number(t.manualStartKm)
+                  : (Number(t.startKm) || 0);
+                const e = (t.manualEndKm !== undefined && t.manualEndKm !== null && String(t.manualEndKm).trim() !== "")
+                  ? Number(t.manualEndKm)
+                  : (t.endKm !== undefined ? Number(t.endKm) : s);
                 const diff = t.totalKm !== undefined && Number(t.totalKm) > 0 ? Number(t.totalKm) : Math.max(0, e - s);
                 return sum + diff;
               }, 0);
@@ -3592,6 +4311,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                           index={idx}
                           onOpenPreview={setOdometerPreview}
                           onShowOnMap={handleShowOnMap}
+                          onEditTrip={setEditingTrip}
                         />
                       ))}
 
@@ -3631,12 +4351,12 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                           No Odometer Trips for {filters.dateRange === "today" ? "Today" : "Selected Date"}
                         </Typography>
                         <Typography sx={{ fontSize: "0.78rem", color: textSub, mt: 0.5, maxWidth: 420 }}>
-                          {allTrips.length > 0
-                            ? `There are ${allTrips.length} odometer trip records recorded for this member across all dates.`
+                          {effectiveAllTrips.length > 0
+                            ? `There are ${effectiveAllTrips.length} odometer trip records recorded for this member across all dates.`
                             : "This user has not submitted any trip odometer verification images yet."}
                         </Typography>
                       </Box>
-                      {allTrips.length > 0 && tripViewMode === "filtered" && (
+                      {effectiveAllTrips.length > 0 && tripViewMode === "filtered" && (
                         <Button
                           size="small"
                           variant="outlined"
@@ -3710,7 +4430,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                       "&:hover": { bgcolor: alpha(primaryColor, 0.1) },
                     }}
                   >
-                    Odometer ({trips.length})
+                    Odometer ({effectiveTrips.length || effectiveAllTrips.length})
                   </Button>
                 </Box>
 
@@ -3755,7 +4475,7 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                 </Typography>
 
                 <Typography sx={{ fontSize: "0.72rem", color: textSub }}>
-                  · {loading ? "…" : timelineTab === "odometer" ? `${trips.length} odometer trip${trips.length !== 1 ? "s" : ""}` : `${visibleVisits.length} visit${visibleVisits.length !== 1 ? "s" : ""}`}
+                  · {loading ? "…" : timelineTab === "odometer" ? `${effectiveTrips.length} odometer trip${effectiveTrips.length !== 1 ? "s" : ""}` : `${visibleVisits.length} visit${visibleVisits.length !== 1 ? "s" : ""}`}
                   {timelineTab !== "odometer" && stayedLocations.length > 0 ? ` · ${stayedLocations.length} stayed` : ""}
                 </Typography>
               </Box>
@@ -3771,19 +4491,49 @@ export default function MemberVisitHistory({ userId: propUserId }) {
             {/* Scrollable visits or Odometer list */}
             <Box sx={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", "&::-webkit-scrollbar": { width: 4 }, "&::-webkit-scrollbar-track": { bgcolor: isDark ? "#0e1424" : "#f8fafc" }, "&::-webkit-scrollbar-thumb": { bgcolor: isDark ? "rgba(255,255,255,0.15)" : "#e2e8f0", borderRadius: 2 } }}>
               {timelineTab === "odometer" ? (
-                <Box sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 2 }}>
+                <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+                  {/* Trip View Mode Switcher Header in Right Tab */}
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, pb: 0.5 }}>
+                    <Typography sx={{ fontSize: "0.74rem", fontWeight: 700, color: textSub }}>
+                      {tripViewMode === "filtered" ? "Date Filtered" : "All Odometer Trips"}
+                    </Typography>
+                    {effectiveAllTrips.length > 0 && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setTripViewMode(tripViewMode === "filtered" ? "all" : "filtered")}
+                        sx={{
+                          height: 22,
+                          borderRadius: "6px",
+                          textTransform: "none",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          px: 1,
+                          borderColor: cardBorder,
+                          color: tripViewMode === "all" ? primaryColor : textSub,
+                          bgcolor: tripViewMode === "all" ? alpha(primaryColor, 0.08) : "transparent",
+                          "&:hover": { borderColor: primaryColor },
+                        }}
+                      >
+                        {tripViewMode === "filtered" ? `View All (${effectiveAllTrips.length})` : "Current Date"}
+                      </Button>
+                    )}
+                  </Box>
+
                   {tripsLoading ? (
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                       <Skeleton variant="rounded" width="100%" height={140} />
                       <Skeleton variant="rounded" width="100%" height={140} />
                     </Box>
-                  ) : (tripViewMode === "filtered" ? trips : allTrips).length > 0 ? (
-                    (tripViewMode === "filtered" ? trips : allTrips).map((trip, idx) => (
+                  ) : (tripViewMode === "filtered" ? (effectiveTrips.length > 0 ? effectiveTrips : effectiveAllTrips) : effectiveAllTrips).length > 0 ? (
+                    (tripViewMode === "filtered" ? (effectiveTrips.length > 0 ? effectiveTrips : effectiveAllTrips) : effectiveAllTrips).map((trip, idx) => (
                       <OdometerTripCard
-                        key={`side-${trip._id || trip.id || `${trip.startTime}-${trip.startKm}`}`}
+                        key={`side-${trip._id || trip.id || `${trip.startTime}-${trip.startKm}-${idx}`}`}
                         trip={trip}
                         index={idx}
                         onOpenPreview={setOdometerPreview}
+                        onShowOnMap={handleShowOnMapGlobal}
+                        onEditTrip={setEditingTrip}
                       />
                     ))
                   ) : (
@@ -3795,6 +4545,25 @@ export default function MemberVisitHistory({ userId: propUserId }) {
                       <Typography sx={{ fontSize: "0.75rem", color: textSub, mt: 0.5 }}>
                         No trips found for this date.
                       </Typography>
+                      {effectiveAllTrips.length > 0 && tripViewMode === "filtered" && (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => setTripViewMode("all")}
+                          sx={{
+                            mt: 2,
+                            borderRadius: "8px",
+                            textTransform: "none",
+                            fontSize: "0.75rem",
+                            fontWeight: 700,
+                            bgcolor: primaryColor,
+                            color: isDark ? "#060a12" : "#fff",
+                            "&:hover": { bgcolor: alpha(primaryColor, 0.85) },
+                          }}
+                        >
+                          View All ({effectiveAllTrips.length}) Trips
+                        </Button>
+                      )}
                     </Box>
                   )}
                 </Box>
@@ -4007,6 +4776,14 @@ export default function MemberVisitHistory({ userId: propUserId }) {
         previewData={odometerPreview}
         onClose={() => setOdometerPreview(null)}
         memberName={memberName}
+      />
+
+      {/* Admin Edit Trip Dialog */}
+      <AdminEditTripDialog
+        open={Boolean(editingTrip)}
+        trip={editingTrip}
+        onClose={() => setEditingTrip(null)}
+        onTripUpdated={handleTripUpdated}
       />
     </Box>
   );

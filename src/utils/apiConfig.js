@@ -1,7 +1,7 @@
 const normalizeOrigin = (value) => (value || "").trim().replace(/\/+$/, "");
 
 export const API_ORIGIN = normalizeOrigin(
-  process.env.REACT_APP_API_URL || "https://soalar-360-backend.onrender.com"
+  process.env.REACT_APP_API_URL || "http://localhost:9001"
 );
 
 const envLegacyOrigins = (process.env.REACT_APP_LEGACY_API_ORIGINS || "")
@@ -13,6 +13,7 @@ export const LEGACY_API_ORIGINS = Array.from(
   new Set([
     "http://localhost:9001",
     "https://solar-backend-6vaa.onrender.com",
+    "https://soalar-360-backend.onrender.com",
     ...envLegacyOrigins,
   ])
 );

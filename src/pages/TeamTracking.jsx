@@ -52,16 +52,18 @@ const resolveAddress = (address) => {
 const avatarColors = ["#0f1f3d","#7c3aed","#0ea5e9","#f59e0b","#10b981","#f43f5e","#8b5cf6","#06b6d4"];
 const getAvatarColor = (name = "") => avatarColors[name.charCodeAt(0) % avatarColors.length];
 
-const TRACKED_ROLES = ["ZSM", "Incharge", "TEAM"];
+const TRACKED_ROLES = ["SUPERVISOR", "ZSM", "Incharge", "TEAM"];
 const ROLE_LABELS = {
+  SUPERVISOR: "Supervisor",
   ZSM: "Operation Lead",
   Incharge: "Incharge",
   TEAM: "Team Member",
 };
 const ROLE_SORT_ORDER = {
-  ZSM: 0,
-  Incharge: 1,
-  TEAM: 2,
+  SUPERVISOR: 0,
+  ZSM: 1,
+  Incharge: 2,
+  TEAM: 3,
 };
 
 // Sort priority: Punched in (on-duty / completed) first, not punched in (offline) at bottom
@@ -75,6 +77,7 @@ const STATUS_SORT_ORDER = {
 
 const normalizeUserRole = (role = "") => {
   const normalized = String(role).trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "supervisor") return "SUPERVISOR";
   if (normalized === "operation_lead" || normalized === "operationlead") return "ZSM";
   if (normalized === "asm" || normalized === "inchange" || normalized === "incharge") return "Incharge";
   if (normalized === "team") return "TEAM";

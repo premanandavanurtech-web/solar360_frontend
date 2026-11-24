@@ -68,13 +68,13 @@ const getAvatarUrl = (avatar) => toBackendAssetUrl(avatar);
 
 const isAdminRole = (role) => ["ADMIN", "Admin_panel"].includes(role);
 
-const Topbar = ({ 
-  toggleDrawer, 
-  isMobile, 
-  isTablet, 
-  drawerOpen, 
+const Topbar = ({
+  toggleDrawer,
+  isMobile,
+  isTablet,
+  drawerOpen,
   sidebarWidth = 280,
-  collapsedWidth = 70 
+  collapsedWidth = 70
 }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
@@ -164,12 +164,12 @@ const Topbar = ({
     setNotificationAnchor(null);
     navigate('/notifications');
   }, [navigate]);
-  
+
   const handleClose = useCallback(() => {
     setAnchorEl(null);
     setNotificationAnchor(null);
   }, []);
-  
+
   const handleLogout = useCallback(async () => {
     if (!window.confirm('Are you sure you want to log out?')) {
       return;
@@ -297,8 +297,8 @@ const Topbar = ({
           Authorization: `Bearer ${token}`,
         },
       });
-      setNotifications(prev => 
-        prev.map(notif => 
+      setNotifications(prev =>
+        prev.map(notif =>
           notif.id === notificationId ? { ...notif, read: true } : notif
         )
       );
@@ -347,9 +347,9 @@ const Topbar = ({
     return roleMap[user.role] || user.role;
   }, [user]);
 
-  const unreadCount = useMemo(() => 
+  const unreadCount = useMemo(() =>
     notifications.filter(n => !n.read).length
-  , [notifications]);
+    , [notifications]);
 
   // Calculate AppBar width
   const getAppBarWidth = useMemo(() => {
@@ -417,7 +417,7 @@ const Topbar = ({
             </Tooltip>
           )}
         </Paper>
-        
+
         {/* Recent Searches */}
         <Box sx={{ mt: 3 }}>
           <Typography variant="subtitle2" color={isDark ? '#94a3b8' : '#666'} gutterBottom>
@@ -428,7 +428,7 @@ const Topbar = ({
               key={index}
               onClick={() => {
                 setSearchQuery(item);
-                handleSearch({ preventDefault: () => {} });
+                handleSearch({ preventDefault: () => { } });
               }}
               sx={{ borderRadius: 1, my: 0.5, color: isDark ? '#f8fafc' : 'inherit' }}
             >
@@ -466,9 +466,9 @@ const Topbar = ({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
             {(isMobile || isTablet) && (
               <Tooltip title="Menu" arrow>
-                <IconButton 
-                  onClick={toggleDrawer} 
-                  sx={{ 
+                <IconButton
+                  onClick={toggleDrawer}
+                  sx={{
                     color: isDark ? '#f8fafc' : '#0f1f3d',
                     '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.1)' : alpha('#0f1f3d', 0.1) },
                   }}
@@ -477,7 +477,7 @@ const Topbar = ({
                 </IconButton>
               </Tooltip>
             )}
-            
+
             {/* Search Bar - Hidden on mobile */}
             {!isMobile && (
               <Box
@@ -599,7 +599,7 @@ const Topbar = ({
                 </Avatar>
                 {!isMobile && (
                   <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-                    <Typography 
+                    <Typography
                       fontSize="0.9rem"
                       fontWeight={600}
                       color={isDark ? '#f8fafc' : '#333333'}
@@ -607,8 +607,8 @@ const Topbar = ({
                     >
                       {displayName}
                     </Typography>
-                    <Typography 
-                      fontSize="0.75rem" 
+                    <Typography
+                      fontSize="0.75rem"
                       color={isDark ? '#94a3b8' : '#666666'}
                       sx={{ lineHeight: 1.2 }}
                     >
@@ -635,14 +635,14 @@ const Topbar = ({
           />
         )}
       </AppBar>
-       
+
       {/* Profile Menu */}
       <Menu
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
         onClose={handleClose}
-        PaperProps={{ 
-          sx: { 
+        PaperProps={{
+          sx: {
             width: { xs: '100%', sm: 280 },
             maxWidth: { xs: '100%', sm: 280 },
             mt: 1,
@@ -654,7 +654,7 @@ const Topbar = ({
             top: { xs: '56px', sm: 'auto' },
             left: { xs: 0, sm: 'auto' },
             right: { xs: 0, sm: 'auto' },
-          } 
+          }
         }}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
@@ -691,7 +691,7 @@ const Topbar = ({
             </Box>
           </Box>
         </Box>
-        
+
         {/* Menu Items */}
         <Box sx={{ py: 0.5 }}>
           <MenuItem
@@ -712,9 +712,9 @@ const Topbar = ({
               primaryTypographyProps={{ fontSize: '0.9rem' }}
             />
           </MenuItem>
-          <MenuItem 
-            onClick={handleLogout} 
-            sx={{ 
+          <MenuItem
+            onClick={handleLogout}
+            sx={{
               color: '#ef4444',
               '&:hover': { bgcolor: isDark ? 'rgba(239, 68, 68, 0.15)' : alpha('#ff4444', 0.05) }
             }}
@@ -723,8 +723,8 @@ const Topbar = ({
             <ListItemIcon sx={{ color: 'inherit' }}>
               {loggingOut ? <CircularProgress size={20} color="inherit" /> : <LogoutIcon fontSize="small" />}
             </ListItemIcon>
-            <ListItemText 
-              primary={loggingOut ? "Logging out..." : "Logout"} 
+            <ListItemText
+              primary={loggingOut ? "Logging out..." : "Logout"}
               primaryTypographyProps={{ fontSize: '0.9rem' }}
             />
           </MenuItem>
@@ -927,13 +927,13 @@ const Topbar = ({
                     bgcolor: isLogout
                       ? (isDark ? 'rgba(239, 68, 68, 0.12)' : 'rgba(254, 242, 242, 0.95)')
                       : notification.read
-                      ? (isDark ? '#0b101c' : '#ffffff')
-                      : (isDark ? 'rgba(59, 130, 246, 0.12)' : alpha('#0f1f3d', 0.045)),
+                        ? (isDark ? '#0b101c' : '#ffffff')
+                        : (isDark ? 'rgba(59, 130, 246, 0.12)' : alpha('#0f1f3d', 0.045)),
                     borderLeft: isLogout
                       ? '4px solid #ef4444'
                       : notification.read
-                      ? '3px solid transparent'
-                      : `3px solid ${isDark ? '#3b82f6' : '#0f1f3d'}`,
+                        ? '3px solid transparent'
+                        : `3px solid ${isDark ? '#3b82f6' : '#0f1f3d'}`,
                     '&:hover': {
                       bgcolor: isLogout
                         ? (isDark ? 'rgba(239, 68, 68, 0.18)' : 'rgba(254, 226, 226, 0.98)')
