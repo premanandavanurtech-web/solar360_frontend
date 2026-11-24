@@ -39,8 +39,8 @@ const handleAuthError = (error) => {
 const formatTime = (iso) =>
   iso
     ? new Date(iso).toLocaleTimeString("en-IN", {
-        hour: "2-digit", minute: "2-digit", hour12: true,
-      })
+      hour: "2-digit", minute: "2-digit", hour12: true,
+    })
     : null;
 
 const resolveAddress = (address) => {
@@ -49,7 +49,7 @@ const resolveAddress = (address) => {
   return address.full || address.short || [address.road, address.city].filter(Boolean).join(", ") || null;
 };
 
-const avatarColors = ["#0f1f3d","#7c3aed","#0ea5e9","#f59e0b","#10b981","#f43f5e","#8b5cf6","#06b6d4"];
+const avatarColors = ["#0f1f3d", "#7c3aed", "#0ea5e9", "#f59e0b", "#10b981", "#f43f5e", "#8b5cf6", "#06b6d4"];
 const getAvatarColor = (name = "") => avatarColors[name.charCodeAt(0) % avatarColors.length];
 
 const TRACKED_ROLES = ["SUPERVISOR", "ZSM", "Incharge", "TEAM"];
@@ -123,7 +123,7 @@ const getStatusConfig = (isDark) => ({
     bg: isDark ? "rgba(16, 185, 129, 0.15)" : alpha("#10b981", 0.1),
     color: isDark ? "#34d399" : "#059669",
     dotColor: "#10b981",
-    border: isDark ? "rgba(16, 185, 129, 0.3)" : "rgba(16, 185, 129, 0.2)",
+    border: isDark ? "rgba(16, 187, 129, 0.3)" : "rgba(16, 185, 129, 0.2)",
     pulse: true,
   },
   completed: {
@@ -173,9 +173,9 @@ const BatteryChip = ({ percentage, isCharging }) => {
   const { color, bg, border, label } = getBatteryColor(percentage, isDark);
   const icon =
     percentage === null ? "🔋" :
-    isCharging          ? "⚡" :
-    percentage > 60     ? "🔋" :
-    percentage > 20     ? "🪫" : "❗";
+      isCharging ? "⚡" :
+        percentage > 60 ? "🔋" :
+          percentage > 20 ? "🪫" : "❗";
 
   return (
     <Chip
@@ -294,7 +294,7 @@ const MemberCard = ({ member, onViewDetails }) => {
 
 const TableRowSkeleton = () => (
   <TableRow>
-    {[1,2,3,4,5,6,7].map((i) => (
+    {[1, 2, 3, 4, 5, 6, 7].map((i) => (
       <TableCell key={i} sx={{ py: 2.25 }}>
         <Skeleton variant="rectangular" height={36} sx={{ borderRadius: 1 }} />
       </TableCell>
@@ -481,8 +481,8 @@ export default function TeamTracking() {
           baseStatus === "active" && derivedTracking === "location_off"
             ? "location_off"
             : baseStatus === "active" && derivedTracking === "no_signal"
-            ? "no_signal"
-            : baseStatus;
+              ? "no_signal"
+              : baseStatus;
         const punchInTime = att?.punchIn?.time ? formatTime(att.punchIn.time) : null;
         const punchOutTime = att?.punchOut?.time ? formatTime(att.punchOut.time) : null;
         const punchBattery = att?.punchIn?.battery || att?.metadata?.batteryAtPunchIn || null;
