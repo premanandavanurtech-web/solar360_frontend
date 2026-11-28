@@ -177,22 +177,28 @@ const uniqueSupervisorNames = (projects = []) => {
   return [...new Set(names)].join(", ") || "-";
 };
 
+const isAdminRole = (roleOrUser) => {
+  const role = typeof roleOrUser === "string" ? roleOrUser : roleOrUser?.role;
+  const r = String(role || "").trim().toUpperCase();
+  return ["ADMIN", "ADMIN_PANEL", "HEAD_OFFICE", "SUPER_ADMIN"].includes(r);
+};
+
 const isManagerRole = (roleOrUser) => {
   const role = typeof roleOrUser === "string" ? roleOrUser : roleOrUser?.role;
   const r = String(role || "").trim().toUpperCase();
-  return ["MANAGER", "HEAD_OFFICE", "ADMIN", "ADMIN_PANEL", "PROJECT_HEAD"].includes(r);
+  return ["MANAGER", "PROJECT_HEAD"].includes(r);
 };
 
 const isSupervisorRole = (roleOrUser) => {
   const role = typeof roleOrUser === "string" ? roleOrUser : roleOrUser?.role;
   const r = String(role || "").trim().toUpperCase();
-  return ["SUPERVISOR", "ZSM"].includes(r) || isManagerRole(roleOrUser);
+  return r === "SUPERVISOR";
 };
 
 const isInchargeRole = (roleOrUser) => {
   const role = typeof roleOrUser === "string" ? roleOrUser : roleOrUser?.role;
   const r = String(role || "").trim().toUpperCase();
-  return ["INCHARGE", "TEAM", "INSTALLER", "ASM"].includes(r) || (!isSupervisorRole(roleOrUser) && r !== "");
+  return ["INCHARGE", "TEAM", "INSTALLER", "ASM"].includes(r) || (!isSupervisorRole(roleOrUser) && !isManagerRole(roleOrUser) && !isAdminRole(roleOrUser) && r !== "");
 };
 
 const isSupervisorSubmitter = (user) => isSupervisorRole(user);
@@ -829,11 +835,21 @@ export default function WorkRegister() {
     const supervisorMap = new Map();
     const managerMap = new Map();
 
+    const normalizeDisplayRole = (rawRole, defaultRole) => {
+      const r = String(rawRole || "").trim().toUpperCase();
+      if (!r || r === "ZSM" || r === "OPERATION_LEAD" || r === "OPERATIONLEAD") {
+        return defaultRole;
+      }
+      return rawRole;
+    };
+
     const registerUser = (map, rawUser, worksheet, defaultRole) => {
       if (!rawUser) return;
       const name = personName(rawUser);
       if (!name || name === "-" || name.toLowerCase() === "n/a") return;
       const id = String(rawUser?._id || rawUser?.employeeId || name).trim();
+
+      const resolvedRole = normalizeDisplayRole(rawUser?.role, defaultRole);
 
       let entry = map.get(id);
       if (!entry) {
@@ -841,7 +857,7 @@ export default function WorkRegister() {
           id,
           _id: rawUser?._id || null,
           name,
-          role: rawUser?.role || defaultRole,
+          role: resolvedRole,
           employeeId: rawUser?.employeeId || "",
           email: rawUser?.email || "",
           phoneNumber: rawUser?.phoneNumber || "",
@@ -857,7 +873,7 @@ export default function WorkRegister() {
         if (!entry.employeeId && rawUser?.employeeId) entry.employeeId = rawUser.employeeId;
         if (!entry.email && rawUser?.email) entry.email = rawUser.email;
         if (!entry.phoneNumber && rawUser?.phoneNumber) entry.phoneNumber = rawUser.phoneNumber;
-        if (rawUser?.role && (!entry.role || entry.role === defaultRole)) entry.role = rawUser.role;
+        if (resolvedRole && (!entry.role || entry.role === defaultRole)) entry.role = resolvedRole;
       }
 
       // Add worksheet if not already added
@@ -889,35 +905,39 @@ export default function WorkRegister() {
       if (submitter) {
         if (isManagerRole(submitter)) {
           registerUser(managerMap, submitter, r, "Manager");
-          registerUser(supervisorMap, submitter, r, "Supervisor");
         } else if (isSupervisorRole(submitter)) {
           registerUser(supervisorMap, submitter, r, "Supervisor");
-        } else {
+        } else if (isInchargeRole(submitter)) {
           registerUser(inchargeMap, submitter, r, "Incharge");
         }
       }
 
-      // 2. ApprovedBy analysis (Managers)
-      if (r.approvedBy) {
+      // 2. ApprovedBy analysis (Managers only — exclude Admin_panel)
+      if (r.approvedBy && isManagerRole(r.approvedBy)) {
         registerUser(managerMap, r.approvedBy, r, "Manager");
       }
 
       // 3. Projects breakdown
       (r.projects || []).forEach((p) => {
-        // Supervisor on project
+        // Supervisor on project — only add to supervisorMap if user's role is actually SUPERVISOR
         if (p.supervisor) {
-          registerUser(supervisorMap, p.supervisor, r, "Supervisor");
-          if (isManagerRole(p.supervisor)) {
+          if (isSupervisorRole(p.supervisor)) {
+            registerUser(supervisorMap, p.supervisor, r, "Supervisor");
+          } else if (isManagerRole(p.supervisor)) {
             registerUser(managerMap, p.supervisor, r, "Manager");
+          } else if (isInchargeRole(p.supervisor)) {
+            registerUser(inchargeMap, p.supervisor, r, "Incharge");
           }
         }
         // Incharges on project
         if (Array.isArray(p.incharges) && p.incharges.length > 0) {
           p.incharges.forEach((inc) => {
-            registerUser(inchargeMap, inc, r, "Incharge");
+            if (isInchargeRole(inc)) {
+              registerUser(inchargeMap, inc, r, "Incharge");
+            }
           });
         }
-        if (p.incharge) {
+        if (p.incharge && isInchargeRole(p.incharge)) {
           registerUser(inchargeMap, p.incharge, r, "Incharge");
         }
       });
