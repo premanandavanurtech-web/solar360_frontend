@@ -792,6 +792,8 @@ export default function WorkRegister() {
   const isDark = theme.palette.mode === "dark";
   const { fetchAPI } = useAuth();
   const [rows, setRows] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [todayStatusModal, setTodayStatusModal] = useState(null); // "submitted" | "pending" | null
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -812,8 +814,15 @@ export default function WorkRegister() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetchAPI("/installer-worksheets/work-register");
+      const [response, usersRes] = await Promise.all([
+        fetchAPI("/installer-worksheets/work-register"),
+        fetchAPI("/user/getAllUsers?limit=500").catch(() => null),
+      ]);
       setRows(response?.result || []);
+      const fetchedUsers = usersRes?.result?.users || usersRes?.data?.users || usersRes?.users || [];
+      if (Array.isArray(fetchedUsers)) {
+        setAllUsers(fetchedUsers);
+      }
     } catch (err) {
       setError(err.message || "Unable to load daily worksheets");
     } finally {
@@ -1117,6 +1126,74 @@ export default function WorkRegister() {
   };
 
   // Metrics
+  const todayReportStatus = useMemo(() => {
+    const todayStr = formatDate(new Date());
+    const submittedIds = new Set();
+    const submittedNames = new Set();
+
+    const recordSubmitted = (u) => {
+      if (!u) return;
+      if (u._id) submittedIds.add(String(u._id));
+      if (u.id) submittedIds.add(String(u.id));
+      if (u.employeeId) submittedIds.add(String(u.employeeId).trim().toUpperCase());
+      const name = personName(u);
+      if (name && name !== "-") submittedNames.add(name.trim().toLowerCase());
+    };
+
+    rows.forEach((r) => {
+      const isToday =
+        formatDate(r.workDate || r.createdAt) === todayStr ||
+        formatDate(r.submittedAt || r.createdAt) === todayStr;
+      if (!isToday) return;
+      recordSubmitted(r.user);
+    });
+
+    const sourceUsers =
+      allUsers.length > 0
+        ? allUsers.filter((u) => !isAdminRole(u) && u.status !== "inactive")
+        : [...roleUsers.incharges, ...roleUsers.supervisors, ...roleUsers.managers];
+
+    const seen = new Set();
+    const submittedToday = [];
+    const notSubmittedToday = [];
+
+    sourceUsers.forEach((u) => {
+      const uid = String(u._id || u.id || u.employeeId || personName(u)).trim();
+      if (!uid || seen.has(uid)) return;
+      seen.add(uid);
+
+      const empId = String(u.employeeId || "").trim().toUpperCase();
+      const nameLower = personName(u).trim().toLowerCase();
+      const hasSubmitted =
+        submittedIds.has(String(u._id || "")) ||
+        submittedIds.has(String(u.id || "")) ||
+        (empId && submittedIds.has(empId)) ||
+        (nameLower && submittedNames.has(nameLower));
+
+      const normalizedRole =
+        String(u.role || "").trim().toUpperCase() === "ZSM" ? "Incharge" : u.role || "Incharge";
+      const memberItem = {
+        id: uid,
+        name: personName(u),
+        employeeId: u.employeeId || "",
+        phoneNumber: u.phoneNumber || "",
+        role: normalizedRole,
+      };
+
+      if (hasSubmitted) {
+        submittedToday.push(memberItem);
+      } else {
+        notSubmittedToday.push(memberItem);
+      }
+    });
+
+    return {
+      todayStr,
+      submittedToday,
+      notSubmittedToday,
+    };
+  }, [rows, allUsers, roleUsers]);
+
   const stats = useMemo(() => {
     let totalProjects = 0;
     let totalPhotos = 0;
@@ -1321,82 +1398,79 @@ export default function WorkRegister() {
         </Stack>
       </Box>
 
-      {/* ─── METRIC CARDS ─── */}
+      {/* ─── METRIC CARDS (TODAY REPORT STATUS) ─── */}
       <Grid container spacing={2.5} sx={{ mb: 3.5 }}>
-        <Grid item xs={12} sm={4}>
+        <Grid item xs={12} sm={6}>
           <Card
             elevation={0}
+            onClick={() => setTodayStatusModal("submitted")}
             sx={{
-              p: 2.2,
+              p: 2.4,
               borderRadius: 3,
-              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+              cursor: "pointer",
+              border: isDark ? "1px solid rgba(16, 185, 129, 0.25)" : "1px solid #bbf7d0",
               bgcolor: isDark ? "#0e1424" : "#ffffff",
               boxShadow: isDark ? "0 4px 20px rgba(0, 0, 0, 0.3)" : "0 2px 8px rgba(15, 23, 42, 0.04)",
+              transition: "all 0.2s ease",
+              "&:hover": {
+                transform: "translateY(-2px)",
+                boxShadow: "0 8px 20px rgba(5, 150, 105, 0.12)",
+                borderColor: "#10b981",
+              },
             }}
           >
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Box>
-                <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
-                  Total Worksheets
-                </Typography>
-                <Typography variant="h4" sx={{ fontWeight: 800, color: isDark ? "#60a5fa" : "#0f2f57", mt: 0.5 }}>
-                  {stats.worksheets}
-                </Typography>
-              </Box>
-              <Avatar sx={{ bgcolor: isDark ? "rgba(37,99,235,0.2)" : "#eff6ff", color: isDark ? "#60a5fa" : "#004792", width: 48, height: 48 }}>
-                <CalendarTodayRounded />
-              </Avatar>
-            </Stack>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Card
-            elevation={0}
-            sx={{
-              p: 2.2,
-              borderRadius: 3,
-              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
-              bgcolor: isDark ? "#0e1424" : "#ffffff",
-              boxShadow: isDark ? "0 4px 20px rgba(0, 0, 0, 0.3)" : "0 2px 8px rgba(15, 23, 42, 0.04)",
-            }}
-          >
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Box>
-                <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
-                  Projects Completed
-                </Typography>
-                <Typography variant="h4" sx={{ fontWeight: 800, color: "#0284c7", mt: 0.5 }}>
-                  {stats.projects}
-                </Typography>
-              </Box>
-              <Avatar sx={{ bgcolor: isDark ? "rgba(2,132,199,0.2)" : "#f0f9ff", color: "#0284c7", width: 48, height: 48 }}>
-                <SpeedRounded />
-              </Avatar>
-            </Stack>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Card
-            elevation={0}
-            sx={{
-              p: 2.2,
-              borderRadius: 3,
-              border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
-              bgcolor: isDark ? "#0e1424" : "#ffffff",
-              boxShadow: isDark ? "0 4px 20px rgba(0, 0, 0, 0.3)" : "0 2px 8px rgba(15, 23, 42, 0.04)",
-            }}
-          >
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Box>
-                <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
-                  Geo-Tagged Photos
+                <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Today Report Sent ({todayReportStatus.todayStr})
                 </Typography>
                 <Typography variant="h4" sx={{ fontWeight: 800, color: "#059669", mt: 0.5 }}>
-                  {stats.photos}
+                  {todayReportStatus.submittedToday.length}
+                </Typography>
+                <Typography variant="caption" sx={{ color: isDark ? "#64748b" : "#64748b", display: "block", mt: 0.4 }}>
+                  Members who submitted today's report • Click to view
                 </Typography>
               </Box>
-              <Avatar sx={{ bgcolor: isDark ? "rgba(5,150,105,0.2)" : "#ecfdf5", color: "#059669", width: 48, height: 48 }}>
-                <ImageRounded />
+              <Avatar sx={{ bgcolor: isDark ? "rgba(16,185,129,0.2)" : "#ecfdf5", color: "#059669", width: 50, height: 50 }}>
+                <CheckCircleRounded />
+              </Avatar>
+            </Stack>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6}>
+          <Card
+            elevation={0}
+            onClick={() => setTodayStatusModal("pending")}
+            sx={{
+              p: 2.4,
+              borderRadius: 3,
+              cursor: "pointer",
+              border: isDark ? "1px solid rgba(239, 68, 68, 0.25)" : "1px solid #fecaca",
+              bgcolor: isDark ? "#0e1424" : "#ffffff",
+              boxShadow: isDark ? "0 4px 20px rgba(0, 0, 0, 0.3)" : "0 2px 8px rgba(15, 23, 42, 0.04)",
+              transition: "all 0.2s ease",
+              "&:hover": {
+                transform: "translateY(-2px)",
+                boxShadow: "0 8px 20px rgba(220, 38, 38, 0.12)",
+                borderColor: "#ef4444",
+              },
+            }}
+          >
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Box>
+                <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Not Sent Today ({todayReportStatus.todayStr})
+                </Typography>
+                <Typography variant="h4" sx={{ fontWeight: 800, color: "#dc2626", mt: 0.5 }}>
+                  {todayReportStatus.notSubmittedToday.length}
+                </Typography>
+                <Typography variant="caption" sx={{ color: isDark ? "#64748b" : "#64748b", display: "block", mt: 0.4 }}>
+                  Members with no report sent today • Click to view
+                </Typography>
+              </Box>
+              <Avatar sx={{ bgcolor: isDark ? "rgba(239,68,68,0.2)" : "#fef2f2", color: "#dc2626", width: 50, height: 50 }}>
+                <CloseRounded />
               </Avatar>
             </Stack>
           </Card>
@@ -3394,6 +3468,93 @@ export default function WorkRegister() {
             </DialogContent>
           </>
         )}
+      </Dialog>
+
+      {/* ─── TODAY REPORT STATUS MODAL ─── */}
+      <Dialog
+        open={Boolean(todayStatusModal)}
+        onClose={() => setTodayStatusModal(null)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            bgcolor: isDark ? "#0e1424" : "#ffffff",
+            border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e2e8f0",
+          },
+        }}
+      >
+        <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
+          <Stack direction="row" spacing={1.2} alignItems="center">
+            {todayStatusModal === "submitted" ? (
+              <CheckCircleRounded sx={{ color: "#059669" }} />
+            ) : (
+              <CloseRounded sx={{ color: "#dc2626" }} />
+            )}
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              {todayStatusModal === "submitted"
+                ? `Today Report Sent (${todayReportStatus.submittedToday.length})`
+                : `Not Sent Today (${todayReportStatus.notSubmittedToday.length})`}
+            </Typography>
+          </Stack>
+          <IconButton size="small" onClick={() => setTodayStatusModal(null)}>
+            <CloseRounded />
+          </IconButton>
+        </DialogTitle>
+        <Divider />
+        <DialogContent sx={{ maxHeight: 420, p: 2 }}>
+          {(() => {
+            const list =
+              todayStatusModal === "submitted"
+                ? todayReportStatus.submittedToday
+                : todayReportStatus.notSubmittedToday;
+            if (list.length === 0) {
+              return (
+                <Typography variant="body2" sx={{ color: "text.secondary", textAlign: "center", py: 4 }}>
+                  {todayStatusModal === "submitted"
+                    ? "No reports submitted today yet."
+                    : "Everyone has submitted their report today!"}
+                </Typography>
+              );
+            }
+            return (
+              <Stack spacing={1.2}>
+                {list.map((m) => (
+                  <Paper
+                    key={m.id}
+                    variant="outlined"
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 2,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      bgcolor: isDark ? "rgba(255,255,255,0.02)" : "#f8fafc",
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                        {m.name}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                        {[m.employeeId, m.phoneNumber].filter(Boolean).join(" • ") || "Field Member"}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={m.role}
+                      size="small"
+                      sx={{
+                        fontWeight: 700,
+                        bgcolor: todayStatusModal === "submitted" ? "#ecfdf5" : "#fef2f2",
+                        color: todayStatusModal === "submitted" ? "#059669" : "#dc2626",
+                      }}
+                    />
+                  </Paper>
+                ))}
+              </Stack>
+            );
+          })()}
+        </DialogContent>
       </Dialog>
     </Box>
   );
